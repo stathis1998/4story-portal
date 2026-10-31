@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { Button } from '../../components/Button'
 import { CharacterCard } from '../../components/CharacterCard'
 import { charactersQueryOptions } from '../../lib/characters'
 
@@ -12,25 +13,20 @@ function CharactersPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="text-3xl">Your characters</h1>
+      <h1 className="text-4xl">Your characters</h1>
       <p className="mt-1 mb-8 text-muted">Everyone on your account, as the server last saved them.</p>
 
       {isPending ? (
         <Skeleton />
       ) : isError ? (
-        <div className="flex flex-col items-start gap-3 rounded-xl border border-danger/40 bg-danger-surface p-5">
+        <div className="flex flex-col items-start gap-3 rounded-xs border border-danger/40 bg-danger-surface p-5">
           <p className="text-danger">Could not load your characters.</p>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-          >
+          <Button onClick={() => refetch()} disabled={isFetching}>
             Retry
-          </button>
+          </Button>
         </div>
       ) : data.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line p-10 text-center text-muted">
+        <p className="rounded-xs border border-dashed border-line p-10 text-center text-muted">
           No characters yet. Create one in the game.
         </p>
       ) : (
@@ -50,7 +46,7 @@ function Skeleton() {
   return (
     <div role="status" aria-label="Loading characters" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-52 animate-pulse rounded-xl border border-line bg-surface" />
+        <div key={i} className="h-52 animate-pulse rounded-xs border border-line bg-surface" />
       ))}
     </div>
   )

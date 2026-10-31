@@ -1,42 +1,31 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 /*
-  Visual direction: a medieval fantasy portal. Parchment and ink, one bronze-gold accent,
-  Cinzel for headings, Source Sans 3 for text. Components use only these semantic tokens.
+  Visual direction: "Bloodstone", dark only. Near-black with a red undertone, one crimson accent,
+  pale stone for secondary actions, amber for errors so they never read as the accent.
+  Alegreya SC for headings, Alegreya Sans for text. Sharp corners and hairline borders.
+  Components use only these semantic tokens.
 */
 :root {
-  --bg: #f4efe4;
-  --surface: #fffdf8;
-  --surface-raised: #f9f4e9;
-  --fg: #1d1a15;
-  --muted: #6c6457;
-  --line: #e0d7c4;
-  --accent: #9a6a17;
-  --accent-hover: #845a12;
-  --accent-fg: #fffdf8;
-  --danger: #b42318;
-  --danger-surface: #fdecea;
-}
-
-.dark {
-  --bg: #0d0f13;
-  --surface: #161920;
-  --surface-raised: #1d212a;
-  --fg: #ece6d8;
-  --muted: #9b9484;
-  --line: #2a2f3a;
-  --accent: #d6a23e;
-  --accent-hover: #e4b458;
-  --accent-fg: #181204;
-  --danger: #f97066;
-  --danger-surface: #2a1513;
+  --bg: #0f0d0d;
+  --surface: #181414;
+  --surface-raised: #201a1a;
+  --fg: #ede6e0;
+  --muted: #9a8e88;
+  --line: #2e2626;
+  /* Crimson fills and borders; small crimson text uses the lighter accent-text to stay readable. */
+  --accent: #c4344c;
+  --accent-hover: #a8293f;
+  --accent-fg: #fff3f3;
+  --accent-text: #e05a70;
+  --secondary: #c8bfb6;
+  --danger: #ff9f43;
+  --danger-surface: #2b1d0f;
 }
 
 @theme inline {
-  --font-display: "Cinzel", Georgia, serif;
-  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --font-display: "Alegreya SC", Georgia, serif;
+  --font-body: "Alegreya Sans", system-ui, sans-serif;
 
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -47,26 +36,26 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);
+  --color-accent-text: var(--accent-text);
+  --color-secondary: var(--secondary);
   --color-danger: var(--danger);
   --color-danger-surface: var(--danger-surface);
 }
 
 @layer base {
   html {
-    color-scheme: light;
-  }
-
-  html.dark {
     color-scheme: dark;
   }
 
   body {
     @apply min-h-screen bg-bg font-body text-fg antialiased;
+    /* Alegreya defaults to old-style figures; levels, dates and coin counts read better aligned. */
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   h1,
   h2,
   h3 {
-    @apply font-display tracking-wide;
+    @apply font-display font-bold tracking-wide;
   }
 }

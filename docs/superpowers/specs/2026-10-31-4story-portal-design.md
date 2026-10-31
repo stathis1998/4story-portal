@@ -57,7 +57,7 @@ Location: `C:\Users\stath\Projects\4story-portal`. Monorepo with Turborepo and n
 
 ### Libraries
 
-- **web:** React, Vite, Tailwind CSS, ESLint, TanStack Router (file-based routes via its Vite plugin), TanStack React Query, Jotai, React Hook Form with `@hookform/resolvers/zod`, Zod, Vitest with React Testing Library.
+- **web:** React, Vite, Tailwind CSS, ESLint, TanStack Router (file-based routes via its Vite plugin), TanStack React Query, React Hook Form with `@hookform/resolvers/zod`, Zod, Vitest with React Testing Library.
 - **api:** NestJS, `mssql`, `@nestjs/jwt`, `@nestjs/throttler`, `cookie-parser`, Zod, Vitest with `unplugin-swc`.
 - **shared:** Zod, Vitest.
 - Playwright is not installed in this version.
@@ -183,7 +183,7 @@ Route guards run in `beforeLoad` using the `me` query from React Query (`ensureQ
 ### State
 
 - **React Query:** `me` and `characters` queries; `login`, `register` and `logout` mutations. Login and register update `me`; logout clears the query cache.
-- **Jotai:** one atom, the light/dark theme, persisted with `atomWithStorage`.
+- **Theme:** dark only ("Bloodstone"), so there is no client theme state.
 - **Forms:** React Hook Form with `zodResolver` and the shared schemas.
 - **API helper:** a `fetch` wrapper that sends the cookie, parses JSON, and throws `ApiError { status, message, fieldErrors? }` for non-2xx responses.
 

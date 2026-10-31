@@ -59,7 +59,7 @@ function RegisterPage() {
       </form>
       <p className="mt-6 text-center text-sm text-muted">
         Already registered?{' '}
-        <Link to="/login" className="font-medium text-accent underline-offset-4 hover:underline">
+        <Link to="/login" className="font-bold text-accent-text underline-offset-4 hover:underline">
           Log in
         </Link>
       </p>

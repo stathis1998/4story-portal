@@ -47,7 +47,7 @@ function LoginPage() {
       </form>
       <p className="mt-6 text-center text-sm text-muted">
         No account yet?{' '}
-        <Link to="/register" className="font-medium text-accent underline-offset-4 hover:underline">
+        <Link to="/register" className="font-bold text-accent-text underline-offset-4 hover:underline">
           Register
         </Link>
       </p>
