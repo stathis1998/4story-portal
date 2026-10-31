@@ -13,6 +13,14 @@ export function createAppQueryClient(onUnauthorized: () => void): QueryClient {
   }
 
   return new QueryClient({
+    defaultOptions: {
+      queries: {
+        // When the API answered (401, 500, ...) retrying only delays what the user sees; an
+        // expired session would otherwise wait out three retries before redirecting. Network
+        // failures get one retry.
+        retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 1,
+      },
+    },
     queryCache: new QueryCache({ onError: (error, query) => handle(error, query.queryKey) }),
     mutationCache: new MutationCache({
       // Login answers 401 for bad credentials; that is a form error, not an expired session.

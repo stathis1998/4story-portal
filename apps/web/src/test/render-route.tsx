@@ -16,8 +16,8 @@ export function renderRoute(path: string, { me }: { me: SessionUser | null }) {
     }),
     createMemoryHistory({ initialEntries: [path] }),
   )
+  // Uses the production query client unchanged, so the tests see the real retry behaviour.
   const { queryClient } = router.options.context
-  queryClient.setDefaultOptions({ queries: { retry: false } })
   queryClient.setQueryData(meQueryOptions.queryKey, me)
 
   render(
