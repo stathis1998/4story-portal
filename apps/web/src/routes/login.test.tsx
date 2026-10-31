@@ -10,8 +10,8 @@ describe('/login', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Log in' }))
 
-    expect(await screen.findByText('Use 4-16 letters or digits')).toBeInTheDocument()
-    expect(screen.getByText(/Use 6-16 characters/)).toBeInTheDocument()
+    expect(await screen.findByText('Enter your username')).toBeInTheDocument()
+    expect(screen.getByText('Enter your password')).toBeInTheDocument()
   })
 
   it('shows a 401 in the message box above the form', async () => {

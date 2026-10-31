@@ -64,6 +64,15 @@ describe('auth HTTP', () => {
       expect(sessionCookie(res)).toMatch(/^session=.+/);
     });
 
+    it('lets an existing game account log in even if it predates the registration rules', async () => {
+      accounts.seed('1', sha1Hex('abc'));
+
+      const res = await http().post('/api/auth/login').send({ username: '1', password: 'abc' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe('1');
+    });
+
     it('returns 401 for a wrong password', async () => {
       const res = await http().post('/api/auth/login').send({ username: 'moose', password: 'wrong12' });
 

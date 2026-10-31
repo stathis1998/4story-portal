@@ -10,9 +10,19 @@ export const passwordSchema = z
   .string()
   .regex(/^[\x20-\x7E]{6,16}$/, 'Use 6-16 characters (letters, digits, symbols or spaces)');
 
+// Login accepts any account that already exists in the game (the stricter rules above apply only to
+// new registrations): szUserID is varchar(50), and the password only has to hash like the client's.
 export const loginRequestSchema = z.object({
-  username: usernameSchema,
-  password: passwordSchema,
+  username: z
+    .string()
+    .min(1, 'Enter your username')
+    .max(50, 'Usernames are at most 50 characters')
+    .regex(/^[\x21-\x7E]*$/, 'Usernames cannot contain spaces or special characters'),
+  password: z
+    .string()
+    .min(1, 'Enter your password')
+    .max(255, 'Passwords are at most 255 characters')
+    .regex(/^[\x20-\x7E]*$/, 'Use letters, digits, symbols or spaces'),
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 
