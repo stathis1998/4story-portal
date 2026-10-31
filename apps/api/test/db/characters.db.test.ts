@@ -16,6 +16,7 @@ it("lists moose's live characters in slot order", async () => {
   const moose = await new SqlAccountsRepository(db).findByUsername('moose');
   const rows = await new SqlCharactersRepository(db).listByUser(moose!.userId);
 
+  const slots = rows.map((r) => r.bSlot);
   expect(rows).toHaveLength(3);
-  expect(rows.map((r) => r.bSlot)).toEqual([...rows.map((r) => r.bSlot)].sort((a, b) => a - b));
+  expect(slots).toEqual(rows.map((r) => r.bSlot).sort((a, b) => a - b));
 });
