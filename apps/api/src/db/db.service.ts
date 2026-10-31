@@ -10,6 +10,10 @@ export function tableNames(config: AppConfig) {
     accounts: `${global}.TACCOUNT_PW`,
     userInfo: `${global}.TUSERINFOTABLE`,
     characters: `${game}.TCHARTABLE`,
+    currentUsers: `${global}.TCURRENTUSER`,
+    serverChart: `${game}.TSVRCHART`,
+    channelChart: `${game}.TCHANNELCHART`,
+    managerLog: `${global}.OPTool_ManagerLog`,
   };
 }
 
