@@ -6,3 +6,4 @@ coverage
 *.log
 *.tsbuildinfo
 apps/api/data/
+apps/web/.tanstack/

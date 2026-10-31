@@ -20,6 +20,7 @@ type Props = {
   selectedCount: number
   disabledReason: string | null
   locations: GmLocation[]
+  locationsError?: string | null
   /** Resolves to an error message to show inline, or null once saved. */
   onSaveLocation: (input: GmLocationInput) => Promise<string | null>
   onDeleteLocation: (id: string) => Promise<string | null>
@@ -32,6 +33,7 @@ export function PositionForm({
   selectedCount,
   disabledReason,
   locations,
+  locationsError,
   onSaveLocation,
   onDeleteLocation,
   onSubmit,
@@ -69,6 +71,7 @@ export function PositionForm({
     <div className="flex flex-col gap-4">
       <PresetsList
         locations={locations}
+        loadError={locationsError}
         onPick={(location) =>
           reset({
             world: location.world,

@@ -30,14 +30,16 @@ export const Route = createFileRoute('/_authed/gm/teleport')({
 })
 
 const MAX_PLAYERS = 20
+// The one server error worth showing: it tells the GM the preset file needs fixing.
+const PRESET_FILE_INVALID = 'Preset file is invalid'
 const POSITION_FIELDS = new Set(['world', 'channel', 'mapId', 'x', 'y', 'z'])
 const CHARACTER_FIELDS = new Set(['target'])
 
 function TeleportPage() {
   const queryClient = useQueryClient()
-  const { data: status } = useQuery(gmStatusQueryOptions)
-  const { data: players, isFetching } = useQuery(onlinePlayersQueryOptions)
-  const { data: locations } = useQuery(gmLocationsQueryOptions)
+  const { data: status, isError: statusFailed } = useQuery(gmStatusQueryOptions)
+  const { data: players, isFetching, isError: playersFailed } = useQuery(onlinePlayersQueryOptions)
+  const { data: locations, error: locationsError, isError: locationsFailed } = useQuery(gmLocationsQueryOptions)
   const teleport = useTeleport()
   const saveLocation = useSaveLocation()
   const deleteLocation = useDeleteLocation()
@@ -85,7 +87,9 @@ function TeleportPage() {
       await request()
       return null
     } catch (err) {
-      return err instanceof ApiError && err.status < 500 ? err.message : 'Something went wrong. Please try again.'
+      return err instanceof ApiError && (err.status < 500 || err.message === PRESET_FILE_INVALID)
+        ? err.message
+        : 'Something went wrong. Please try again.'
     }
   }
 
@@ -105,9 +109,14 @@ function TeleportPage() {
         {status && <StatusBadge state={status.state} />}
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[3fr_2fr]">
+      <div className="mt-4">
+        <FormMessage message={statusFailed ? 'Could not load the game server status.' : null} />
+      </div>
+
+      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[3fr_2fr]">
         <PlayersPanel
           players={players ?? []}
+          loadError={playersFailed ? 'Could not load online players.' : null}
           worldNames={worldNames}
           selected={selected}
           onChange={setChosen}
@@ -131,6 +140,13 @@ function TeleportPage() {
                   selectedCount={selected.length}
                   disabledReason={disabledReason}
                   locations={locations ?? []}
+                  locationsError={
+                    locationsFailed
+                      ? locationsError instanceof ApiError && locationsError.message
+                        ? locationsError.message
+                        : 'Could not load saved locations.'
+                      : null
+                  }
                   onSaveLocation={(input) => reportFailure(() => saveLocation.mutateAsync(input))}
                   onDeleteLocation={(id) => reportFailure(() => deleteLocation.mutateAsync(id))}
                   onSubmit={(position, setFieldError) =>

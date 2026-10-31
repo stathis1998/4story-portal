@@ -5,15 +5,18 @@ import { FormMessage } from '../FormMessage'
 
 type Props = {
   locations: GmLocation[]
+  /** Set when the list could not be loaded, so an empty list is not mistaken for no presets. */
+  loadError?: string | null
   onPick: (location: GmLocation) => void
   /** Resolves to an error message to show, or null once deleted. */
   onDelete: (id: string) => Promise<string | null>
 }
 
-export function PresetsList({ locations, onPick, onDelete }: Props) {
+export function PresetsList({ locations, loadError, onPick, onDelete }: Props) {
   const [confirming, setConfirming] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  if (loadError) return <FormMessage message={loadError} />
   if (locations.length === 0) return <p className="text-sm text-muted">No saved locations yet.</p>
 
   return (

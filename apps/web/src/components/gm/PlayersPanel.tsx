@@ -2,9 +2,12 @@ import type { OnlinePlayer } from '@4story-portal/shared'
 import { useState } from 'react'
 import { Button } from '../Button'
 import { Checkbox } from '../Checkbox'
+import { FormMessage } from '../FormMessage'
 
 type Props = {
   players: OnlinePlayer[]
+  /** Set when the list could not be loaded, so an empty list is not mistaken for no players. */
+  loadError?: string | null
   worldNames: Map<number, string>
   selected: string[]
   onChange: (names: string[]) => void
@@ -15,7 +18,7 @@ type Props = {
 const th = 'px-3 py-2 text-left text-xs font-bold tracking-wider text-muted uppercase'
 const td = 'px-3 py-2'
 
-export function PlayersPanel({ players, worldNames, selected, onChange, onRefresh, refreshing }: Props) {
+export function PlayersPanel({ players, loadError, worldNames, selected, onChange, onRefresh, refreshing }: Props) {
   const [search, setSearch] = useState('')
   const needle = search.trim().toLowerCase()
   const visible = players.filter((player) => player.name.toLowerCase().includes(needle))
@@ -30,7 +33,7 @@ export function PlayersPanel({ players, worldNames, selected, onChange, onRefres
   }
 
   return (
-    <section aria-label="Online players" className="flex flex-col gap-3">
+    <section aria-label="Online players" className="flex min-w-0 flex-col gap-3">
       <div className="flex items-center gap-3">
         <input
           type="search"
@@ -46,7 +49,9 @@ export function PlayersPanel({ players, worldNames, selected, onChange, onRefres
         </Button>
       </div>
 
-      {players.length === 0 ? (
+      {loadError ? (
+        <FormMessage message={loadError} />
+      ) : players.length === 0 ? (
         <p className="rounded-xs border border-dashed border-line p-10 text-center text-muted">
           No one is online right now.
         </p>

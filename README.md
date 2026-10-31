@@ -48,13 +48,15 @@ DB_GAME_NAME=TGAME_GSP
 Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands to the game's TControlSvr.
 
 - Keep TControlSvr's port 3616 firewalled to localhost.
-- Create the `portal` `TMANAGER` account and put the same credentials in `.env` (`CONTROL_USER`, `CONTROL_PASSWORD`). The script targets `TGLOBAL_GSP_TEST` by default:
+- Create the `portal` `TMANAGER` account and put the same credentials in `.env` (`CONTROL_USER`, `CONTROL_PASSWORD`). TControlSvr logs in against the live `TGLOBAL_GSP`, so the account must exist there. The script targets `TGLOBAL_GSP_TEST` by default:
 
   ```sh
   sqlcmd -S "localhost\FOURSTORY" -E -C -b -i scripts/db/create-portal-manager.sql -v PORTAL_PASSWORD=your-control-password
   ```
 
-  For the live database, edit the `DB` and `ALLOW_LIVE` lines at the top of the script first.
+  Edit the `DB` and `ALLOW_LIVE` lines at the top of the script to target `TGLOBAL_GSP` before running it.
+- The online player list and the audit come from `DB_GLOBAL_NAME` / `DB_GAME_NAME`. Point them at the databases the game servers use (see "Going live"); the `_TEST` copies have no one online.
+- List only existing accounts in `GM_USERNAMES`.
 - TControlSvr must be running and connected to the world server for teleports to arrive. The portal can only report "sent".
 
 ## Test databases

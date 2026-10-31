@@ -76,6 +76,33 @@ describe('teleport page: sending', () => {
     expect(await screen.findByText('No one is online right now.')).toBeInTheDocument()
   })
 
+  it('shows an error, not the empty text, when the players fail to load', async () => {
+    mockApi(base({ 'GET /gm/players': () => json(500, { statusCode: 500, message: 'Internal server error' }) }))
+    renderRoute('/gm/teleport', { me: gm })
+    expect(await screen.findByText('Could not load online players.')).toBeInTheDocument()
+    expect(screen.queryByText('No one is online right now.')).not.toBeInTheDocument()
+  })
+
+  it('shows an error and no destination panel when the status fails to load', async () => {
+    mockApi(base({ 'GET /gm/status': () => json(500, { statusCode: 500, message: 'Internal server error' }) }))
+    renderRoute('/gm/teleport', { me: gm })
+    expect(await screen.findByText('Could not load the game server status.')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Coordinates' })).not.toBeInTheDocument()
+  })
+
+  it('shows the API message when the saved locations fail to load, and passes it through on save', async () => {
+    const invalid = () => json(500, { statusCode: 500, message: 'Preset file is invalid' })
+    mockApi(base({ 'GET /gm/locations': invalid, 'POST /gm/locations': invalid }))
+    const { user } = renderRoute('/gm/teleport', { me: gm })
+    expect(await screen.findByText('Preset file is invalid')).toBeInTheDocument()
+    expect(screen.queryByText('No saved locations yet.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save as preset' }))
+    await fill(user)
+    await user.type(screen.getByLabelText('Preset name'), 'Gate')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.getAllByText('Preset file is invalid')).toHaveLength(2))
+  })
+
   it('sends the selected players to the coordinates', async () => {
     const fetchMock = mockApi(base({ 'POST /gm/teleport': () => json(202, { sent: true, names: ['Kaelith'] }) }))
     const { user } = renderRoute('/gm/teleport', { me: gm })
