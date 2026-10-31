@@ -42,7 +42,7 @@ describe('/register', () => {
   })
 
   it('sends only username and password', async () => {
-    const fetchMock = mockApi({ 'POST /auth/register': () => json(201, { userId: 5, username: 'newuser' }) })
+    const fetchMock = mockApi({ 'POST /auth/register': () => json(201, { userId: 5, username: 'newuser', isGm: false }) })
     const { user } = renderRoute('/register', { me: null })
 
     await fillForm(user)

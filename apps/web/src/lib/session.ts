@@ -1,13 +1,13 @@
-import type { LoginRequest, RegisterRequest, SessionUser } from '@4story-portal/shared'
+import type { LoginRequest, Me, RegisterRequest } from '@4story-portal/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ApiError, apiFetch } from './api'
 
 export const meQueryOptions = queryOptions({
   queryKey: ['me'],
-  queryFn: async (): Promise<SessionUser | null> => {
+  queryFn: async (): Promise<Me | null> => {
     try {
-      return await apiFetch<SessionUser>('/auth/me')
+      return await apiFetch<Me>('/auth/me')
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) return null
       throw error
@@ -23,7 +23,7 @@ const post = <T>(path: string, body?: unknown) =>
 function useSignedIn() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  return async (user: SessionUser) => {
+  return async (user: Me) => {
     queryClient.setQueryData(meQueryOptions.queryKey, user)
     await navigate({ to: '/characters' })
   }
@@ -33,7 +33,7 @@ export function useLogin() {
   const onSuccess = useSignedIn()
   return useMutation({
     mutationKey: ['login'],
-    mutationFn: (input: LoginRequest) => post<SessionUser>('/auth/login', input),
+    mutationFn: (input: LoginRequest) => post<Me>('/auth/login', input),
     onSuccess,
   })
 }
@@ -44,7 +44,7 @@ export function useRegister() {
     mutationKey: ['register'],
     // Only username and password go to the API; confirmPassword stays in the form.
     mutationFn: ({ username, password }: RegisterRequest) =>
-      post<SessionUser>('/auth/register', { username, password }),
+      post<Me>('/auth/register', { username, password }),
     onSuccess,
   })
 }

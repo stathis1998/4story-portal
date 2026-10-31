@@ -1,4 +1,4 @@
-import type { SessionUser } from '@4story-portal/shared'
+import type { Me } from '@4story-portal/shared'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router'
 import { render } from '@testing-library/react'
@@ -8,7 +8,7 @@ import { meQueryOptions } from '../lib/session'
 import { createAppRouter } from '../router'
 
 /** Renders the real app at `path` with in-memory history and `me` already known. */
-export function renderRoute(path: string, { me }: { me: SessionUser | null }) {
+export function renderRoute(path: string, { me }: { me: Me | null }) {
   const router = createAppRouter(
     createAppQueryClient(() => {
       queryClient.setQueryData(meQueryOptions.queryKey, null)

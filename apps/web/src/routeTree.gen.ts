@@ -14,6 +14,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
+import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -39,18 +40,25 @@ const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
   path: '/characters',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmTeleportRoute = AuthedGmTeleportRouteImport.update({
+  id: '/gm/teleport',
+  path: '/gm/teleport',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/gm/teleport': typeof AuthedGmTeleportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/gm/teleport': typeof AuthedGmTeleportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,13 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
+  '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/characters'
+  fullPaths: '/' | '/login' | '/register' | '/characters' | '/gm/teleport'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/characters'
+  to: '/' | '/login' | '/register' | '/characters' | '/gm/teleport'
   id:
     | '__root__'
     | '/'
@@ -72,6 +81,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authed/characters'
+    | '/_authed/gm/teleport'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -118,15 +128,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedCharactersRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/teleport': {
+      id: '/_authed/gm/teleport'
+      path: '/gm/teleport'
+      fullPath: '/gm/teleport'
+      preLoaderRoute: typeof AuthedGmTeleportRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
+  AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
+  AuthedGmTeleportRoute: AuthedGmTeleportRoute,
 }
 
 const AuthedRouteWithChildren =

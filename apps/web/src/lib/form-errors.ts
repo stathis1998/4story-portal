@@ -24,5 +24,7 @@ export function applyServerError<T extends FieldValues>(
     return null
   }
 
+  if (error.status === 503) return error.message
+
   return error.status >= 500 ? 'Something went wrong. Please try again.' : error.message
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { mockApi } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
-const moose = { userId: 1, username: 'moose' }
+const moose = { userId: 1, username: 'moose', isGm: false }
 
 describe('route guards', () => {
   it.each([

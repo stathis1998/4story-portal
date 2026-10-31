@@ -37,7 +37,7 @@ describe('/login', () => {
   })
 
   it('goes to /characters after a successful login', async () => {
-    mockApi({ 'POST /auth/login': () => json(200, { userId: 1, username: 'moose' }) })
+    mockApi({ 'POST /auth/login': () => json(200, { userId: 1, username: 'moose', isGm: false }) })
     const { user, router } = renderRoute('/login', { me: null })
 
     await user.type(await screen.findByLabelText('Username'), 'moose')

@@ -4,7 +4,7 @@ import { character } from '../test/characters'
 import { json, mockApi } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
-const moose = { userId: 1, username: 'moose' }
+const moose = { userId: 1, username: 'moose', isGm: false }
 
 describe('/characters', () => {
   it('shows a loading skeleton while characters load', async () => {
