@@ -79,6 +79,16 @@ function TeleportPage() {
     }
   }
 
+  // Turns a failed request into the message to show beside it; null means it worked.
+  async function reportFailure(request: () => Promise<unknown>) {
+    try {
+      await request()
+      return null
+    } catch (err) {
+      return err instanceof ApiError && err.status < 500 ? err.message : 'Something went wrong. Please try again.'
+    }
+  }
+
   const disabledReason =
     status && status.state !== 'connected'
       ? 'Game server is not connected'
@@ -114,30 +124,21 @@ function TeleportPage() {
               active={tab}
               onChange={(id) => setTab(id as 'position' | 'character')}
             />
-            <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-              {tab === 'position' ? (
-                <PositionForm
+            <div role="tabpanel" id="panel-position" aria-labelledby="tab-position" hidden={tab !== 'position'}>
+              <PositionForm
                   worlds={status.worlds}
                   channels={status.channels}
                   selectedCount={selected.length}
                   disabledReason={disabledReason}
                   locations={locations ?? []}
-                  onSaveLocation={async (input) => {
-                    try {
-                      await saveLocation.mutateAsync(input)
-                      return null
-                    } catch (err) {
-                      return err instanceof ApiError && err.status < 500
-                        ? err.message
-                        : 'Something went wrong. Please try again.'
-                    }
-                  }}
-                  onDeleteLocation={(id) => deleteLocation.mutateAsync(id).catch(() => undefined)}
+                  onSaveLocation={(input) => reportFailure(() => saveLocation.mutateAsync(input))}
+                  onDeleteLocation={(id) => reportFailure(() => deleteLocation.mutateAsync(id))}
                   onSubmit={(position, setFieldError) =>
                     send({ kind: 'position', ...position }, POSITION_FIELDS, setFieldError)
                   }
                 />
-              ) : (
+            </div>
+            <div role="tabpanel" id="panel-character" aria-labelledby="tab-character" hidden={tab !== 'character'}>
                 <CharacterTargetForm
                   world={targetWorld}
                   candidates={(players ?? []).filter((player) => !selected.includes(player.name))}
@@ -145,7 +146,6 @@ function TeleportPage() {
                   disabledReason={disabledReason}
                   onSubmit={(destination, setFieldError) => send(destination, CHARACTER_FIELDS, setFieldError)}
                 />
-              )}
             </div>
             <FormMessage message={error} />
             {note && <p className="rounded-xs border border-line bg-surface px-3 py-2 text-sm">{note}</p>}

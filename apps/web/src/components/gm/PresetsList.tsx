@@ -1,19 +1,24 @@
 import type { GmLocation } from '@4story-portal/shared'
 import { useState } from 'react'
 import { Button } from '../Button'
+import { FormMessage } from '../FormMessage'
 
 type Props = {
   locations: GmLocation[]
   onPick: (location: GmLocation) => void
-  onDelete: (id: string) => void | Promise<void>
+  /** Resolves to an error message to show, or null once deleted. */
+  onDelete: (id: string) => Promise<string | null>
 }
 
 export function PresetsList({ locations, onPick, onDelete }: Props) {
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (locations.length === 0) return <p className="text-sm text-muted">No saved locations yet.</p>
 
   return (
+    <div className="flex flex-col gap-2">
+    <FormMessage message={error} />
     <ul className="flex flex-col gap-1">
       {locations.map((location) => (
         <li key={location.id} className="flex items-center justify-between gap-2">
@@ -26,7 +31,8 @@ export function PresetsList({ locations, onPick, onDelete }: Props) {
               <Button
                 size="sm"
                 onClick={async () => {
-                  await onDelete(location.id)
+                  const message = await onDelete(location.id)
+                  setError(message)
                   setConfirming(null)
                 }}
               >
@@ -41,7 +47,10 @@ export function PresetsList({ locations, onPick, onDelete }: Props) {
               variant="secondary"
               size="sm"
               aria-label={`Delete ${location.name}`}
-              onClick={() => setConfirming(location.id)}
+              onClick={() => {
+                setError(null)
+                setConfirming(location.id)
+              }}
             >
               Delete
             </Button>
@@ -49,5 +58,6 @@ export function PresetsList({ locations, onPick, onDelete }: Props) {
         </li>
       ))}
     </ul>
+    </div>
   )
 }

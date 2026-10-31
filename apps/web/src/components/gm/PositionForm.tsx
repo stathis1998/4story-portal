@@ -22,7 +22,7 @@ type Props = {
   locations: GmLocation[]
   /** Resolves to an error message to show inline, or null once saved. */
   onSaveLocation: (input: GmLocationInput) => Promise<string | null>
-  onDeleteLocation: (id: string) => void | Promise<void>
+  onDeleteLocation: (id: string) => Promise<string | null>
   onSubmit: (position: PositionDestination, setError: UseFormSetError<PositionDestination>) => void | Promise<void>
 }
 

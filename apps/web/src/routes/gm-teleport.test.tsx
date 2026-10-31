@@ -63,11 +63,11 @@ describe('teleport page: sending', () => {
   it('lists players and filters by search', async () => {
     mockApi(base())
     const { user } = renderRoute('/gm/teleport', { me: gm })
-    expect(await screen.findByText('Kaelith')).toBeInTheDocument()
-    expect(screen.getByText('Moosey')).toBeInTheDocument()
+    expect(await screen.findByRole('checkbox', { name: 'Select Kaelith' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select Moosey' })).toBeInTheDocument()
     await user.type(screen.getByRole('searchbox'), 'kae')
-    expect(screen.queryByText('Moosey')).not.toBeInTheDocument()
-    expect(screen.getByText('Kaelith')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Select Moosey' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select Kaelith' })).toBeInTheDocument()
   })
 
   it('shows the empty text', async () => {
@@ -138,7 +138,7 @@ describe('teleport page: sending', () => {
     const { user } = renderRoute('/gm/teleport', { me: gm })
     await user.click(await screen.findByRole('checkbox', { name: 'Select all' }))
     expect(screen.getByRole('button', { name: 'Teleport 21 players' })).toBeDisabled()
-    expect(screen.getByText('Select at most 20 players')).toBeInTheDocument()
+    expect(screen.getAllByText('Select at most 20 players').length).toBeGreaterThan(0)
   })
 
   it('shows server validation errors on fields the form lacks', async () => {
@@ -222,6 +222,28 @@ describe('teleport page: sending', () => {
           true,
         ),
       )
+    })
+
+    it('shows an error when deleting a preset fails', async () => {
+      mockApi(
+        base({
+          'GET /gm/locations': () => json(200, [town]),
+          'DELETE /gm/locations/loc1': () => json(404, { statusCode: 404, message: 'Preset not found' }),
+        }),
+      )
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('button', { name: 'Delete Town square' }))
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Preset not found')
+    })
+
+    it('keeps typed coordinates when switching tabs', async () => {
+      mockApi(base())
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.type(await screen.findByLabelText('X'), '2800')
+      await user.click(screen.getByRole('tab', { name: 'Character' }))
+      await user.click(screen.getByRole('tab', { name: 'Coordinates' }))
+      expect(screen.getByLabelText('X')).toHaveValue(2800)
     })
 
     it('teleports to a character', async () => {
