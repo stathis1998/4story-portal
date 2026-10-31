@@ -3,13 +3,15 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { ACCOUNTS_REPOSITORY, type AccountsRepository } from '../src/auth/accounts.repository.js';
+import { CHARACTERS_REPOSITORY, type CharactersRepository } from '../src/characters/characters.repository.js';
 import { CONFIG, loadConfig } from '../src/config/config.js';
 import { DbService } from '../src/db/db.service.js';
-import { FakeAccountsRepository } from './fakes.js';
+import { FakeAccountsRepository, FakeCharactersRepository } from './fakes.js';
 import { validEnv } from './fixtures.js';
 
 export type TestAppOverrides = {
   accounts?: AccountsRepository;
+  characters?: CharactersRepository;
 };
 
 // The real AppModule with the database swapped out, configured exactly like main.ts.
@@ -21,6 +23,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue({})
     .overrideProvider(ACCOUNTS_REPOSITORY)
     .useValue(overrides.accounts ?? new FakeAccountsRepository())
+    .overrideProvider(CHARACTERS_REPOSITORY)
+    .useValue(overrides.characters ?? new FakeCharactersRepository())
     .compile();
 
   const app = moduleRef.createNestApplication({ logger: false });

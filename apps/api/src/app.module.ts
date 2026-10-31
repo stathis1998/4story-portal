@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module.js';
+import { CharactersModule } from './characters/characters.module.js';
 import { ConfigModule } from './config/config.js';
 import { DbModule } from './db/db.module.js';
 
@@ -14,6 +15,7 @@ import { DbModule } from './db/db.module.js';
       errorMessage: 'Too many attempts. Please try again later.',
     }),
     AuthModule,
+    CharactersModule,
   ],
 })
 export class AppModule {}
