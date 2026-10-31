@@ -6,14 +6,18 @@ import { ACCOUNTS_REPOSITORY, type AccountsRepository } from '../src/auth/accoun
 import { CHARACTERS_REPOSITORY, type CharactersRepository } from '../src/characters/characters.repository.js';
 import { CONFIG, loadConfig } from '../src/config/config.js';
 import { ControlClient } from '../src/control/control-client.js';
+import { GM_LOCATIONS_STORE, GmLocationsStore } from '../src/gm/gm-locations.store.js';
+import { GM_REPOSITORY } from '../src/gm/gm.repository.js';
 import { DbService } from '../src/db/db.service.js';
-import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient } from './fakes.js';
+import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeGmRepository } from './fakes.js';
 import { validEnv } from './fixtures.js';
 
 export type TestAppOverrides = {
   accounts?: AccountsRepository;
   characters?: CharactersRepository;
   control?: FakeControlClient;
+  gm?: FakeGmRepository;
+  locations?: GmLocationsStore;
 };
 
 // The real AppModule with the database and control server swapped out, configured exactly like main.ts.
@@ -29,6 +33,10 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.characters ?? new FakeCharactersRepository())
     .overrideProvider(ControlClient)
     .useValue(overrides.control ?? new FakeControlClient())
+    .overrideProvider(GM_REPOSITORY)
+    .useValue(overrides.gm ?? new FakeGmRepository())
+    .overrideProvider(GM_LOCATIONS_STORE)
+    .useValue(overrides.locations ?? new GmLocationsStore('./data/unused-test-presets.json'))
     .compile();
 
   const app = moduleRef.createNestApplication({ logger: false });

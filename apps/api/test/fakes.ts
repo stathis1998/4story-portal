@@ -1,6 +1,7 @@
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository } from '../src/characters/characters.repository.js';
+import type { AuditEntry, GmRepository, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -78,5 +79,30 @@ export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveTo
 
   private requireConnected(): void {
     if (this.state !== 'connected') throw new ControlUnavailableError();
+  }
+}
+
+export class FakeGmRepository implements GmRepository {
+  players: OnlinePlayerRow[] = [];
+  channels: number[] = [1, 2, 3, 50];
+  hosted = true;
+  failAudit = false;
+  readonly audits: AuditEntry[] = [];
+
+  async listOnlinePlayers(): Promise<OnlinePlayerRow[]> {
+    return this.players;
+  }
+
+  async listChannels(): Promise<number[]> {
+    return this.channels;
+  }
+
+  async isLocationHosted(): Promise<boolean> {
+    return this.hosted;
+  }
+
+  async writeAudit(e: AuditEntry): Promise<void> {
+    if (this.failAudit) throw new Error('audit failed');
+    this.audits.push(e);
   }
 }
