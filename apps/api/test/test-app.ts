@@ -1,0 +1,30 @@
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/app.setup.js';
+import { ACCOUNTS_REPOSITORY, type AccountsRepository } from '../src/auth/accounts.repository.js';
+import { CONFIG, loadConfig } from '../src/config/config.js';
+import { DbService } from '../src/db/db.service.js';
+import { FakeAccountsRepository } from './fakes.js';
+import { validEnv } from './fixtures.js';
+
+export type TestAppOverrides = {
+  accounts?: AccountsRepository;
+};
+
+// The real AppModule with the database swapped out, configured exactly like main.ts.
+export async function createTestApp(overrides: TestAppOverrides = {}): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(CONFIG)
+    .useValue(loadConfig(validEnv))
+    .overrideProvider(DbService)
+    .useValue({})
+    .overrideProvider(ACCOUNTS_REPOSITORY)
+    .useValue(overrides.accounts ?? new FakeAccountsRepository())
+    .compile();
+
+  const app = moduleRef.createNestApplication({ logger: false });
+  configureApp(app);
+  await app.init();
+  return app;
+}
