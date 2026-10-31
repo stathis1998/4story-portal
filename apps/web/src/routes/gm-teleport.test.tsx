@@ -154,4 +154,90 @@ describe('teleport page: sending', () => {
     await user.click(screen.getByRole('button', { name: 'Teleport 1 player' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Names must be unique')
   })
+
+  describe('presets and character target', () => {
+    const town = { id: 'loc1', name: 'Town square', world: 1, channel: 2, mapId: 7, x: 2800, y: 50, z: 5000 }
+
+    it('fills the fields from a preset', async () => {
+      mockApi(base({ 'GET /gm/locations': () => json(200, [town]) }))
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('button', { name: 'Town square' }))
+      expect(screen.getByLabelText('Map ID')).toHaveValue(7)
+      expect(screen.getByLabelText('X')).toHaveValue(2800)
+      expect(screen.getByLabelText('Height (Y)')).toHaveValue(50)
+      expect(screen.getByLabelText('Z')).toHaveValue(5000)
+      expect(screen.getByLabelText('Channel')).toHaveValue('2')
+    })
+
+    it('shows the empty presets text', async () => {
+      mockApi(base())
+      renderRoute('/gm/teleport', { me: gm })
+      expect(await screen.findByText('No saved locations yet.')).toBeInTheDocument()
+    })
+
+    it('saves the current position as a preset', async () => {
+      let saved: unknown[] = []
+      const fetchMock = mockApi(
+        base({
+          'GET /gm/locations': () => json(200, saved),
+          'POST /gm/locations': (body) => {
+            saved = [{ id: 'new1', ...(body as object) }]
+            return json(201, saved[0])
+          },
+        }),
+      )
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('button', { name: 'Save as preset' }))
+      await fill(user)
+      await user.type(screen.getByLabelText('Preset name'), 'Gate')
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      expect(await screen.findByRole('button', { name: 'Gate' })).toBeInTheDocument()
+      expect(sentBodies(fetchMock, 'POST /gm/locations')).toEqual([
+        { name: 'Gate', world: 1, channel: 1, mapId: 0, x: 2800, y: 50, z: 5000 },
+      ])
+    })
+
+    it('shows a validation error when saving without a name', async () => {
+      mockApi(base())
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('button', { name: 'Save as preset' }))
+      await fill(user)
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+    })
+
+    it('deletes a preset after confirming', async () => {
+      const fetchMock = mockApi(
+        base({
+          'GET /gm/locations': () => json(200, [town]),
+          'DELETE /gm/locations/loc1': () => json(204),
+        }),
+      )
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('button', { name: 'Delete Town square' }))
+      expect(screen.getByText('Delete?')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([url, init]) => url === '/api/gm/locations/loc1' && init?.method === 'DELETE')).toBe(
+          true,
+        ),
+      )
+    })
+
+    it('teleports to a character', async () => {
+      const fetchMock = mockApi(base({ 'POST /gm/teleport': () => json(202, { sent: true, names: ['Kaelith'] }) }))
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('checkbox', { name: 'Select Kaelith' }))
+      await user.click(screen.getByRole('tab', { name: 'Character' }))
+      const target = screen.getByLabelText('Target character')
+      expect(screen.queryByRole('option', { name: 'Kaelith' })).not.toBeInTheDocument()
+      expect(screen.getByText('Choose a target character')).toBeInTheDocument()
+      await user.selectOptions(target, 'Moosey')
+      await user.click(screen.getByRole('button', { name: 'Teleport 1 player' }))
+      expect(await screen.findByText(/^Sent to Kaelith/)).toBeInTheDocument()
+      expect(sentBodies(fetchMock, 'POST /gm/teleport')).toEqual([
+        { names: ['Kaelith'], destination: { kind: 'character', world: 1, target: 'Moosey' } },
+      ])
+    })
+  })
 })
