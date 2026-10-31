@@ -7,6 +7,7 @@
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
+    "dev:host": "nest start --watch",
     "start": "node dist/main",
     "lint": "oxlint src/ test/ && tsc --noEmit",
     "test": "vitest run",
