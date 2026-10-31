@@ -4,11 +4,12 @@ type Props = {
   label: string
   registration: UseFormRegisterReturn
   error?: string
-  type?: 'text' | 'password'
+  type?: 'text' | 'password' | 'number'
   autoComplete?: string
+  step?: string
 }
 
-export function TextField({ label, registration, error, type = 'text', autoComplete }: Props) {
+export function TextField({ label, registration, error, type = 'text', autoComplete, step }: Props) {
   const id = registration.name
   const errorId = `${id}-error`
 
@@ -21,6 +22,7 @@ export function TextField({ label, registration, error, type = 'text', autoCompl
         id={id}
         type={type}
         autoComplete={autoComplete}
+        step={step}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         className="rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent aria-invalid:border-danger aria-invalid:focus:ring-danger"
