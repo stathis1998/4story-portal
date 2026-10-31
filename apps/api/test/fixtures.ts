@@ -7,4 +7,10 @@ export const validEnv = {
   DB_GAME_NAME: 'TGAME_GSP_TEST',
   JWT_SECRET: 'a'.repeat(32),
   API_PORT: '3000',
+  GM_USERNAMES: 'Moose',
+  CONTROL_HOST: '127.0.0.1',
+  CONTROL_PORT: '3616',
+  CONTROL_USER: 'portal',
+  CONTROL_PASSWORD: 'secret',
+  GM_LOCATIONS_FILE: './data/gm-locations.json',
 };
