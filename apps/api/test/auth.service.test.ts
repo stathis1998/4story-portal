@@ -1,6 +1,7 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../src/auth/auth.service.js';
+import type { GmAccess } from '../src/auth/gm-access.js';
 import { sha1Hex } from '../src/auth/sha1.js';
 import { FakeAccountsRepository } from './fakes.js';
 
@@ -10,7 +11,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     accounts = new FakeAccountsRepository();
-    service = new AuthService(accounts);
+    service = new AuthService(accounts, { isGm: (name: string) => name.toLowerCase() === 'moose' } as GmAccess);
   });
 
   describe('register', () => {

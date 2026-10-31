@@ -99,4 +99,12 @@ describe('decoders', () => {
     expect(decodeLoginAck(hex('00 03 07000000'))).toEqual({ ok: true, authority: 3, managerId: 7 });
     expect(decodeLoginAck(hex('01 00 00000000')).ok).toBe(false);
   });
+
+  it.each([
+    ['negative', 'FFFFFFFF'],
+    ['past the end', '09000000'],
+  ])('rejects a group list string length that is %s', (_label, length) => {
+    const body = Buffer.concat([hex('01000000 00'), hex(length), Buffer.from('abc')]);
+    expect(() => decodeGroupList(body)).toThrow(RangeError);
+  });
 });

@@ -125,6 +125,9 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
       if (ack.ok) {
         this.retryIndex = 0;
         this.setState('connected', `authority ${ack.authority}`);
+        if (ack.authority > 6) {
+          this.logger.warn(`portal manager authority ${ack.authority} is too low for teleports (needs 1-6)`);
+        }
       } else {
         this.socket = null;
         socket.destroy();

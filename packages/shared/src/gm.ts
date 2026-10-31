@@ -14,7 +14,7 @@ const positionShape = z.object({
   channel: z.number().int().min(1).max(255),
   mapId: z.number().int().min(0).max(65535),
   x: coordinate,
-  y: z.number().finite(),
+  y: z.number().min(-1e6).max(1e6),
   z: coordinate,
 });
 

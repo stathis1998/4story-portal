@@ -129,6 +129,7 @@ class BodyReader {
   string(): string {
     const len = this.body.readInt32LE(this.offset);
     this.offset += 4;
+    if (len < 0 || this.offset + len > this.body.length) throw new RangeError('string length out of range');
     const s = this.body.toString('latin1', this.offset, this.offset + len);
     this.offset += len;
     return s;

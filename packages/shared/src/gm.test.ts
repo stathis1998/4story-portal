@@ -21,6 +21,9 @@ describe('positionSchema', () => {
   it.each([262144, -1])('rejects x = %d', (x) =>
     expect(positionSchema.safeParse({ ...position, x }).success).toBe(false));
 
+  it.each([1e6 + 1, -1e6 - 1, 1e300])('rejects y = %d', (y) =>
+    expect(positionSchema.safeParse({ ...position, y }).success).toBe(false));
+
   it('rejects 0/0/0 on the x path', () => {
     const result = positionSchema.safeParse({ ...position, x: 0, y: 0, z: 0 });
     expect(result.success).toBe(false);

@@ -56,6 +56,18 @@ describe('auth HTTP', () => {
     });
   });
 
+  describe('POST /api/auth/register (GM names)', () => {
+    it.each(['Moose', 'moose'])('returns the taken-username 409 for the unregistered GM name %s', async (username) => {
+      accounts.accounts.length = 0;
+
+      const res = await http().post('/api/auth/register').send({ username, password: 'secret2' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ statusCode: 409, message: 'Username is already taken' });
+      expect(accounts.accounts).toHaveLength(0);
+    });
+  });
+
   describe('POST /api/auth/login', () => {
     it('returns the user and a session cookie for the right password', async () => {
       const res = await http().post('/api/auth/login').send({ username: 'player', password: 'secret1' });

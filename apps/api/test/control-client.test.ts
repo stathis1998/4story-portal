@@ -101,6 +101,16 @@ describe('ControlClient', () => {
     await vi.waitFor(() => expect(server!.received[0]).toEqual(Buffer.concat([encodeLogin('portal', 'secret'), reference])));
   });
 
+  it('warns when the portal manager authority is too low for teleports', async () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    server = await startFakeServer((socket) => socket.write(encodeFrame(MSG.OPLOGIN_ACK, hex('00 07 07000000'))));
+    const c = connect(server.port);
+
+    await vi.waitFor(() => expect(c.status().state).toBe('connected'));
+    expect(warn).toHaveBeenCalledWith('portal manager authority 7 is too low for teleports (needs 1-6)');
+    warn.mockRestore();
+  });
+
   it('stops on a failed login without retrying', async () => {
     server = await startFakeServer((socket) => socket.write(LOGIN_FAILED));
     const c = connect(server.port);
