@@ -89,6 +89,16 @@ describe('auth HTTP', () => {
       expect(res.status).toBe(429);
     });
 
+    it('rate-limits each player separately behind the dev proxy', async () => {
+      // Vite forwards the browser's address in X-Forwarded-For; the API sees every request from loopback.
+      const login = (ip: string) =>
+        http().post('/api/auth/login').set('X-Forwarded-For', ip).send({ username: 'moose', password: 'wrong12' });
+      for (let i = 0; i < 10; i++) await login('10.0.0.1');
+
+      expect((await login('10.0.0.1')).status).toBe(429);
+      expect((await login('10.0.0.2')).status).toBe(401);
+    });
+
     it('returns a generic 500 without driver details when the database fails', async () => {
       accounts.findByUsername = async () => {
         throw new Error('Login failed for user sa; table TACCOUNT_PW');

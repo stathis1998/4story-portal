@@ -13,7 +13,8 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    // Same origin for the browser, so the httpOnly session cookie needs no CORS setup.
-    proxy: { '/api': 'http://localhost:3000' },
+    // Same origin for the browser, so the httpOnly session cookie needs no CORS setup. xfwd passes
+    // the browser's address on, so the API rate-limits each player separately.
+    proxy: { '/api': { target: 'http://localhost:3000', xfwd: true } },
   },
 })
