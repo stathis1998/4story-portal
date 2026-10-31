@@ -5,6 +5,7 @@ import { FormMessage } from '../../../components/FormMessage'
 import { PlayersPanel } from '../../../components/gm/PlayersPanel'
 import { PositionForm } from '../../../components/gm/PositionForm'
 import { StatusBadge } from '../../../components/StatusBadge'
+import { ApiError } from '../../../lib/api'
 import { applyServerError } from '../../../lib/form-errors'
 import { gmStatusQueryOptions, onlinePlayersQueryOptions, useTeleport } from '../../../lib/gm'
 import { meQueryOptions } from '../../../lib/session'
@@ -16,6 +17,9 @@ export const Route = createFileRoute('/_authed/gm/teleport')({
   },
   component: TeleportPage,
 })
+
+const MAX_PLAYERS = 20
+const POSITION_FIELDS = new Set(['world', 'channel', 'mapId', 'x', 'y', 'z'])
 
 function TeleportPage() {
   const queryClient = useQueryClient()
@@ -39,7 +43,9 @@ function TeleportPage() {
       ? 'Game server is not connected'
       : selected.length === 0
         ? 'Select at least one player'
-        : null
+        : selected.length > MAX_PLAYERS
+          ? 'Select at most 20 players'
+          : null
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -74,7 +80,13 @@ function TeleportPage() {
                   })
                   setNote(`Sent to ${result.names.join(', ')}. The game doesn't confirm teleports, so check in game.`)
                 } catch (err) {
-                  setError(applyServerError(err, setFieldError))
+                  // Errors on fields this form lacks (names, destination) would otherwise go nowhere.
+                  const stray =
+                    err instanceof ApiError
+                      ? Object.entries(err.fieldErrors ?? {}).find(([field]) => !POSITION_FIELDS.has(field))
+                      : undefined
+                  const message = applyServerError(err, setFieldError)
+                  setError(message ?? stray?.[1][0] ?? null)
                 }
               }}
             />

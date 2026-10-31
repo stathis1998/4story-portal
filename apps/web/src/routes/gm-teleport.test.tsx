@@ -123,4 +123,35 @@ describe('teleport page: sending', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
     expect(await screen.findByText('0 selected')).toBeInTheDocument()
   })
+
+  it('caps the selection at 20 players', async () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({
+      charId: i,
+      name: 'Player' + i,
+      level: 1,
+      className: 'Mage',
+      world: 1,
+      channel: 1,
+      mapId: 0,
+    }))
+    mockApi(base({ 'GET /gm/players': () => json(200, many) }))
+    const { user } = renderRoute('/gm/teleport', { me: gm })
+    await user.click(await screen.findByRole('checkbox', { name: 'Select all' }))
+    expect(screen.getByRole('button', { name: 'Teleport 21 players' })).toBeDisabled()
+    expect(screen.getByText('Select at most 20 players')).toBeInTheDocument()
+  })
+
+  it('shows server validation errors on fields the form lacks', async () => {
+    mockApi(
+      base({
+        'POST /gm/teleport': () =>
+          json(400, { statusCode: 400, message: 'Validation failed', fieldErrors: { names: ['Names must be unique'] } }),
+      }),
+    )
+    const { user } = renderRoute('/gm/teleport', { me: gm })
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Kaelith' }))
+    await fill(user)
+    await user.click(screen.getByRole('button', { name: 'Teleport 1 player' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Names must be unique')
+  })
 })
