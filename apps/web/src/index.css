@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Visual direction: a medieval fantasy portal. Parchment and ink, one bronze-gold accent,
+  Cinzel for headings, Source Sans 3 for text. Components use only these semantic tokens.
+*/
+:root {
+  --bg: #f4efe4;
+  --surface: #fffdf8;
+  --surface-raised: #f9f4e9;
+  --fg: #1d1a15;
+  --muted: #6c6457;
+  --line: #e0d7c4;
+  --accent: #9a6a17;
+  --accent-hover: #845a12;
+  --accent-fg: #fffdf8;
+  --danger: #b42318;
+  --danger-surface: #fdecea;
+}
+
+.dark {
+  --bg: #0d0f13;
+  --surface: #161920;
+  --surface-raised: #1d212a;
+  --fg: #ece6d8;
+  --muted: #9b9484;
+  --line: #2a2f3a;
+  --accent: #d6a23e;
+  --accent-hover: #e4b458;
+  --accent-fg: #181204;
+  --danger: #f97066;
+  --danger-surface: #2a1513;
+}
+
+@theme inline {
+  --font-display: "Cinzel", Georgia, serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-screen bg-bg font-body text-fg antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-wide;
+  }
+}
