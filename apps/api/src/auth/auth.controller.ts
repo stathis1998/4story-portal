@@ -5,11 +5,13 @@ import {
   loginRequestSchema,
   type RegisterRequest,
   registerRequestSchema,
+  type Me,
   type SessionUser,
 } from '@4story-portal/shared';
 import type { Response } from 'express';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { AuthService } from './auth.service.js';
+import { GmAccess } from './gm-access.js';
 import { CurrentUser, SessionGuard } from './session.guard.js';
 import { SESSION_COOKIE, SessionService } from './session.service.js';
 
@@ -18,6 +20,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
+    private readonly gm: GmAccess,
   ) {}
 
   @Post('register')
@@ -26,7 +29,7 @@ export class AuthController {
   async register(
     @Body(new ZodValidationPipe(registerRequestSchema)) body: RegisterRequest,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<SessionUser> {
+  ): Promise<Me> {
     return this.signIn(await this.auth.register(body), res);
   }
 
@@ -37,7 +40,7 @@ export class AuthController {
   async login(
     @Body(new ZodValidationPipe(loginRequestSchema)) body: LoginRequest,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<SessionUser> {
+  ): Promise<Me> {
     return this.signIn(await this.auth.login(body), res);
   }
 
@@ -49,12 +52,12 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(SessionGuard)
-  me(@CurrentUser() user: SessionUser): SessionUser {
-    return user;
+  me(@CurrentUser() user: SessionUser): Me {
+    return this.gm.me(user);
   }
 
-  private signIn(user: SessionUser, res: Response): SessionUser {
+  private signIn(user: SessionUser, res: Response): Me {
     res.cookie(SESSION_COOKIE, this.sessions.sign(user), this.sessions.cookieOptions());
-    return user;
+    return this.gm.me(user);
   }
 }

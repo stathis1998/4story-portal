@@ -4,6 +4,7 @@ import { type AppConfig, CONFIG } from '../config/config.js';
 import { ACCOUNTS_REPOSITORY, SqlAccountsRepository } from './accounts.repository.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { GmAccess, GmGuard } from './gm-access.js';
 import { SessionGuard } from './session.guard.js';
 import { SessionService } from './session.service.js';
 
@@ -19,8 +20,10 @@ import { SessionService } from './session.service.js';
     AuthService,
     SessionService,
     SessionGuard,
+    GmAccess,
+    GmGuard,
     { provide: ACCOUNTS_REPOSITORY, useClass: SqlAccountsRepository },
   ],
-  exports: [SessionService, SessionGuard],
+  exports: [SessionService, SessionGuard, GmAccess, GmGuard],
 })
 export class AuthModule {}

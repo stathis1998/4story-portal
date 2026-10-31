@@ -21,6 +21,7 @@ describe('auth HTTP', () => {
   beforeEach(async () => {
     accounts = new FakeAccountsRepository();
     accounts.seed('moose', sha1Hex('secret1'));
+    accounts.seed('player', sha1Hex('secret1'));
     app = await createTestApp({ accounts });
   });
 
@@ -33,7 +34,7 @@ describe('auth HTTP', () => {
       const res = await http().post('/api/auth/register').send({ username: 'newuser', password: 'secret1' });
 
       expect(res.status).toBe(201);
-      expect(res.body).toEqual({ userId: expect.any(Number), username: 'newuser' });
+      expect(res.body).toEqual({ userId: expect.any(Number), username: 'newuser', isGm: false });
       const raw = ([] as string[]).concat(res.headers['set-cookie']).find((c) => c.startsWith('session='))!;
       expect(raw).toMatch(/HttpOnly/i);
       expect(raw).toMatch(/SameSite=Lax/i);
@@ -57,11 +58,18 @@ describe('auth HTTP', () => {
 
   describe('POST /api/auth/login', () => {
     it('returns the user and a session cookie for the right password', async () => {
+      const res = await http().post('/api/auth/login').send({ username: 'player', password: 'secret1' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ userId: accounts.accounts[1].userId, username: 'player', isGm: false });
+      expect(sessionCookie(res)).toMatch(/^session=.+/);
+    });
+
+    it('flags a configured GM, ignoring case', async () => {
       const res = await http().post('/api/auth/login').send({ username: 'moose', password: 'secret1' });
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ userId: accounts.accounts[0].userId, username: 'moose' });
-      expect(sessionCookie(res)).toMatch(/^session=.+/);
+      expect(res.body.isGm).toBe(true);
     });
 
     it('lets an existing game account log in even if it predates the registration rules', async () => {
@@ -113,12 +121,20 @@ describe('auth HTTP', () => {
 
   describe('GET /api/auth/me', () => {
     it('returns the user for a valid session cookie', async () => {
-      const login = await http().post('/api/auth/login').send({ username: 'moose', password: 'secret1' });
+      const login = await http().post('/api/auth/login').send({ username: 'player', password: 'secret1' });
 
       const res = await http().get('/api/auth/me').set('Cookie', sessionCookie(login));
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ userId: accounts.accounts[0].userId, username: 'moose' });
+      expect(res.body).toEqual({ userId: accounts.accounts[1].userId, username: 'player', isGm: false });
+    });
+
+    it('reports isGm for a GM session', async () => {
+      const login = await http().post('/api/auth/login').send({ username: 'moose', password: 'secret1' });
+
+      const res = await http().get('/api/auth/me').set('Cookie', sessionCookie(login));
+
+      expect(res.body).toEqual({ userId: accounts.accounts[0].userId, username: 'moose', isGm: true });
     });
 
     it('returns 401 without a cookie', async () =>
