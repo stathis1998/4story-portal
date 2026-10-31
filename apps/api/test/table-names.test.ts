@@ -1,0 +1,11 @@
+import { expect, it } from 'vitest';
+import { loadConfig } from '../src/config/config.js';
+import { tableNames } from '../src/db/db.service.js';
+import { validEnv } from './fixtures.js';
+
+it('builds bracketed three-part table names from the configured databases', () =>
+  expect(tableNames(loadConfig(validEnv))).toEqual({
+    accounts: '[TGLOBAL_GSP_TEST].dbo.TACCOUNT_PW',
+    userInfo: '[TGLOBAL_GSP_TEST].dbo.TUSERINFOTABLE',
+    characters: '[TGAME_GSP_TEST].dbo.TCHARTABLE',
+  }));

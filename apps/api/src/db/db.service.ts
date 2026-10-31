@@ -1,0 +1,52 @@
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import sql from 'mssql';
+import { CONFIG, type AppConfig } from '../config/config.js';
+
+// Database names are validated by loadConfig (letters, digits, underscores), so bracketing them is safe.
+export function tableNames(config: AppConfig) {
+  const global = `[${config.db.globalName}].dbo`;
+  const game = `[${config.db.gameName}].dbo`;
+  return {
+    accounts: `${global}.TACCOUNT_PW`,
+    userInfo: `${global}.TUSERINFOTABLE`,
+    characters: `${game}.TCHARTABLE`,
+  };
+}
+
+@Injectable()
+export class DbService implements OnModuleInit, OnModuleDestroy {
+  readonly pool: sql.ConnectionPool;
+  readonly tables: ReturnType<typeof tableNames>;
+
+  constructor(@Inject(CONFIG) config: AppConfig) {
+    this.tables = tableNames(config);
+    this.pool = new sql.ConnectionPool({
+      server: config.db.host,
+      port: config.db.port,
+      user: config.db.user,
+      password: config.db.password,
+      options: { encrypt: false, trustServerCertificate: true },
+    });
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.pool.connect();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.pool.close();
+  }
+
+  async withTransaction<T>(fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
+    const tx = new sql.Transaction(this.pool);
+    await tx.begin();
+    try {
+      const result = await fn(tx);
+      await tx.commit();
+      return result;
+    } catch (error) {
+      await tx.rollback().catch(() => undefined);
+      throw error;
+    }
+  }
+}
