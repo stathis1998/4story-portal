@@ -271,10 +271,13 @@ export class StatsService {
 
     return BADGES.map((badge) => {
       const earned = mine?.has(badge.id) ?? false;
-      const holderIds = ranked.filter((account) => snapshot.earned.get(account.userId)?.has(badge.id));
+      const holderIds = new Set(
+        ranked.filter((account) => snapshot.earned.get(account.userId)?.has(badge.id)).map((account) => account.userId),
+      );
       const unlocks = snapshot.unlocks.filter((unlock) => unlock.badgeId === badge.id);
       const firstSeen = (earned && unlocks.find((unlock) => unlock.userId === userId)?.firstSeen) || null;
-      const dated = unlocks.filter((unlock) => rankedIds.has(unlock.userId));
+      // Only current holders: the store keeps badges an account has since lost.
+      const dated = unlocks.filter((unlock) => holderIds.has(unlock.userId));
       const allDated = dated.every((unlock) => unlock.firstSeen !== null);
       const earliest = dated.map((unlock) => unlock.firstSeen ?? '').sort()[0];
       return {
@@ -282,7 +285,7 @@ export class StatsService {
         name: badge.name,
         description: badge.description,
         earned,
-        holders: holderIds.length,
+        holders: holderIds.size,
         players: ranked.length,
         firstSeen,
         isNew: firstSeen !== null && daysBetween(firstSeen, today) < NEW_FOR_DAYS,

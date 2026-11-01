@@ -21,10 +21,10 @@ function AuthedLayout() {
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <span className="font-display text-sm tracking-[0.35em] text-accent-text uppercase">4Story</span>
             <nav aria-label="Main" className="flex gap-4 text-sm font-bold">
-              <Link to="/characters" className="text-muted hover:underline" activeProps={{ className: 'text-fg' }}>
+              <Link to="/characters" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Characters
               </Link>
-              <Link to="/hall-of-fame" className="text-muted hover:underline" activeProps={{ className: 'text-fg' }}>
+              <Link to="/hall-of-fame" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Hall of Fame
               </Link>
             </nav>

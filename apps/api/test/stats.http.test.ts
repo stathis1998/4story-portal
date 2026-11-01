@@ -217,6 +217,19 @@ describe('player stats routes', () => {
       expect(await badge('upgrade-10')).toMatchObject({ firstSeen: '2026-10-25', isNew: false, firstToEarn: true });
     });
 
+    it('is first to earn even if someone who held it earlier has since lost it', async () => {
+      repo.rows = {
+        ...repo.rows,
+        characters: repo.rows.characters.map((c) => ({ ...c, gold: c.userId === PLAYER ? 1000 : 0 })),
+      };
+      vi.spyOn(store, 'badgeUnlocks').mockReturnValue([
+        { userId: OTHER, badgeId: 'wealth-1000', firstSeen: null },
+        { userId: PLAYER, badgeId: 'wealth-1000', firstSeen: '2026-10-30' },
+      ]);
+
+      expect(await badge('wealth-1000')).toMatchObject({ earned: true, holders: 1, firstToEarn: true });
+    });
+
     it('still works with no dates when the store is broken', async () => {
       vi.spyOn(store, 'badgeUnlocks').mockReturnValue([]);
       expect(await badge('level-50')).toMatchObject({ earned: true, firstSeen: null, isNew: false, firstToEarn: false });

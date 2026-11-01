@@ -327,6 +327,16 @@ describe('hall of fame', () => {
     expect(await screen.findByRole('heading', { name: 'Hall of Fame', level: 1 })).toBeInTheDocument()
   })
 
+  it('marks the current page in the header', async () => {
+    mockApi(route())
+    renderRoute('/hall-of-fame', { me })
+
+    const current = await screen.findByRole('link', { name: 'Hall of Fame' })
+    expect(current).not.toHaveClass('text-muted')
+    expect(current).toHaveClass('text-fg')
+    expect(screen.getByRole('link', { name: 'Characters' })).toHaveClass('text-muted')
+  })
+
   it('lists each category with places, marking your entry', async () => {
     mockApi(route())
     renderRoute('/hall-of-fame', { me })
