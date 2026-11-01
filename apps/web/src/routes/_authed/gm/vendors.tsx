@@ -74,12 +74,12 @@ function VendorsPage() {
                   {stock.data && (
                     <>
                       <AddItemSearch
-                        key={selected.id}
+                        key={`add-${selected.id}`}
                         vendor={selected}
                         soldItemIds={new Set(stock.data.map((item) => item.itemId))}
                         onNote={setNote}
                       />
-                      <VendorItemsTable key={selected.id} vendor={selected} items={stock.data} onNote={setNote} />
+                      <VendorItemsTable key={`stock-${selected.id}`} vendor={selected} items={stock.data} onNote={setNote} />
                     </>
                   )}
                 </>
