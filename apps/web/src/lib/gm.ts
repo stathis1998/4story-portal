@@ -1,4 +1,8 @@
 import type {
+  GmEvent,
+  GmEventInput,
+  GmEventList,
+  GmEventSchedule,
   GmItemPriceResult,
   GmItemSearchResult,
   GmLocation,
@@ -17,8 +21,8 @@ import type {
   VendorShop,
 } from '@4story-portal/shared'
 import { splitMoney } from '@4story-portal/shared'
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from './api'
+import { type QueryClient, queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ApiError, apiFetch } from './api'
 
 export const gmStatusQueryOptions = queryOptions({
   queryKey: ['gm', 'status'],
@@ -48,6 +52,69 @@ export const gmPlacesQueryOptions = queryOptions({
 export const mapName = (id: number, name: string | null | undefined) => name ?? `Map ${id}`
 
 export const mapOptionLabel = ({ id, name }: GmMap) => (name ? `${id} – ${name}` : mapName(id, name))
+
+export const gmEventsQueryOptions = queryOptions({
+  queryKey: ['gm', 'events'],
+  queryFn: () => apiFetch<GmEventList>('/gm/events'),
+  // Events start and stop on their own schedule.
+  refetchInterval: 5000,
+})
+
+const invalidateEvents = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({ queryKey: gmEventsQueryOptions.queryKey, exact: true })
+
+export function useCreateEvent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: GmEventInput) =>
+      apiFetch<GmEvent>('/gm/events', { method: 'POST', body: JSON.stringify(input) }),
+    onSettled: () => invalidateEvents(queryClient),
+  })
+}
+
+export function useUpdateEvent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ index, input }: { index: number; input: GmEventInput }) =>
+      apiFetch<GmEvent>(`/gm/events/${index}`, { method: 'PUT', body: JSON.stringify(input) }),
+    // Also after a failure: "already ended" means the list is out of date.
+    onSettled: () => invalidateEvents(queryClient),
+  })
+}
+
+export function useDeleteEvent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (index: number) => apiFetch<void>(`/gm/events/${index}`, { method: 'DELETE' }),
+    onSettled: () => invalidateEvents(queryClient),
+  })
+}
+
+/** The API writes its event errors for the GM, including the 502s and 503s. */
+export function eventErrorMessage(err: unknown) {
+  return err instanceof ApiError && (err.status < 500 || err.status === 502 || err.status === 503)
+    ? err.message
+    : 'Something went wrong. Please try again.'
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Split by hand rather than through Date: these are the server's clock, not the browser's.
+function wallClockParts(value: string) {
+  const [, month, day] = value.slice(0, 10).split('-').map(Number)
+  return { day, month: MONTHS[month - 1], date: `${day} ${MONTHS[month - 1]}`, time: value.slice(11) }
+}
+
+export function formatEventSchedule({ mode, start, end }: GmEventSchedule) {
+  const from = wallClockParts(start)
+  const to = wallClockParts(end)
+  if (mode === 'period') return `${from.date} ${from.time} → ${to.date} ${to.time}`
+
+  const window = `Daily ${from.time}–${to.time}`
+  if (start.slice(0, 10) === end.slice(0, 10)) return `${window}, ${from.date}`
+  if (from.month === to.month) return `${window}, ${from.day}–${to.date}`
+  return `${window}, ${from.date} – ${to.date}`
+}
 
 export const gmLoginsQueryOptions = queryOptions({
   queryKey: ['gm', 'logins'],
