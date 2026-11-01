@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { FormMessage } from '../../../components/FormMessage'
 import { GameIcon } from '../../../components/gm/GameIcon'
 import { GmNav } from '../../../components/gm/GmNav'
+import { VendorItemsTable } from '../../../components/gm/VendorItemsTable'
 import { VendorList } from '../../../components/gm/VendorList'
-import { gmVendorsQueryOptions, mapName, vendorDisplayName } from '../../../lib/gm'
+import { gmVendorsQueryOptions, mapName, vendorDisplayName, vendorStockQueryOptions } from '../../../lib/gm'
 import { meQueryOptions } from '../../../lib/session'
 
 export const Route = createFileRoute('/_authed/gm/vendors')({
@@ -24,6 +26,8 @@ function VendorsPage() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { data, isError } = useQuery(gmVendorsQueryOptions)
   const selected = data?.vendors.find((vendor) => vendor.id === selectedId)
+  const stock = useQuery({ ...vendorStockQueryOptions(selected?.id ?? 0), enabled: Boolean(selected) })
+  const [note, setNote] = useState<string | null>(null)
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -44,22 +48,32 @@ function VendorsPage() {
               <VendorList
                 vendors={data.vendors}
                 selected={selectedId}
-                onSelect={(vendor) => void navigate({ search: { vendor } })}
+                onSelect={(vendor) => {
+                  setNote(null)
+                  void navigate({ search: { vendor } })
+                }}
               />
             </div>
             <section className="min-w-0 flex-1">
               {selected ? (
-                <div className="flex items-center gap-3">
-                  <GameIcon spriteId={selected.faceIcon} size={48} />
-                  <div>
-                    <h2 className="text-2xl">{vendorDisplayName(selected)}</h2>
-                    <p className="text-sm text-muted">
-                      {[selected.name && selected.title, selected.country, mapName(selected.mapId, selected.mapName)]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
+                <>
+                  <div className="flex items-center gap-3">
+                    <GameIcon spriteId={selected.faceIcon} size={48} />
+                    <div className="min-w-0">
+                      <h2 className="text-2xl break-words">{vendorDisplayName(selected)}</h2>
+                      <p className="text-sm text-muted">
+                        {[selected.name && selected.title, selected.country, mapName(selected.mapId, selected.mapName)]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                  {note && <p className="mt-3 text-sm font-bold text-accent-text">{note}</p>}
+                  <FormMessage message={stock.isError ? 'Could not load stock.' : null} />
+                  {stock.data && (
+                    <VendorItemsTable key={selected.id} vendor={selected} items={stock.data} onNote={setNote} />
+                  )}
+                </>
               ) : selectedId ? (
                 <p className="text-muted">That NPC is not a vendor.</p>
               ) : (

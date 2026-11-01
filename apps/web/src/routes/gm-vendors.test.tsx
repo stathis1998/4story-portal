@@ -1,6 +1,6 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { json, mockApi } from '../test/mock-api'
+import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
 const gm = { userId: 1, username: 'moose', isGm: true }
@@ -144,5 +144,273 @@ describe('vendors page', () => {
     mockApi({ 'GET /gm/vendors': () => json(400, { message: 'nope' }) })
     renderRoute('/gm/vendors', { me: gm })
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load vendors.')
+  })
+})
+
+const item = (o = {}) => ({
+  itemId: 8001,
+  name: 'Small Potion',
+  level: 1,
+  icon: 500,
+  base: 1,
+  multiplier: 50,
+  price: 50,
+  soldBy: 12,
+  ...o,
+})
+
+const stockApi = (items: unknown[], extra: Parameters<typeof mockApi>[0] = {}) =>
+  mockApi({
+    'GET /gm/vendors': list([vendor(), pvp]),
+    'GET /gm/vendors/20002/items': () => json(200, items),
+    'GET /gm/vendors/20003/items': () => json(200, items),
+    ...extra,
+  })
+
+type User = ReturnType<typeof renderRoute>['user']
+
+const openEditor = async (user: User, name = 'Small Potion') =>
+  user.click(await screen.findByRole('button', { name: `Edit price of ${name}` }))
+
+const setField = async (user: User, label: string, value: string) => {
+  const field = screen.getByLabelText(label)
+  await user.clear(field)
+  if (value) await user.type(field, value)
+}
+
+const deleted = (fetchMock: ReturnType<typeof mockApi>) =>
+  fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([input]) => String(input))
+
+describe('vendor stock', () => {
+  it('lists stock with icon, level, split price and sold-by', async () => {
+    stockApi([item(), item({ itemId: 8002, name: 'Derion Cloth', price: 5000, soldBy: 3, icon: null })])
+    renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    const row = (await screen.findByText('Small Potion')).closest('tr')!
+    expect(row.querySelector('img')).toHaveAttribute('src', '/game-icons/500.png')
+    expect(within(row).getByText('0R 0L 50C')).toBeInTheDocument()
+    expect(within(row).getByText('12')).toBeInTheDocument()
+    expect(within(screen.getByText('Derion Cloth').closest('tr')!).getByText('0R 5L 0C')).toBeInTheDocument()
+  })
+
+  it('filters stock', async () => {
+    stockApi([item(), item({ itemId: 8002, name: 'Derion Cloth' })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await user.type(await screen.findByLabelText('Filter stock'), 'cloth')
+    expect(screen.getByText('Derion Cloth')).toBeInTheDocument()
+    expect(screen.queryByText('Small Potion')).not.toBeInTheDocument()
+  })
+
+  it('shows Free for a price of 0', async () => {
+    stockApi([item({ price: 0, multiplier: 0 })])
+    renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    expect(await screen.findByText('Free')).toBeInTheDocument()
+  })
+
+  it('shows points for a PvP shop', async () => {
+    stockApi([item({ price: 150 })])
+    renderRoute('/gm/vendors?vendor=20003', { me: gm })
+    expect(await screen.findByText('150 points')).toBeInTheDocument()
+  })
+
+  it('shows an unknown item, removable, with no edit button', async () => {
+    stockApi([item({ name: null })])
+    renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    expect(await screen.findByText('Unknown item #8001')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit price/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Unknown item #8001' })).toBeInTheDocument()
+  })
+
+  it('shows no edit button when the base is 0', async () => {
+    stockApi([item({ base: 0 })])
+    renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    expect(await screen.findByText("Price can't be set: level 0 item")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Edit price/ })).not.toBeInTheDocument()
+  })
+
+  it('previews sell-back and warns about other vendors', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Cron', '75')
+    expect(screen.getByText('Sells back for 18 cron.')).toBeInTheDocument()
+    expect(screen.getByText('Sold by 12 vendors: this changes all of them.')).toBeInTheDocument()
+  })
+
+  it('leaves out the vendor warning when only this vendor sells it', async () => {
+    stockApi([item({ soldBy: 1 })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    expect(screen.getByText('Sells back for 12 cron.')).toBeInTheDocument()
+    expect(screen.queryByText(/this changes all of them/)).not.toBeInTheDocument()
+  })
+
+  it('disables save until the price changes', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    const save = screen.getByRole('button', { name: 'Save' })
+    expect(save).toBeDisabled()
+    await setField(user, 'Cron', '75')
+    expect(save).toBeEnabled()
+    await setField(user, 'Cron', '50')
+    expect(save).toBeDisabled()
+  })
+
+  it('sends the joined amount and shows a note', async () => {
+    const fetchMock = stockApi([item()], {
+      'PUT /gm/items/8001/price': () =>
+        json(200, { itemId: 8001, name: 'Small Potion', price: 1_002_003, multiplier: 1, soldBy: 12 }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Rune', '1')
+    await setField(user, 'Luna', '2')
+    await setField(user, 'Cron', '3')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'money', amount: 1_002_003 }]),
+    )
+    expect(
+      await screen.findByText(/now costs 1,002,003 cron at 12 vendors\. Restart TMapSvr to apply\./),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('says 1 vendor when singular', async () => {
+    stockApi([item()], {
+      'PUT /gm/items/8001/price': () =>
+        json(200, { itemId: 8001, name: 'Small Potion', price: 75, multiplier: 75, soldBy: 1 }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Cron', '75')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(
+      await screen.findByText('Small Potion now costs 75 cron at 1 vendor. Restart TMapSvr to apply.'),
+    ).toBeInTheDocument()
+  })
+
+  it('edits one points field and hides sell-back on a PvP shop', async () => {
+    const fetchMock = stockApi([item({ price: 150 })], {
+      'PUT /gm/items/8001/price': () =>
+        json(200, { itemId: 8001, name: 'Small Potion', price: 200, multiplier: 200, soldBy: 12 }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20003', { me: gm })
+    await openEditor(user)
+    expect(screen.queryByLabelText('Rune')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
+    await setField(user, 'PvP points', '200')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'pvp', amount: 200 }]),
+    )
+    expect(await screen.findByText(/now costs 200 points at 12 vendors/)).toBeInTheDocument()
+  })
+
+  it('treats a blank field as 0', async () => {
+    const fetchMock = stockApi([item()], {
+      'PUT /gm/items/8001/price': () =>
+        json(200, { itemId: 8001, name: 'Small Potion', price: 1_000_000, multiplier: 1, soldBy: 12 }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Cron', '')
+    await setField(user, 'Rune', '1')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'money', amount: 1_000_000 }]),
+    )
+  })
+
+  it('disables save for a negative or fractional value', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    const save = screen.getByRole('button', { name: 'Save' })
+    await setField(user, 'Cron', '-5')
+    expect(save).toBeDisabled()
+    await setField(user, 'Cron', '7.5')
+    expect(save).toBeDisabled()
+    await setField(user, 'Cron', '60')
+    expect(save).toBeEnabled()
+  })
+
+  it('warns when the price cannot be charged exactly', async () => {
+    stockApi([item({ base: 53750, price: 0, multiplier: 0 })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Rune', '16')
+    expect(screen.getByText('Will charge 15,999,999 cron')).toBeInTheDocument()
+    await setField(user, 'Rune', '0')
+    await setField(user, 'Cron', '75')
+    expect(screen.queryByText(/Will charge/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the typed values and shows the error when saving fails', async () => {
+    stockApi([item()], {
+      'PUT /gm/items/8001/price': () => json(422, { statusCode: 422, message: 'Price is too high for this item' }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Cron', '75')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Price is too high for this item')).toBeInTheDocument()
+    expect(screen.getByLabelText('Cron')).toHaveValue(75)
+  })
+
+  it('closes the editor when another vendor is selected', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await user.click(screen.getByRole('button', { name: /Elrod/ }))
+    expect(await screen.findByRole('heading', { name: 'Elrod' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Edit price of Small Potion' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('asks before removing and sends nothing on cancel', async () => {
+    const fetchMock = stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await user.click(await screen.findByRole('button', { name: 'Remove Small Potion' }))
+    expect(screen.getByText('Remove Small Potion from Mr Bab?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('Remove Small Potion from Mr Bab?')).not.toBeInTheDocument()
+    expect(deleted(fetchMock)).toEqual([])
+  })
+
+  it('removes and shows a note', async () => {
+    let removed = false
+    const fetchMock = stockApi([], {
+      'GET /gm/vendors/20002/items': () => json(200, removed ? [] : [item()]),
+      'DELETE /gm/vendors/20002/items/8001': () => {
+        removed = true
+        return json(200, { itemId: 8001, name: 'Small Potion' })
+      },
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await user.click(await screen.findByRole('button', { name: 'Remove Small Potion' }))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('Small Potion removed from Mr Bab. Restart TMapSvr to apply.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Small Potion' })).not.toBeInTheDocument())
+    expect(deleted(fetchMock)).toEqual(['/api/gm/vendors/20002/items/8001'])
+  })
+
+  it('refreshes after removing an item that was already gone', async () => {
+    let gone = false
+    const fetchMock = stockApi([], {
+      'GET /gm/vendors/20002/items': () => json(200, gone ? [] : [item()]),
+      'DELETE /gm/vendors/20002/items/8001': () => {
+        gone = true
+        return json(404, { statusCode: 404, message: 'That vendor no longer sells this item' })
+      },
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await user.click(await screen.findByRole('button', { name: 'Remove Small Potion' }))
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('That vendor no longer sells this item')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Small Potion')).not.toBeInTheDocument())
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input) === '/api/gm/vendors/20002/items').length,
+    ).toBeGreaterThan(1)
   })
 })
