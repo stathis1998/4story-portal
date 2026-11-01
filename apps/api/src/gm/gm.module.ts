@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { type AppConfig, CONFIG } from '../config/config.js';
+import { EventsController } from './events.controller.js';
+import { EventsService } from './events.service.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore } from './gm-locations.store.js';
 import { GmController } from './gm.controller.js';
 import { GM_REPOSITORY, SqlGmRepository } from './gm.repository.js';
@@ -12,8 +14,9 @@ import { VendorsService } from './vendors.service.js';
 
 @Module({
   imports: [AuthModule],
-  controllers: [GmController, VendorsController],
+  controllers: [GmController, VendorsController, EventsController],
   providers: [
+    EventsService,
     TeleportService,
     LoginsService,
     VendorsService,

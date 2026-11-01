@@ -4,6 +4,7 @@ import type { CharacterRow, CharactersRepository } from '../src/characters/chara
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
+import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
 export function characterRow(overrides: Partial<CharacterRow> = {}): CharacterRow {
@@ -59,11 +60,21 @@ export class FakeAccountsRepository implements AccountsRepository {
 
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
-export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick'> {
+export class FakeControlClient
+  implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'listEvents' | 'changeEvent'>
+{
   state: ControlState = 'connected';
   worlds: { id: number; name: string }[] = [{ id: 1, name: 'Lapiris' }];
   readonly moves: unknown[] = [];
   readonly kicks: string[] = [];
+  events: ControlEvent[] = [];
+  readonly changes: { kind: EventKind; event: ControlEvent }[] = [];
+  /** What the server answers a change with. */
+  changeResult = 0;
+  /** Thrown by event requests, after a list has succeeded when failOnlyChange is set. */
+  failWith?: Error;
+  failOnlyChange = false;
+  nextIndex = 50;
   /** Runs after each kick: a test uses it to play the game server logging a real session out. */
   onKick?: (name: string) => void;
 
@@ -85,6 +96,22 @@ export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveTo
     this.requireConnected();
     this.kicks.push(name);
     this.onKick?.(name);
+  }
+
+  async listEvents(): Promise<ControlEvent[]> {
+    this.requireConnected();
+    if (this.failWith && !this.failOnlyChange) throw this.failWith;
+    return this.events;
+  }
+
+  async changeEvent(kind: EventKind, event: ControlEvent): Promise<{ result: number; event: ControlEvent }> {
+    this.requireConnected();
+    if (this.failWith) throw this.failWith;
+    this.changes.push({ kind, event });
+    return {
+      result: this.changeResult,
+      event: kind === EVENT_KIND.ADD ? { ...event, index: this.nextIndex++ } : event,
+    };
   }
 
   private requireConnected(): void {
