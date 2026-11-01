@@ -110,6 +110,13 @@ export const vendorStockQueryOptions = (id: number) =>
 /** The vendor's name, else its title, else "NPC 20002". The API already turns the database's '_' into ''. */
 export const vendorDisplayName = (vendor: GmVendor) => vendor.name || vendor.title || `NPC ${vendor.id}`
 
+/** The item's name, else "Item #8001" (the database held '_'). A null name is not in TITEMCHART: "Unknown item #8001". */
+export const itemDisplayName = ({ itemId, name }: { itemId: number; name: string | null }) =>
+  name === null ? `Unknown item #${itemId}` : name || `Item #${itemId}`
+
+/** "1 vendor" or "12 vendors". */
+export const vendorCount = (count: number) => `${count} ${count === 1 ? 'vendor' : 'vendors'}`
+
 const number = new Intl.NumberFormat('en-US')
 
 /** A price in words, for notes: `1 Rune 2 Luna 3 Cron`, `75 Cron` or `150 points`. */
@@ -124,6 +131,13 @@ export function priceText(price: number, shop: VendorShop) {
     .filter(([amount]) => amount !== 0)
     .map(([amount, name]) => `${number.format(amount as number)} ${name}`)
     .join(' ')
+}
+
+/** The note shown after a price is saved. */
+export function priceNote(name: string, { price, soldBy }: GmItemPriceResult, shop: VendorShop) {
+  return price === 0
+    ? `${name} is now free at ${vendorCount(soldBy)}. Restart TMapSvr to apply.`
+    : `${name} now costs ${priceText(price, shop)} at ${vendorCount(soldBy)}. Restart TMapSvr to apply.`
 }
 
 export function useRemoveVendorItem() {
@@ -151,17 +165,19 @@ export function useSetItemPrice() {
         method: 'PUT',
         body: JSON.stringify({ currency, amount }),
       }),
+    // Search results carry prices too, and a lowered price can make an item addable.
     onSettled: () =>
-      queryClient.invalidateQueries({
-        queryKey: gmVendorsQueryOptions.queryKey,
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: gmVendorsQueryOptions.queryKey }),
+        queryClient.invalidateQueries({ queryKey: ['gm', 'items'] }),
+      ]),
   })
 }
 
-export const itemSearchQueryOptions = (q: string) =>
+export const itemSearchQueryOptions = (q: string, shop: VendorShop) =>
   queryOptions({
-    queryKey: ['gm', 'items', q],
-    queryFn: () => apiFetch<GmItemSearchResult[]>(`/gm/items?q=${encodeURIComponent(q)}`),
+    queryKey: ['gm', 'items', q, shop],
+    queryFn: () => apiFetch<GmItemSearchResult[]>(`/gm/items?q=${encodeURIComponent(q)}&shop=${shop}`),
   })
 
 export function useAddVendorItem() {

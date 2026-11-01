@@ -1,7 +1,8 @@
 import type { GmVendor, GmVendorItem } from '@4story-portal/shared'
+import { fullStackOverflows } from '@4story-portal/shared'
 import { useState } from 'react'
 import { ApiError } from '../../lib/api'
-import { priceText, useRemoveVendorItem, useSetItemPrice, vendorDisplayName } from '../../lib/gm'
+import { itemDisplayName, priceNote, useRemoveVendorItem, useSetItemPrice, vendorDisplayName } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
 import { GameIcon } from './GameIcon'
@@ -17,7 +18,6 @@ type Props = {
 const th = 'px-3 py-2 text-left whitespace-nowrap text-xs font-bold tracking-wider text-muted uppercase'
 const td = 'px-3 py-2'
 
-const itemName = (item: GmVendorItem) => item.name ?? `Unknown item #${item.itemId}`
 const errorMessage = (err: unknown) =>
   err instanceof ApiError && err.status < 500 ? err.message : 'Something went wrong. Please try again.'
 
@@ -32,7 +32,11 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
   const vendorName = vendorDisplayName(vendor)
 
   const needle = filter.trim().toLowerCase()
-  const shown = needle ? items.filter((item) => itemName(item).toLowerCase().includes(needle)) : items
+  const shown = needle
+    ? items.filter(
+        (item) => itemDisplayName(item).toLowerCase().includes(needle) || `#${item.itemId}`.includes(needle),
+      )
+    : items
 
   async function save(item: GmVendorItem, amount: number) {
     setSaveError(null)
@@ -43,12 +47,7 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
         amount,
       })
       setEditing(null)
-      const vendors = `${result.soldBy} ${result.soldBy === 1 ? 'vendor' : 'vendors'}`
-      onNote(
-        result.price === 0
-          ? `${itemName(item)} is now free at ${vendors}. Restart TMapSvr to apply.`
-          : `${itemName(item)} now costs ${priceText(result.price, vendor.shop)} at ${vendors}. Restart TMapSvr to apply.`,
-      )
+      onNote(priceNote(itemDisplayName(item), result, vendor.shop))
     } catch (err) {
       setSaveError(errorMessage(err))
     }
@@ -59,7 +58,7 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
     setRemoveError(null)
     try {
       await remove.mutateAsync({ vendorId: vendor.id, itemId: item.itemId })
-      onNote(`${itemName(item)} removed from ${vendorName}. Restart TMapSvr to apply.`)
+      onNote(`${itemDisplayName(item)} removed from ${vendorName}. Restart TMapSvr to apply.`)
     } catch (err) {
       setRemoveError(errorMessage(err))
     }
@@ -102,15 +101,33 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
             </thead>
             <tbody>
               {shown.map((item) => {
-                const name = itemName(item)
+                const name = itemDisplayName(item)
                 const icon = <GameIcon spriteId={item.icon} size={32} />
+                const label = (
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span>
+                      <span className={item.name ? '' : 'text-muted'}>{name}</span>
+                      {item.name && <span className="ml-1.5 text-muted">#{item.itemId}</span>}
+                    </span>
+                    {!item.inClient && (
+                      <span className="text-xs font-bold text-danger">
+                        Not in client: crashes players opening this shop
+                      </span>
+                    )}
+                    {fullStackOverflows(item.price, item.stack) && (
+                      <span className="text-xs font-bold text-danger">
+                        Buying a full stack costs almost nothing: lower this price.
+                      </span>
+                    )}
+                  </span>
+                )
                 if (editing === item.itemId) {
                   return (
                     <tr key={item.itemId} className="border-b border-line last:border-b-0">
                       <td colSpan={5} className={td}>
                         <div className="mb-2 flex items-center gap-3">
                           {icon}
-                          <span>{name}</span>
+                          {label}
                         </div>
                         <PriceEditor
                           item={item}
@@ -129,13 +146,13 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
                     <td className={td}>
                       <span className="flex items-center gap-3">
                         {icon}
-                        <span className={item.name ? '' : 'text-muted'}>{name}</span>
+                        {label}
                       </span>
                     </td>
                     <td className={td}>{item.level}</td>
                     <td className={`${td} whitespace-nowrap`}>
                       <span data-testid="price">
-                        <Price price={item.price} shop={vendor.shop} />
+                        {item.name === null ? '—' : <Price price={item.price} shop={vendor.shop} />}
                       </span>
                     </td>
                     <td className={td}>{item.soldBy}</td>
