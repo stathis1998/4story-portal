@@ -19,4 +19,10 @@ it('builds bracketed three-part table names from the configured databases', () =
     items: '[TGAME_GSP_TEST].dbo.TITEMCHART',
     itemAttrs: '[TGAME_GSP_TEST].dbo.TITEMATTRCHART',
     levels: '[TGAME_GSP_TEST].dbo.TLEVELCHART',
+    allCharacters: '[TGLOBAL_GSP_TEST].dbo.TALLCHARTABLE',
+    sessionLog: '[TGLOBAL_GSP_TEST].dbo.TLOG',
+    characterItems: '[TGAME_GSP_TEST].dbo.TITEMTABLE',
+    companions: '[TGAME_GSP_TEST].dbo.TCOMPANIONTABLE',
+    characterTitles: '[TGAME_GSP_TEST].dbo.TTITLETABLE',
+    titles: '[TGAME_GSP_TEST].dbo.TTITLECHART',
   }));

@@ -11,7 +11,16 @@ import { GM_REPOSITORY } from '../src/gm/gm.repository.js';
 import { LOGIN_CLEAR_TIMING } from '../src/gm/logins.service.js';
 import { VENDORS_REPOSITORY } from '../src/gm/vendors.repository.js';
 import { DbService } from '../src/db/db.service.js';
-import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeGmRepository, FakeVendorsRepository } from './fakes.js';
+import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
+import { PortalStore } from '../src/store/portal-store.js';
+import {
+  FakeAccountsRepository,
+  FakeCharactersRepository,
+  FakeControlClient,
+  FakeGmRepository,
+  FakeStatsRepository,
+  FakeVendorsRepository,
+} from './fakes.js';
 import { validEnv } from './fixtures.js';
 
 export type TestAppOverrides = {
@@ -21,6 +30,8 @@ export type TestAppOverrides = {
   gm?: FakeGmRepository;
   locations?: GmLocationsStore;
   vendors?: FakeVendorsRepository;
+  stats?: FakeStatsRepository;
+  store?: PortalStore;
 };
 
 // The real AppModule with the database and control server swapped out, configured exactly like main.ts.
@@ -44,6 +55,10 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.locations ?? new GmLocationsStore('./data/unused-test-presets.json'))
     .overrideProvider(LOGIN_CLEAR_TIMING)
     .useValue({ pollMs: 1, waitMs: 50 })
+    .overrideProvider(STATS_REPOSITORY)
+    .useValue(overrides.stats ?? new FakeStatsRepository())
+    .overrideProvider(PortalStore)
+    .useValue(overrides.store ?? new PortalStore(':memory:'))
     .compile();
 
   const app = moduleRef.createNestApplication({ logger: false });

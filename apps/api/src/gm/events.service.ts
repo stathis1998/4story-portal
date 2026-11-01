@@ -241,7 +241,7 @@ function toControlEvent(input: GmEventInput, index: number): ControlEvent {
   };
 }
 
-function toGmEvent(event: ControlEvent): GmEvent {
+export function toGmEvent(event: ControlEvent): GmEvent {
   return {
     index: event.index,
     type: event.type,
@@ -291,4 +291,4 @@ function wallClockOf(date: Date): string {
 }
 
 const toWallClock = (seconds: bigint) => wallClockOf(new Date(Number(seconds) * 1000));
-const currentWallClock = () => wallClockOf(new Date());
+export const currentWallClock = () => wallClockOf(new Date());

@@ -61,7 +61,7 @@ Earned per account, using the account stats.
 | `companion-20` | Beast Master | Any character with a level 20 companion |
 | `wealth-1000` | Treasure Hoard | Any character with 1,000 gold |
 
-**Rarity:** "held by H of T players", counted in accounts. T is accounts with a live character. Hidden GM accounts count in neither.
+**Rarity:** "held by H of T players", counted in accounts. T is accounts with a live character that isn't banned. Hidden GM accounts count in neither.
 
 **Dates:** the first time the portal sees an account hold a badge, it stores the date. Badges held when the portal first runs this feature store no date, and show none. A badge seen in the last 7 days is **New**. The account with the earliest date, when no holder has a blank date, is **First to earn** it.
 
