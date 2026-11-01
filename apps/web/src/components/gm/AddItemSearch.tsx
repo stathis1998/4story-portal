@@ -2,10 +2,11 @@ import type { GmVendor } from '@4story-portal/shared'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../lib/api'
-import { itemSearchQueryOptions, priceLabel, useAddVendorItem, vendorDisplayName } from '../../lib/gm'
+import { itemSearchQueryOptions, useAddVendorItem, vendorDisplayName } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
 import { GameIcon } from './GameIcon'
+import { Price } from './Price'
 
 type Props = {
   vendor: GmVendor
@@ -100,7 +101,7 @@ export function AddItemSearch({ vendor, soldItemIds, onNote }: Props) {
                     {found.name} <span className="font-normal text-muted">#{found.itemId} · Lv {found.level}</span>
                   </span>
                   <span className="font-normal text-muted">
-                    {reason ?? priceLabel(vendor.shop === 'pvp' ? found.pvpPrice : found.price, vendor.shop)}
+                    {reason ?? <Price price={vendor.shop === 'pvp' ? found.pvpPrice : found.price} shop={vendor.shop} />}
                   </span>
                 </Button>
               </li>

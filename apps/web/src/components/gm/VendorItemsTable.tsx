@@ -1,10 +1,11 @@
 import type { GmVendor, GmVendorItem } from '@4story-portal/shared'
 import { useState } from 'react'
 import { ApiError } from '../../lib/api'
-import { priceLabel, priceText, useRemoveVendorItem, useSetItemPrice, vendorDisplayName } from '../../lib/gm'
+import { priceText, useRemoveVendorItem, useSetItemPrice, vendorDisplayName } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
 import { GameIcon } from './GameIcon'
+import { Price } from './Price'
 import { PriceEditor } from './PriceEditor'
 
 type Props = {
@@ -42,10 +43,11 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
         amount,
       })
       setEditing(null)
+      const vendors = `${result.soldBy} ${result.soldBy === 1 ? 'vendor' : 'vendors'}`
       onNote(
-        `${itemName(item)} now costs ${priceText(result.price, vendor.shop)} at ${result.soldBy} ${
-          result.soldBy === 1 ? 'vendor' : 'vendors'
-        }. Restart TMapSvr to apply.`,
+        result.price === 0
+          ? `${itemName(item)} is now free at ${vendors}. Restart TMapSvr to apply.`
+          : `${itemName(item)} now costs ${priceText(result.price, vendor.shop)} at ${vendors}. Restart TMapSvr to apply.`,
       )
     } catch (err) {
       setSaveError(errorMessage(err))
@@ -122,7 +124,11 @@ export function VendorItemsTable({ vendor, items, onNote }: Props) {
                     </span>
                   </td>
                   <td className={td}>{item.level}</td>
-                  <td className={`${td} whitespace-nowrap`}>{priceLabel(item.price, vendor.shop)}</td>
+                  <td className={`${td} whitespace-nowrap`}>
+                    <span data-testid="price">
+                      <Price price={item.price} shop={vendor.shop} />
+                    </span>
+                  </td>
                   <td className={td}>{item.soldBy}</td>
                   <td className={`${td} text-right`}>
                     {confirming === item.itemId ? (

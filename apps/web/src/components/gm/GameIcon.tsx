@@ -1,8 +1,8 @@
 import { useState } from 'react'
 
-type Props = { spriteId: number | null; size: number }
+type Props = { spriteId: number | null; size: number; alt?: string }
 
-export function GameIcon({ spriteId, size }: Props) {
+export function GameIcon({ spriteId, size, alt = '' }: Props) {
   const [failed, setFailed] = useState(false)
   if (spriteId === null || failed) {
     return <span aria-hidden="true" className="inline-block shrink-0 rounded-xs bg-line" style={{ width: size, height: size }} />
@@ -10,7 +10,7 @@ export function GameIcon({ spriteId, size }: Props) {
   return (
     <img
       src={`/game-icons/${spriteId}.png`}
-      alt=""
+      alt={alt}
       loading="lazy"
       width={size}
       height={size}

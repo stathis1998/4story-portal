@@ -112,17 +112,19 @@ export const vendorDisplayName = (vendor: GmVendor) => vendor.name || vendor.tit
 
 const number = new Intl.NumberFormat('en-US')
 
-/** A price as the table shows it: `Free`, `0R 5L 0C` or `150 points`. */
-export function priceLabel(price: number, shop: VendorShop) {
-  if (price === 0) return 'Free'
+/** A price in words, for notes: `1 Rune 2 Luna 3 Cron`, `75 Cron` or `150 points`. */
+export function priceText(price: number, shop: VendorShop) {
   if (shop === 'pvp') return `${number.format(price)} points`
   const { rune, luna, cron } = splitMoney(price)
-  return `${rune}R ${luna}L ${cron}C`
+  return [
+    [rune, 'Rune'],
+    [luna, 'Luna'],
+    [cron, 'Cron'],
+  ]
+    .filter(([amount]) => amount !== 0)
+    .map(([amount, name]) => `${number.format(amount as number)} ${name}`)
+    .join(' ')
 }
-
-/** A price in a sentence: `75 cron` or `150 points`. */
-export const priceText = (price: number, shop: VendorShop) =>
-  `${number.format(price)} ${shop === 'pvp' ? 'points' : 'cron'}`
 
 export function useRemoveVendorItem() {
   const queryClient = useQueryClient()

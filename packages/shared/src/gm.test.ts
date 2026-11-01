@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addVendorItemSchema,
+  COIN_SPRITES,
   characterNameSchema,
   chargedPrice,
   gmIdSchema,
@@ -112,6 +113,7 @@ describe('sell back and money', () => {
   it('pays a quarter, rounded down', () => expect(sellBackPrice(75)).toBe(18));
   it('splits', () => expect(splitMoney(268_750)).toEqual({ rune: 0, luna: 268, cron: 750 }));
   it('joins, carrying oversized parts', () => expect(joinMoney({ rune: 1, luna: 1500, cron: 2 })).toBe(2_500_002));
+  it('names the coin sprites', () => expect(COIN_SPRITES).toEqual({ rune: 11137, luna: 11138, cron: 11136 }));
 });
 
 describe('vendor schemas', () => {

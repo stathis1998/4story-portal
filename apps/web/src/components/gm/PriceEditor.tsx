@@ -1,5 +1,6 @@
 import type { GmVendorItem, VendorShop } from '@4story-portal/shared'
 import {
+  COIN_SPRITES,
   MAX_PRICE,
   chargedPrice,
   joinMoney,
@@ -8,9 +9,10 @@ import {
   splitMoney,
 } from '@4story-portal/shared'
 import { useState } from 'react'
-import { priceText } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
+import { GameIcon } from './GameIcon'
+import { Price } from './Price'
 
 type Props = {
   item: GmVendorItem
@@ -32,11 +34,11 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
   })
   const fields =
     shop === 'pvp'
-      ? [{ key: 'points', label: 'PvP points' }]
+      ? [{ key: 'points', label: 'PvP points', sprite: null }]
       : [
-          { key: 'rune', label: 'Rune' },
-          { key: 'luna', label: 'Luna' },
-          { key: 'cron', label: 'Cron' },
+          { key: 'rune', label: 'Rune', sprite: COIN_SPRITES.rune },
+          { key: 'luna', label: 'Luna', sprite: COIN_SPRITES.luna },
+          { key: 'cron', label: 'Cron', sprite: COIN_SPRITES.cron },
         ]
 
   // A blank field counts as 0.
@@ -60,9 +62,13 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
       }}
     >
       <div className="flex flex-wrap items-end gap-3">
-        {fields.map(({ key, label }) => (
+        {fields.map(({ key, label, sprite }) => (
           <div key={key} className="flex flex-col gap-1">
-            <label htmlFor={`price-${key}`} className="text-xs font-bold tracking-wider text-muted uppercase">
+            <label
+              htmlFor={`price-${key}`}
+              className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-muted uppercase"
+            >
+              {sprite !== null && <GameIcon spriteId={sprite} size={16} />}
               {label}
             </label>
             <input
@@ -83,11 +89,23 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
         </Button>
       </div>
       <div className="flex flex-wrap gap-x-2 text-sm text-muted">
-        {shop === 'money' && usable && <p>Sells back for {priceText(sellBackPrice(charged!), shop)}.</p>}
+        {shop === 'money' && usable && (
+          <p>
+            {sellBackPrice(charged!) === 0 ? (
+              'Sells back for nothing.'
+            ) : (
+              <>
+                Sells back for <Price price={sellBackPrice(charged!)} shop={shop} />
+              </>
+            )}
+          </p>
+        )}
         {item.soldBy > 1 && <p>Sold by {item.soldBy} vendors: this changes all of them.</p>}
       </div>
       {usable && charged !== amount && (
-        <p className="text-sm font-bold text-accent-text">Will charge {priceText(charged!, shop)}</p>
+        <p className="text-sm font-bold text-accent-text">
+          Will charge <Price price={charged!} shop={shop} />
+        </p>
       )}
       <FormMessage message={error} />
     </form>

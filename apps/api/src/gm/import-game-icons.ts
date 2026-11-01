@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { COIN_SPRITES } from '@4story-portal/shared';
 import dotenv from 'dotenv';
 import {
   buildIconLookup,
@@ -56,12 +57,18 @@ async function main(): Promise<void> {
   }
 
   const lookup = buildIconLookup({ items, visuals, templates, npcs, lists });
+  // The price coins are not item or face icons, so they are asked for by name.
+  const wanted = usedSprites(lookup);
+  for (const sprite of Object.values(COIN_SPRITES)) wanted.add(sprite);
   const pngs = extractSprites({
     imageIndex,
     bufferList,
     readData: (relativePath) => readFileSync(path.join(clientRoot, 'Data', ...relativePath.split(/[\\/]/))),
-    wanted: usedSprites(lookup),
+    wanted,
   });
+  for (const [coin, sprite] of Object.entries(COIN_SPRITES)) {
+    if (!pngs.has(sprite)) throw new Error(`The ${coin} coin sprite ${sprite} is missing from the extraction`);
+  }
 
   // Everything parsed: only now touch the output.
   const generated = path.resolve(process.cwd(), 'src/gm/game-icons.generated.ts');

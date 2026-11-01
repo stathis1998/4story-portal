@@ -20,7 +20,7 @@ export function VendorList({ vendors, selected, onSelect }: Props) {
   )
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 md:max-h-[calc(100vh-6rem)]">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="vendor-search" className="text-xs font-bold tracking-wider text-muted uppercase">
           Search vendors
@@ -34,28 +34,30 @@ export function VendorList({ vendors, selected, onSelect }: Props) {
         />
       </div>
       <Checkbox label="PvP shops only" checked={pvpOnly} onChange={(event) => setPvpOnly(event.target.checked)} />
-      {shown.length === 0 && <p className="text-sm text-muted">No matching vendor.</p>}
-      <ul className="flex flex-col gap-1">
-        {shown.map((vendor) => (
-          <li key={vendor.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(vendor.id)}
-              aria-current={vendor.id === selected ? 'true' : undefined}
-              className={`flex w-full items-center gap-3 rounded-xs border px-2 py-1.5 text-left transition hover:border-accent ${
-                vendor.id === selected ? 'border-accent bg-surface-raised' : 'border-line bg-surface'
-              }`}
-            >
-              <GameIcon spriteId={vendor.faceIcon} size={36} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate font-bold">{vendorDisplayName(vendor)}</span>
-                {vendor.name && vendor.title && <span className="truncate text-xs text-muted">{vendor.title}</span>}
-              </span>
-              <span className="text-sm text-muted">{vendor.itemCount}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="md:min-h-0 md:overflow-y-auto md:pr-1">
+        {shown.length === 0 && <p className="text-sm text-muted">No matching vendor.</p>}
+        <ul className="flex flex-col gap-1">
+          {shown.map((vendor) => (
+            <li key={vendor.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(vendor.id)}
+                aria-current={vendor.id === selected ? 'true' : undefined}
+                className={`flex w-full items-center gap-3 rounded-xs border px-2 py-1.5 text-left transition hover:border-accent ${
+                  vendor.id === selected ? 'border-accent bg-surface-raised' : 'border-line bg-surface'
+                }`}
+              >
+                <GameIcon spriteId={vendor.faceIcon} size={36} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-bold">{vendorDisplayName(vendor)}</span>
+                  {vendor.name && vendor.title && <span className="truncate text-xs text-muted">{vendor.title}</span>}
+                </span>
+                <span className="text-sm text-muted">{vendor.itemCount}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

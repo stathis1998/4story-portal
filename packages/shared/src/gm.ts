@@ -119,6 +119,9 @@ export const multiplierForPrice = (base: number, amount: number) => {
 /** What a vendor pays a player who sells an item back: a quarter, rounded down. */
 export const sellBackPrice = (price: number) => Math.floor(price / 4);
 
+/** The game's coin sprites: Rune, Luna and Cron. */
+export const COIN_SPRITES = { rune: 11137, luna: 11138, cron: 11136 } as const;
+
 type Money = { rune: number; luna: number; cron: number };
 
 export const splitMoney = (price: number): Money => ({
