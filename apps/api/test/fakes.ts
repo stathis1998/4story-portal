@@ -1,7 +1,7 @@
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository } from '../src/characters/characters.repository.js';
-import type { AuditEntry, GmRepository, OnlinePlayerRow } from '../src/gm/gm.repository.js';
+import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -58,10 +58,13 @@ export class FakeAccountsRepository implements AccountsRepository {
 
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
-export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter'> {
+export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick'> {
   state: ControlState = 'connected';
   worlds: { id: number; name: string }[] = [{ id: 1, name: 'Lapiris' }];
   readonly moves: unknown[] = [];
+  readonly kicks: string[] = [];
+  /** Runs after each kick: a test uses it to play the game server logging a real session out. */
+  onKick?: (name: string) => void;
 
   status(): { state: ControlState; worlds: { id: number; name: string }[] } {
     return { state: this.state, worlds: this.worlds };
@@ -77,6 +80,12 @@ export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveTo
     this.moves.push({ kind: 'character', world, target, names });
   }
 
+  kick(name: string): void {
+    this.requireConnected();
+    this.kicks.push(name);
+    this.onKick?.(name);
+  }
+
   private requireConnected(): void {
     if (this.state !== 'connected') throw new ControlUnavailableError();
   }
@@ -87,7 +96,11 @@ export class FakeGmRepository implements GmRepository {
   channels: number[] = [1, 2, 3, 50];
   hostedMaps: number[] = [0];
   hosted = true;
+  logins: LoginRow[] = [];
+  /** Plays the row vanishing between the last check and the delete. */
+  loginGoesBeforeDelete = false;
   failAudit = false;
+  readonly deletedLogins: number[] = [];
   readonly audits: AuditEntry[] = [];
 
   async listOnlinePlayers(): Promise<OnlinePlayerRow[]> {
@@ -103,6 +116,21 @@ export class FakeGmRepository implements GmRepository {
 
   async isLocationHosted(): Promise<boolean> {
     return this.hosted;
+  }
+
+  async listLogins(): Promise<LoginRow[]> {
+    return this.logins;
+  }
+
+  async findLogin(key: number): Promise<LoginRow | null> {
+    return this.logins.find((login) => login.key === key) ?? null;
+  }
+
+  async deleteLogin(key: number): Promise<boolean> {
+    if (this.loginGoesBeforeDelete) return false;
+    this.deletedLogins.push(key);
+    this.logins = this.logins.filter((login) => login.key !== key);
+    return true;
   }
 
   async writeAudit(e: AuditEntry): Promise<void> {

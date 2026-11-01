@@ -8,12 +8,20 @@ import {
   encodeFrame,
   encodeLogin,
   encodeUserMove,
+  encodeUserKickout,
   encodeUserPosition,
 } from '../src/control/control-protocol.js';
 
 const hex = (s: string) => Buffer.from(s.replace(/ /g, ''), 'hex');
 
 describe('control protocol encoding', () => {
+  it('encodes CT_USERKICKOUT_REQ as the bare character name', () => {
+    const frame = encodeUserKickout('Kaelith');
+    expect(frame.readUInt16LE(0)).toBe(27);
+    expect(frame.readUInt16LE(2)).toBe(0x932c);
+    expect(frame.subarray(16)).toEqual(Buffer.concat([hex('07000000'), Buffer.from('Kaelith', 'latin1')]));
+  });
+
   it('encodes CT_USERMOVE_REQ byte-exact (spec reference frame)', () => {
     const frame = encodeUserMove({ world: 1, channel: 1, mapId: 0, x: 2800, y: 50, z: 5000 }, ['mrdkos']);
     expect(frame).toEqual(

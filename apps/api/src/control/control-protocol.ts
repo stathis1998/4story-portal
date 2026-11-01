@@ -8,6 +8,7 @@ export const MSG = {
   OPLOGIN_REQ: 0x9302,
   OPLOGIN_ACK: 0x9303,
   GROUPLIST_ACK: 0x9306,
+  USERKICKOUT_REQ: 0x932c,
   USERMOVE_REQ: 0x932e,
   USERPOSITION_REQ: 0x9344,
 } as const;
@@ -110,6 +111,10 @@ export function encodeUserPosition(world: number, target: string, names: string[
   const w = new BodyWriter().byte(world).string(target).word(names.length);
   for (const name of names) w.string(name);
   return encodeFrame(MSG.USERPOSITION_REQ, w.toBuffer());
+}
+
+export function encodeUserKickout(name: string): Buffer {
+  return encodeFrame(MSG.USERKICKOUT_REQ, new BodyWriter().string(name).toBuffer());
 }
 
 class BodyReader {

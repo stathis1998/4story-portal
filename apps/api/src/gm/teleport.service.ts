@@ -71,7 +71,7 @@ export class TeleportService {
 
   private async audit(log: string, actor: Actor): Promise<void> {
     try {
-      await this.repo.writeAudit({ ip: actor.ip, gmId: actor.username, log });
+      await this.repo.writeAudit({ ip: actor.ip, gmId: actor.username, command: 'TELEPORT', log });
     } catch (error) {
       this.logger.warn(`Could not write the teleport audit row: ${error instanceof Error ? error.message : error}`);
     }

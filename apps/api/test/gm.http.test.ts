@@ -57,6 +57,8 @@ describe('/api/gm', () => {
     ['get', '/api/gm/locations'],
     ['post', '/api/gm/locations'],
     ['delete', '/api/gm/locations/x'],
+    ['get', '/api/gm/logins'],
+    ['post', '/api/gm/logins/1/clear'],
   ] as const;
 
   describe('GET /api/gm/places', () => {
@@ -97,6 +99,127 @@ describe('/api/gm', () => {
     const res = await other[method](path);
     expect(res.status).toBe(403);
     expect(res.body.message).toBe('GM access required');
+  });
+
+  describe('logins', () => {
+    const login = (extra = {}) => ({
+      key: 7,
+      account: 'friend',
+      character: 'Kaelith' as string | null,
+      world: 1,
+      channel: 2,
+      blocked: true,
+      loggedInAt: new Date('2026-10-31T23:37:25.553Z'),
+      ...extra,
+    });
+
+    it('lists logins with the login time as an ISO string', async () => {
+      gm.logins = [login()];
+
+      const res = await agent.get('/api/gm/logins');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([{ ...login(), loggedInAt: '2026-10-31T23:37:25.553Z' }]);
+    });
+
+    it('deletes the row when the kick finds no session, because it is stuck', async () => {
+      gm.logins = [login(), login({ key: 8, account: 'other', character: 'Moosey' })];
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ outcome: 'cleared' });
+      expect(control.kicks).toEqual(['Kaelith']);
+      expect(gm.deletedLogins).toEqual([7]);
+      expect(gm.audits).toEqual([
+        { ip: expect.any(String), gmId: 'moose', command: 'CLEARLOGIN', log: 'Kaelith (friend): stuck login cleared' },
+      ]);
+    });
+
+    it('leaves the row to the normal logout when the kick closes a real session', async () => {
+      gm.logins = [login()];
+      control.onKick = () => {
+        gm.logins = [];
+      };
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.body).toEqual({ outcome: 'logged-out' });
+      expect(gm.deletedLogins).toEqual([]);
+      expect(gm.audits[0].log).toBe('Kaelith (friend): logged out by kick');
+    });
+
+    it('waits for a logout that takes a moment', async () => {
+      gm.logins = [login()];
+      control.onKick = () => {
+        setTimeout(() => {
+          gm.logins = [];
+        }, 10);
+      };
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.body).toEqual({ outcome: 'logged-out' });
+      expect(gm.deletedLogins).toEqual([]);
+    });
+
+    it('reports a logout when the row goes just before the delete', async () => {
+      gm.logins = [login()];
+      gm.loginGoesBeforeDelete = true;
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.body).toEqual({ outcome: 'logged-out' });
+    });
+
+    it('deletes a login with no character in game without kicking, even when disconnected', async () => {
+      gm.logins = [login({ character: null })];
+      control.state = 'disconnected';
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.body).toEqual({ outcome: 'cleared' });
+      expect(control.kicks).toEqual([]);
+      expect(gm.deletedLogins).toEqual([7]);
+      expect(gm.audits[0].log).toBe('friend: stuck login cleared');
+    });
+
+    it('refuses to touch a character login when disconnected, since it could be a real session', async () => {
+      gm.logins = [login()];
+      control.state = 'disconnected';
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.status).toBe(503);
+      expect(res.body.message).toBe('Game server is not connected');
+      expect(gm.deletedLogins).toEqual([]);
+      expect(gm.audits[0].log).toBe('REJECTED disconnected: Kaelith (friend)');
+    });
+
+    it('returns 404 for a login that is gone', async () => {
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.status).toBe(404);
+      expect(control.kicks).toEqual([]);
+    });
+
+    it('returns 400 for a key that is not a number', async () => {
+      expect((await agent.post('/api/gm/logins/abc/clear')).status).toBe(400);
+    });
+
+    it('still reports the outcome when the audit write fails', async () => {
+      gm.logins = [login()];
+      gm.failAudit = true;
+
+      const res = await agent.post('/api/gm/logins/7/clear');
+
+      expect(res.body).toEqual({ outcome: 'cleared' });
+    });
+
+    it('throttles clears', async () => {
+      for (let i = 0; i < 30; i++) await agent.post('/api/gm/logins/7/clear').expect(404);
+      expect((await agent.post('/api/gm/logins/7/clear')).status).toBe(429);
+    });
   });
 
   it('reports status with channels', async () => {
@@ -161,7 +284,7 @@ describe('/api/gm', () => {
     expect(res.body).toEqual({ sent: true, names: ['Kaelith'] });
     expect(control.moves).toEqual([{ ...position, names: ['Kaelith'] }]);
     expect(gm.audits).toEqual([
-      { ip: expect.any(String), gmId: 'moose', log: 'Kaelith -> w1 ch1 map0 (2800,50,5000)' },
+      { ip: expect.any(String), gmId: 'moose', command: 'TELEPORT', log: 'Kaelith -> w1 ch1 map0 (2800,50,5000)' },
     ]);
   });
 

@@ -54,3 +54,18 @@ export type GmMap = { id: number; name: string | null };
 export type GmDestination = { name: string; mapId: number; x: number; y: number; z: number };
 
 export type GmPlaces = { maps: GmMap[]; destinations: GmDestination[] };
+
+/** A row in the game's table of logged-in users, which a stuck login never leaves. */
+export type GmLogin = {
+  key: number;
+  account: string;
+  /** Null until the player has entered the game. */
+  character: string | null;
+  world: number;
+  channel: number;
+  /** Someone tried to log in over this row. */
+  blocked: boolean;
+  loggedInAt: string;
+};
+
+export type GmLoginClearResult = { outcome: 'logged-out' | 'cleared' };

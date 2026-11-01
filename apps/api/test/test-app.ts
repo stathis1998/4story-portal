@@ -8,6 +8,7 @@ import { CONFIG, loadConfig } from '../src/config/config.js';
 import { ControlClient } from '../src/control/control-client.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore } from '../src/gm/gm-locations.store.js';
 import { GM_REPOSITORY } from '../src/gm/gm.repository.js';
+import { LOGIN_CLEAR_TIMING } from '../src/gm/logins.service.js';
 import { DbService } from '../src/db/db.service.js';
 import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeGmRepository } from './fakes.js';
 import { validEnv } from './fixtures.js';
@@ -37,6 +38,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.gm ?? new FakeGmRepository())
     .overrideProvider(GM_LOCATIONS_STORE)
     .useValue(overrides.locations ?? new GmLocationsStore('./data/unused-test-presets.json'))
+    .overrideProvider(LOGIN_CLEAR_TIMING)
+    .useValue({ pollMs: 1, waitMs: 50 })
     .compile();
 
   const app = moduleRef.createNestApplication({ logger: false });

@@ -8,6 +8,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Param,
+  ParseIntPipe,
   Post,
   Req,
   UseGuards,
@@ -17,6 +18,8 @@ import {
   type GmLocation,
   type GmLocationInput,
   gmLocationInputSchema,
+  type GmLogin,
+  type GmLoginClearResult,
   type GmPlaces,
   type GmStatus,
   type OnlinePlayer,
@@ -33,6 +36,7 @@ import { ControlClient } from '../control/control-client.js';
 import { gamePlaces } from './game-places.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore, InvalidPresetFileError } from './gm-locations.store.js';
 import { GM_REPOSITORY, type GmRepository } from './gm.repository.js';
+import { LoginsService } from './logins.service.js';
 import { TeleportService } from './teleport.service.js';
 
 @Controller('gm')
@@ -43,6 +47,7 @@ export class GmController {
     @Inject(GM_REPOSITORY) private readonly repo: GmRepository,
     @Inject(GM_LOCATIONS_STORE) private readonly locations: GmLocationsStore,
     private readonly teleports: TeleportService,
+    private readonly logins: LoginsService,
   ) {}
 
   @Get('status')
@@ -70,6 +75,23 @@ export class GmController {
     @Req() req: Request,
   ): Promise<TeleportResult> {
     return this.teleports.teleport(body, { username: user.username, ip: req.ip ?? '' });
+  }
+
+  @Get('logins')
+  listLogins(): Promise<GmLogin[]> {
+    return this.logins.list();
+  }
+
+  @Post('logins/:key/clear')
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  clearLogin(
+    @Param('key', ParseIntPipe) key: number,
+    @CurrentUser() user: SessionUser,
+    @Req() req: Request,
+  ): Promise<GmLoginClearResult> {
+    return this.logins.clear(key, { username: user.username, ip: req.ip ?? '' });
   }
 
   @Get('locations')

@@ -8,6 +8,7 @@ import {
   decodeGroupList,
   decodeLoginAck,
   encodeLogin,
+  encodeUserKickout,
   encodeUserMove,
   encodeUserPosition,
   type Frame,
@@ -76,6 +77,10 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
 
   moveToCharacter(world: number, target: string, names: string[]): void {
     this.connectedSocket().write(encodeUserPosition(world, target, names));
+  }
+
+  kick(name: string): void {
+    this.connectedSocket().write(encodeUserKickout(name));
   }
 
   private connectedSocket(): net.Socket {

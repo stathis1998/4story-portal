@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import net from 'node:net';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
-import { FrameDecoder, MSG, encodeFrame, encodeLogin } from '../src/control/control-protocol.js';
+import { FrameDecoder, MSG, encodeFrame, encodeLogin, encodeUserKickout } from '../src/control/control-protocol.js';
 
 const hex = (s: string) => Buffer.from(s.replace(/ /g, ''), 'hex');
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -101,6 +101,18 @@ describe('ControlClient', () => {
     await vi.waitFor(() => expect(server!.received[0]).toEqual(Buffer.concat([encodeLogin('portal', 'secret'), reference])));
   });
 
+  it('sends the kick frame', async () => {
+    server = await startFakeServer();
+    const c = connect(server.port);
+    await vi.waitFor(() => expect(c.status().state).toBe('connected'));
+
+    c.kick('Kaelith');
+
+    await vi.waitFor(() =>
+      expect(server!.received[0]).toEqual(Buffer.concat([encodeLogin('portal', 'secret'), encodeUserKickout('Kaelith')])),
+    );
+  });
+
   it('warns when the portal manager authority is too low for teleports', async () => {
     const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     server = await startFakeServer((socket) => socket.write(encodeFrame(MSG.OPLOGIN_ACK, hex('00 07 07000000'))));
@@ -172,6 +184,7 @@ describe('ControlClient', () => {
     client = new ControlClient({ host: '127.0.0.1', port: 1, user: 'portal', password: 'secret' });
 
     expect(() => client!.moveToCharacter(1, 'Moosey', ['Kaelith'])).toThrow(ControlUnavailableError);
+    expect(() => client!.kick('Kaelith')).toThrow(ControlUnavailableError);
     expect(() => client!.moveToPosition({ world: 1, channel: 1, mapId: 0, x: 1, y: 1, z: 1 }, ['a'])).toThrow(
       ControlUnavailableError,
     );
