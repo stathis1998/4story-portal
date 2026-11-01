@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
-import type { AccountRow, CharacterRow, CompanionRow, GearRow, SessionRow, StatRows, TitleRow } from './stats-rules.js';
+import type { AccountRow, CharacterRow, CompanionRow, GearRow, SessionRow, SocialRow, StatRows, TitleRow } from './stats-rules.js';
 
 export interface StatsRepository {
   loadRows(): Promise<StatRows>;
@@ -18,16 +18,17 @@ export class SqlStatsRepository implements StatsRepository {
   constructor(private readonly db: DbService) {}
 
   async loadRows(): Promise<StatRows> {
-    const [characters, sessions, gear, companions, titles, titlesTotal, accounts] = await Promise.all([
+    const [characters, sessions, gear, companions, titles, titlesTotal, social, accounts] = await Promise.all([
       this.characters(),
       this.sessions(),
       this.gear(),
       this.companions(),
       this.titles(),
       this.titlesTotal(),
+      this.social(),
       this.accounts(),
     ]);
-    return { characters, sessions, gear, companions, titles, titlesTotal, accounts };
+    return { characters, sessions, gear, companions, titles, titlesTotal, social, accounts };
   }
 
   private async characters(): Promise<CharacterRow[]> {
@@ -96,6 +97,23 @@ export class SqlStatsRepository implements StatsRepository {
       .request()
       .query<{ total: number }>(`SELECT COUNT(*) AS total FROM ${this.db.tables.titles} WHERE wTitleID <> 0`);
     return result.recordset[0].total;
+  }
+
+  private async social(): Promise<SocialRow[]> {
+    const { characters, friends, guildMembers, guilds, duelScores } = this.db.tables;
+    const result = await this.db.pool.request().query<Omit<SocialRow, 'inGuild' | 'leadsGuild'> & { inGuild: number; leadsGuild: number }>(
+      `SELECT c.dwCharID AS charId,
+              (SELECT COUNT(*) FROM ${friends} f
+               JOIN ${characters} other ON other.dwCharID = f.dwFriendID AND other.bDelete = 0
+               WHERE f.dwCharID = c.dwCharID) AS friends,
+              CASE WHEN EXISTS (SELECT 1 FROM ${guildMembers} m WHERE m.dwCharID = c.dwCharID) THEN 1 ELSE 0 END AS inGuild,
+              CASE WHEN EXISTS (SELECT 1 FROM ${guilds} g WHERE g.dwChief = c.dwCharID) THEN 1 ELSE 0 END AS leadsGuild,
+              ISNULL(d.dwWarriorWin + d.dwRangerWin + d.dwArcherWin + d.dwWizardWin + d.dwPriestWin + d.dwSorcererWin, 0) AS duelWins
+       FROM ${characters} c
+       LEFT JOIN ${duelScores} d ON d.dwCharID = c.dwCharID
+       WHERE c.bDelete = 0`,
+    );
+    return result.recordset.map((row) => ({ ...row, inGuild: row.inGuild === 1, leadsGuild: row.leadsGuild === 1 }));
   }
 
   private async accounts(): Promise<AccountRow[]> {

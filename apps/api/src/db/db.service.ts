@@ -27,6 +27,10 @@ export function tableNames(config: AppConfig) {
     companions: `${game}.TCOMPANIONTABLE`,
     characterTitles: `${game}.TTITLETABLE`,
     titles: `${game}.TTITLECHART`,
+    friends: `${game}.TFRIENDTABLE`,
+    guildMembers: `${game}.TGUILDMEMBERTABLE`,
+    guilds: `${game}.TGUILDTABLE`,
+    duelScores: `${game}.TDUELSCORETABLE`,
   };
 }
 

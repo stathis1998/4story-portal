@@ -53,6 +53,18 @@ describe('SqlStatsRepository against the _TEST copy', () => {
     }
   });
 
+  it('reads friends, guilds and duel wins for every live character', () => {
+    expect(rows.social.map(({ charId }) => charId).sort((a, b) => a - b)).toEqual(
+      rows.characters.map(({ id }) => id).sort((a, b) => a - b),
+    );
+    for (const row of rows.social) {
+      expect(row.friends).toBeGreaterThanOrEqual(0);
+      expect(row.duelWins).toBeGreaterThanOrEqual(0);
+      expect(typeof row.inGuild).toBe('boolean');
+      expect(typeof row.leadsGuild).toBe('boolean');
+    }
+  });
+
   it('feeds the rules without errors', () => {
     const stats = computeStats(rows, '2026-11-01');
     expect(stats.characters.size).toBe(rows.characters.length);

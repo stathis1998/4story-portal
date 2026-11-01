@@ -1,5 +1,6 @@
 import type { ActiveEvents, BadgeView, CharacterProfile, HallOfFame, PlayerOverview } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { character } from '../test/characters'
 import { json, mockApi, sentBodies } from '../test/mock-api'
@@ -12,6 +13,8 @@ const badge = (overrides: Partial<BadgeView> = {}): BadgeView => ({
   id: 'level-50',
   name: 'Level 50',
   description: 'Reach level 50',
+  category: 'progress',
+  comingSoon: false,
   earned: true,
   holders: 2,
   players: 5,
@@ -95,6 +98,55 @@ describe('characters page stats', () => {
     expect(within(items[1]).getByText('Level 90')).toBeInTheDocument()
     expect(within(items[1]).getByText('Not earned yet')).toBeInTheDocument()
     expect(screen.getByText('1 of 2 earned')).toBeInTheDocument()
+  })
+
+  describe('achievement categories', () => {
+    const categorised = () =>
+      overview({
+        badges: [
+          badge({ id: 'level-50', name: 'Level 50', category: 'progress' }),
+          badge({ id: 'level-90', name: 'Level 90', category: 'progress', earned: false }),
+          badge({ id: 'hours-10', name: '10 Hours', category: 'playtime', earned: false }),
+          badge({ id: 'quests-10', name: 'Helping Hand', category: 'progress', comingSoon: true, earned: false, holders: 0 }),
+          badge({ id: 'deaths-1', name: 'Ouch', description: 'Die for the first time', category: 'misfortune', comingSoon: true, earned: false, holders: 0 }),
+        ],
+      })
+    const show = async () => {
+      mockApi(base({ 'GET /me/overview': () => json(200, categorised()) }))
+      renderRoute('/characters', { me })
+      await screen.findByRole('tablist')
+    }
+
+    it('has a tab per category with its count, leaving out coming soon ones', async () => {
+      await show()
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Progress 1/2', 'Playtime 0/1', 'Misfortune'])
+      expect(screen.getByText('1 of 3 earned')).toBeInTheDocument()
+    })
+
+    it('shows one category at a time', async () => {
+      await show()
+      expect(screen.getByText('Level 50')).toBeInTheDocument()
+      expect(screen.queryByText('10 Hours')).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Playtime 0/1' }))
+      expect(screen.getByText('10 Hours')).toBeInTheDocument()
+      expect(screen.queryByText('Level 50')).not.toBeInTheDocument()
+      expect(screen.getByRole('tabpanel', { name: 'Playtime 0/1' })).toBeInTheDocument()
+    })
+
+    it('marks coming soon ones, after the rest and without rarity', async () => {
+      await show()
+      const items = within(screen.getByRole('list', { name: 'Achievements' })).getAllByRole('listitem')
+      expect(items.map((item) => within(item).getAllByText(/Level|Helping/)[0].textContent)).toEqual(['Level 50', 'Level 90', 'Helping Hand'])
+      expect(within(items[2]).getByText('Coming soon')).toBeInTheDocument()
+      expect(within(items[2]).queryByText(/Held by/)).not.toBeInTheDocument()
+      expect(within(items[2]).queryByText('Not earned yet')).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Misfortune' }))
+      expect(screen.getByText('Ouch')).toBeInTheDocument()
+      expect(screen.getByText('Die for the first time')).toBeInTheDocument()
+      expect(screen.getByText('Coming soon')).toBeInTheDocument()
+    })
   })
 
   it('adds progress and hours to the card, and links to the character', async () => {
