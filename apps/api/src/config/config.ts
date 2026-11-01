@@ -24,6 +24,7 @@ const envSchema = z.object({
   CONTROL_USER: controlCredential,
   CONTROL_PASSWORD: controlCredential,
   GM_LOCATIONS_FILE: z.string().min(1),
+  PORTAL_DB_FILE: z.string().min(1).default('./data/portal.sqlite'),
 });
 
 export type AppConfig = {
@@ -38,6 +39,7 @@ export type AppConfig = {
   jwtSecret: string;
   apiPort: number;
   gm: { usernames: string[]; locationsFile: string };
+  portalDbFile: string;
   control: { host: string; port: number; user: string; password: string };
 };
 
@@ -68,6 +70,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
         .filter((name) => name !== ''),
       locationsFile: e.GM_LOCATIONS_FILE,
     },
+    portalDbFile: e.PORTAL_DB_FILE,
     control: {
       host: e.CONTROL_HOST,
       port: e.CONTROL_PORT,

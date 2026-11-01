@@ -9,6 +9,12 @@ describe('loadConfig', () => {
       apiPort: 3000,
     }));
 
+  it('defaults the portal database file, so an existing .env keeps working', () =>
+    expect(loadConfig(validEnv).portalDbFile).toBe('./data/portal.sqlite'));
+
+  it('takes the portal database file from the environment', () =>
+    expect(loadConfig({ ...validEnv, PORTAL_DB_FILE: './elsewhere.sqlite' }).portalDbFile).toBe('./elsewhere.sqlite'));
+
   it('names every missing variable', () =>
     expect(() => loadConfig({})).toThrow(/DB_HOST[\s\S]*JWT_SECRET/));
 
