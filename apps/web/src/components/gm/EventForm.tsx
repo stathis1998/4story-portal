@@ -7,7 +7,7 @@ import {
   isDropEvent,
   PERCENT_EVENT_TYPES,
 } from '@4story-portal/shared'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { formatWallClock, mapOptionLabel } from '../../lib/gm'
 import { Button } from '../Button'
@@ -143,8 +143,8 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
   } = useForm<FormValues>({ defaultValues: defaultValues(event, worlds) })
   const [message, setMessage] = useState<string | null>(null)
   // Not dirtyFields: it compares with the defaults, so it counts the messages generated below as edits.
-  const startMessageEdited = useRef(false)
-  const endMessageEdited = useRef(false)
+  const [startMessageEdited, setStartMessageEdited] = useState(false)
+  const [endMessageEdited, setEndMessageEdited] = useState(false)
 
   const watchedType = useWatch({ control, name: 'type' })
   const type = event?.type ?? watchedType
@@ -156,9 +156,9 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
   // Messages follow the other fields on a new event, until the GM writes their own.
   useEffect(() => {
     if (event) return
-    if (!startMessageEdited.current) setValue('startMessage', startMessageFor(type, bonus, startNotice))
-    if (!endMessageEdited.current) setValue('endMessage', endMessageFor(type, bonus, endNotice))
-  }, [event, type, bonus, startNotice, endNotice, setValue])
+    if (!startMessageEdited) setValue('startMessage', startMessageFor(type, bonus, startNotice))
+    if (!endMessageEdited) setValue('endMessage', endMessageFor(type, bonus, endNotice))
+  }, [event, type, bonus, startNotice, endNotice, startMessageEdited, endMessageEdited, setValue])
 
   async function submit(values: FormValues) {
     setMessage(null)
@@ -280,7 +280,7 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
       <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
         <TextField
           label="Start message"
-          registration={register('startMessage', { onChange: () => (startMessageEdited.current = true) })}
+          registration={register('startMessage', { onChange: () => setStartMessageEdited(true) })}
           error={errors.startMessage?.message}
         />
         <TextField
@@ -291,7 +291,7 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
         />
         <TextField
           label="End message"
-          registration={register('endMessage', { onChange: () => (endMessageEdited.current = true) })}
+          registration={register('endMessage', { onChange: () => setEndMessageEdited(true) })}
           error={errors.endMessage?.message}
         />
         <TextField
