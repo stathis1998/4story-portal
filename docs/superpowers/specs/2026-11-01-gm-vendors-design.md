@@ -52,12 +52,13 @@ base  = TLEVELCHART.dwMoney (or dwPvPMoney for a PvP vendor) at that level, 0 if
 price = DWORD(base * multiplier + 0.99)     where base * multiplier is 32-bit float arithmetic
 ```
 
-Source: `CTMapSvrModule::GetItemPrice` and `GetItemPvPrice`. Level 0 has base 0, so no multiplier can give those items a price.
+Source: `CTMapSvrModule::GetItemPrice` and `GetItemPvPrice`. Level 0 has base 0, so no multiplier can give those items a price: they are always free in that currency.
 
 Consequences:
-- A price change applies at every vendor selling the item.
+- A price change applies at every vendor selling the item for that currency. A money price means nothing at a type 21 vendor, and a PvP price means nothing at a type 2 vendor.
 - The server pays `CTItem::GetPrice() / 4` when a player sells to any vendor, and that is computed from `fPrice`, so sell-back moves with the money price. For items with attributes, `GetPrice` uses the instance's power level, so an upgraded item sells for more than the formula here shows.
-- The buy handler computes `price * count` in a `DWORD`, so a large enough price wraps around and becomes cheap.
+- Selling is refused unless `bIsSell` has the `ITEMTRADE_SELL` bit (2, in `TMapType.h`), checked in `OnCS_ITEMSELL_REQ`.
+- The buy handler caps the count at `bStack` and computes `price * count` in a `DWORD` (`CSHandler.cpp:5951-5979`), so a price whose full stack passes 4,294,967,295 wraps around and becomes cheap. This is a money exploit, not just a wrong price: item 29104 Name Change (148,500,000, stack 200, sell flag set) buys 29 for 11,532,704 instead of 4,306,500,000 and sells back for 1,076,625,000. Items 7503 and 7921 are on sale with such a price today. The check is `fullStackOverflows` in `packages/shared`, which treats stack 0 as 1. It runs when setting a price and when adding an item.
 - Money is displayed as `Rune = price / 1,000,000`, `Luna = (price % 1,000,000) / 1,000`, `Cron = price % 1,000`.
 
 ### 2.4 Client behavior
@@ -136,15 +137,15 @@ Names come from the database (`szNAME`, `szName`, `NC_szName2`). A name of `_` c
 | Route | Purpose |
 |---|---|
 | `GET /gm/vendors` | Returns `{ database, vendors }`. `database` is `DB_GAME_NAME`. Each vendor has ID, name, title, shop type (`money` or `pvp`), country, map ID, map name, item count and portrait sprite ID. |
-| `GET /gm/vendors/:id/items` | The vendor's stock. Each row has item ID, name, level, icon sprite ID, price, base and sold-by count. |
+| `GET /gm/vendors/:id/items` | The vendor's stock. Each row has item ID, name, level, icon sprite ID, stack, price, multiplier, base, sold-by count, whether it is in the client, and whether it can be sold back. Price, multiplier, base and sold-by are for the vendor's currency. |
 | `POST /gm/vendors/:id/items` | Body `{ itemId }`. Adds the item to this vendor. |
 | `DELETE /gm/vendors/:id/items/:itemId` | Removes the item from this vendor only. Returns 204. |
-| `PUT /gm/items/:itemId/price` | Body `{ currency: 'money' \| 'pvp', amount }`. Returns the new price, multiplier and sold-by count. |
-| `GET /gm/items?q=` | Item search by name or exact ID, up to 50 results. Each row has ID, name, level, icon, money price, PvP price and whether it is in the client. |
+| `PUT /gm/items/:itemId/price` | Body `{ currency: 'money' \| 'pvp', amount }`. Returns the new price, multiplier and sold-by count for that currency. |
+| `GET /gm/items?q=&shop=` | Item search by name or exact ID, up to 50 results. `shop` is `money` or `pvp` and is required, 400 otherwise. Each row has the same fields as a stock row, computed for that shop by the same mapper, with a non-null name. |
 
 The vendor list is small enough to filter in the browser.
 
-Sold-by counts only count vendors (types 2 and 21), because other NPC types use the same IDs for other things. Stock rows whose item is not in `TITEMCHART` appear as `Unknown item #<id>` with no price, so they can be removed. None exist on vendor types today.
+Sold-by means "vendors this price edit changes", so it counts only vendors using that currency: type 2 for money, type 21 for PvP. Other NPC types use the same IDs for other things and are never counted. `canSellBack` is `(bIsSell & 2) !== 0`. Stock rows whose item is not in `TITEMCHART` appear as `Unknown item #<id>` with no price, so they can be removed. None exist on vendor types today.
 
 ### 4.2 Price functions
 
@@ -167,11 +168,14 @@ The stored multiplier is the 32-bit float value, so the database holds exactly w
 | Adding an item not in `itemIcons` | 422 | Not in the game client, adding it would crash players opening this shop |
 | Adding an item not in `TITEMCHART` | 422 | Not in the game database, the server would ignore it |
 | Item already sold by this vendor | 409 | Already sold by this vendor |
+| Adding an item whose full stack overflows in the vendor's currency | 422 | Price too high to sell here: buying a full stack would overflow. Lower its price first. |
 | Adding would exceed 255 in any view | 422 | Would exceed the 255 item shop limit for `<class>` in `<faction>` |
 | Base is 0 | 422 | This item's level has no price, so it can't be set |
-| `amount * max(bStack, 1)` over 4,294,967,295 | 422 | Price too high, buying a full stack would overflow |
+| Setting a price where the amount or the charged price, times `max(bStack, 1)`, is over 4,294,967,295 | 422 | Price too high, buying a full stack would overflow |
 
 `amount` is validated by Zod as an integer from 0 to 4,294,967,295.
+
+When adding, the checks run in the order of the table: the overflow check comes after the duplicate check and before the 255 check. None of the rejections writes or audits anything.
 
 The 255 check counts, for each of the 6 classes and for countries 0 and 1, the vendor's stock plus the new item using the filter in section 2.5. Vendors with a higher existing count don't exist today, and removing items is always allowed.
 
@@ -219,7 +223,9 @@ Changes reach players after TMapSvr restarts.
 - The first banner line appears only when `database` ends in `_TEST`. The restart line is always shown.
 - `GameIcon` builds `/game-icons/<spriteId>.png`, sets `loading="lazy"`, and shows a neutral placeholder when the sprite ID is `null` or the image fails to load.
 - **Vendor list:** filters as you type on name, title or ID, and has a PvP-only checkbox. Rows show the portrait, name, title and item count. A vendor with no name shows its title as the name.
-- **Stock table:** filters in the browser. Money prices show each non-zero denomination as a number followed by its coin icon, the way the game lays them out, for example `5 [luna] 200 [cron]`. PvP shops show `1,200 points`. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there.
+- **Stock table:** filters in the browser. Money prices show each non-zero denomination as a number followed by its coin icon, the way the game lays them out, for example `5 [luna] 200 [cron]`. PvP shops show `1,200 points`. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there. An unknown row (name null) shows a dash instead of a price. Rows show `#<id>` in muted text next to the name, and the filter matches IDs too.
+- **Item names:** an empty name displays as `Item #<id>` everywhere, including notes and confirmations. A null name stays `Unknown item #<id>`.
+- **Stock row warnings:** a row whose full stack overflows shows `Buying a full stack costs almost nothing: lower this price.` in danger text. A row that isn't in the client shows `Not in client: crashes players opening this shop`, and can still be removed.
 - **Vendor list:** from the two-column width up it scrolls inside its own pane, so selecting a vendor far down the list never leaves the stock off-screen.
 
 ### 5.2 Editing a price
@@ -232,9 +238,11 @@ The row becomes an inline editor:
 ```
 
 - PvP shops show one points field and no sell-back line, since sell-back is always paid from `fPrice`.
-- The sell-back line updates as you type.
+- The sell-back line updates as you type. In a money shop, an item that can't be sold back shows `Can't be sold to vendors.` instead.
 - The vendor count warning appears only when more than one vendor sells the item.
-- Save is disabled when the price is unchanged.
+- Save is disabled when the price is unchanged, and when every field is blank. Partly blank fields count as 0.
+- An amount of 0 can be saved, and shows a bold line: `Will be free at 12 vendors.` (`1 vendor` when singular).
+- An amount within the maximum whose typed or charged value overflows a full stack shows `Too high: buying a full stack of 200 would overflow.` with the real stack, and Save is disabled. These are the same checks the API makes.
 - If `chargedPrice` can't reach the amount, the editor shows `Will charge` and the charged price with coins before saving.
 - Items with base 0 have no edit button, only `Price can't be set: level 0 item`.
 - A failed save shows its error in the row and keeps the typed values.
@@ -247,8 +255,10 @@ The trash button asks for confirmation inline, naming the item and the vendor, l
 
 `+ Add item` opens a search box above the table, debounced.
 
-- Results show icon, name, ID, level and the current price in this shop's currency.
+- Results show icon, name, ID, level and the current price in this shop's currency, fetched with `shop` in the URL and the query key.
 - Clicking a result adds it immediately, because removing it is one click. If its price in this shop is 0, the confirmation says it is free until a price is set.
+- A result with base 0 shows `Always free` in place of the price, and its confirmation says `<name> added to <vendor>. It is always free in this shop, because its level has no price. Restart TMapSvr to apply.`
+- A result whose full stack overflows is greyed out with `Price too high for a full stack`, next to a `Set price` button opening the same `PriceEditor` as the stock table. Saving refreshes the results, because the price mutation also invalidates `['gm', 'items']`, so the item can then be added.
 - Items this vendor already sells are greyed out with `Already sold`.
 - Items not in the client are greyed out with `Not in client`.
 - The API enforces these checks too.
@@ -263,12 +273,12 @@ Load failures use `FormMessage` (`Could not load vendors.`).
 
 | Layer | Where | Covers |
 |---|---|---|
-| Price functions | `packages/shared/src/gm.test.ts` | Real rows (item 8001: base 1, multiplier 50, price 50), a case needing a float nudge (base 475, 499,650), a price no float can reach (base 53750, 16,000,000 charges 15,999,999), sell-back, base 0, money split and join |
+| Price functions | `packages/shared/src/gm.test.ts` | Real rows (item 8001: base 1, multiplier 50, price 50), a case needing a float nudge (base 475, 499,650), a price no float can reach (base 53750, 16,000,000 charges 15,999,999), sell-back, base 0, money split and join, `fullStackOverflows` at the boundary (stack 100: 42,949,672 fits, 42,949,673 doesn't; stack 0 counts as 1) |
 | Import parsing | `apps/api/test/game-icons-import.test.ts` | Small built buffers for each chart format, list and sprite lookup, DXT decoding, strict failure on leftover bytes, best-effort NPC files |
-| Service rules | `apps/api/test/` with fakes | Every rejection in section 4.3, the 255 limit including `DCC_ALLCOUNTRY`, audit text |
-| HTTP | `apps/api/test/gm-vendors.http.test.ts` | Non-GMs get 403, validation, status codes |
-| Real database | `apps/api/test/db/vendors.db.test.ts` | Queries against `_TEST`, rolled back: vendor filter, base lookup with and without attributes, stock join, sold-by count, add, remove, price update. `table-names.test.ts` covers the new names. |
-| Web | `apps/web/src/routes/gm-vendors.test.tsx` | Search, selecting a vendor, price edit and preview, confirm on remove, greyed-out add results, `_TEST` banner |
+| Service rules | `apps/api/test/` with fakes | Every rejection in section 4.3 and its order, adding with an overflowing full stack in both currencies with no write and no audit, the sold-by split, `canSellBack` from flags, search by shop, the 255 limit including `DCC_ALLCOUNTRY`, audit text |
+| HTTP | `apps/api/test/gm-vendors.http.test.ts` | Non-GMs get 403, validation including a missing or invalid `shop`, status codes |
+| Real database | `apps/api/test/db/vendors.db.test.ts` | Queries against `_TEST`, rolled back: vendor filter, base lookup with and without attributes, stock join, sold-by counts split by vendor type, raw trade flags, add, remove, price update. `table-names.test.ts` covers the new names. |
+| Web | `apps/web/src/routes/gm-vendors.test.tsx` | Search, selecting a vendor, price edit and preview, confirm on remove, greyed-out add results, `Set price` then adding after the refetch, stock row warnings, `Always free`, blank and 0 in the editor, too-high messages, `Can't be sold to vendors.`, `#id` display and filter, name fallbacks, the dash for unknown rows, `_TEST` banner |
 
 **Checked by hand before calling it done:**
 1. Run the real import against the client and look at the icons.
