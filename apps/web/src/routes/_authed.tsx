@@ -17,8 +17,18 @@ function AuthedLayout() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-          <span className="font-display text-sm tracking-[0.35em] text-accent-text uppercase">4Story</span>
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            <span className="font-display text-sm tracking-[0.35em] text-accent-text uppercase">4Story</span>
+            <nav aria-label="Main" className="flex gap-4 text-sm font-bold">
+              <Link to="/characters" className="text-muted hover:underline" activeProps={{ className: 'text-fg' }}>
+                Characters
+              </Link>
+              <Link to="/hall-of-fame" className="text-muted hover:underline" activeProps={{ className: 'text-fg' }}>
+                Hall of Fame
+              </Link>
+            </nav>
+          </div>
           <div className="flex items-center gap-4">
             {me?.isGm && (
               <Link to="/gm/teleport" className="text-sm font-bold text-accent-text hover:underline">

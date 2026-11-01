@@ -72,6 +72,18 @@ Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands t
 - The server has no pause: stopping an event removes it. Saving a running event restarts it, so players see the start message again and the bonus drops out for a second or two. To change an event's type, stop it and create a new one, because the server would leave the old bonus on.
 - Finished events delete themselves from `TEVENTCHART`, so `TMANAGERLOG` is the only history, as `EVENT`. The list can't load while TControlSvr is down, and a bonus stays on past its end until TControlSvr comes back.
 
+## Player dashboard
+
+Logged-in players see their own progress and how they compare, all worked out from data the game already stores:
+
+- `/characters`: an event banner while one runs, hours and streaks, an activity calendar, badges with their rarity, and a level bar on each card.
+- `/characters/:id`: equipped gear, companions, titles, records and rankings, for your own characters only.
+- `/hall-of-fame`: the top three in each category, with your place. Gold and account names never appear. GMs get a **Hide GM accounts** switch, which removes GM accounts from the rankings and rarity for everyone.
+
+At most 12 hours of one session count, so a character left logged in for days doesn't bury everyone else. Stats change when the game saves a session, and the API reads them at most once a minute.
+
+The game databases are only read for this. The portal's own data, the hide switch with its change history and the date each badge was first seen, is in a SQLite file at `PORTAL_DB_FILE` (by default `apps/api/data/portal.sqlite`). To back it up, copy the file. It uses Node's built-in `node:sqlite`, so Node 24 prints an "experimental" warning at startup. If the file can't be used, stats still work, with no badge dates and nobody hidden.
+
 ## Test databases
 
 Development and tests never write to the real game databases (`TGLOBAL_GSP`, `TGAME_GSP`). They use copies:

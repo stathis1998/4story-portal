@@ -2,7 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '../../components/Button'
 import { CharacterCard } from '../../components/CharacterCard'
+import { AccountSummary } from '../../components/stats/AccountSummary'
+import { BadgeGrid } from '../../components/stats/BadgeGrid'
+import { EventBanner } from '../../components/stats/EventBanner'
 import { charactersQueryOptions } from '../../lib/characters'
+import { overviewQueryOptions } from '../../lib/stats'
 
 export const Route = createFileRoute('/_authed/characters')({
   component: CharactersPage,
@@ -10,9 +14,12 @@ export const Route = createFileRoute('/_authed/characters')({
 
 function CharactersPage() {
   const { data, isPending, isError, refetch, isFetching } = useQuery(charactersQueryOptions)
+  // Separate from the characters, so a stats failure doesn't take them down too.
+  const { data: overview, isError: statsFailed } = useQuery(overviewQueryOptions)
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
+      <EventBanner />
       <h1 className="text-4xl">Your characters</h1>
       <p className="mt-1 mb-8 text-muted">Everyone on your account, as the server last saved them.</p>
 
@@ -26,17 +33,30 @@ function CharactersPage() {
           </Button>
         </div>
       ) : data.length === 0 ? (
-        <p className="rounded-xs border border-dashed border-line p-10 text-center text-muted">
+        <p className="mb-8 rounded-xs border border-dashed border-line p-10 text-center text-muted">
           No characters yet. Create one in the game.
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[...data]
             .sort((a, b) => a.slot - b.slot)
             .map((character) => (
-              <CharacterCard key={character.id} character={character} />
+              <CharacterCard
+                key={character.id}
+                character={character}
+                stats={overview?.characters.find((stats) => stats.id === character.id)}
+                linked
+              />
             ))}
         </div>
+      )}
+
+      {statsFailed && <p className="mb-8 text-sm text-muted">Your stats could not be loaded right now.</p>}
+      {overview && (
+        <>
+          <AccountSummary overview={overview} />
+          <BadgeGrid badges={overview.badges} />
+        </>
       )}
     </main>
   )
