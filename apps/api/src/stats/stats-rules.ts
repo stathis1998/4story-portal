@@ -333,7 +333,7 @@ const duelsBadge = (wins: number, name: string): BadgeDefinition => ({
 });
 
 export const BADGES: readonly BadgeDefinition[] = [
-  ...[10, 25, 50, 75, 90, 100, 125].map(levelBadge),
+  ...[10, 25, 50, 75, 90].map(levelBadge),
   {
     id: 'level-50-x3',
     name: 'Three of a Kind',

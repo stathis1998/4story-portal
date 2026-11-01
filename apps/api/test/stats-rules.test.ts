@@ -300,8 +300,8 @@ describe('achievement categories', () => {
 
   it('files every achievement under a category', () => {
     const count = (category: string) => BADGES.filter((badge) => badge.category === category).length;
-    expect(BADGES).toHaveLength(48);
-    expect(['progress', 'playtime', 'gear', 'collection', 'social'].map(count)).toEqual([8, 15, 6, 12, 7]);
+    expect(BADGES).toHaveLength(46);
+    expect(['progress', 'playtime', 'gear', 'collection', 'social'].map(count)).toEqual([6, 15, 6, 12, 7]);
   });
 
   it('gives each one its own ID, including the coming soon ones', () => {
@@ -327,11 +327,9 @@ describe('achievement categories', () => {
     expect(['deaths-', 'failed-upgrades-', 'destroyed-', 'kills-', 'bosses-', 'quests-'].map(count)).toEqual([3, 3, 2, 3, 2, 3]);
   });
 
-  it('gives level 100 and 125', () => {
-    expect(earned({ characters: [character({ level: 99 })] })).not.toContain('level-100');
-    expect(earned({ characters: [character({ level: 100 })] })).toContain('level-100');
-    expect(earned({ characters: [character({ level: 124 })] })).not.toContain('level-125');
-    expect(earned({ characters: [character({ level: 125 })] })).toContain('level-125');
+  it('stops at level 90, the level cap', () => {
+    const levels = BADGES.filter((badge) => /^level-\d+$/.test(badge.id)).map((badge) => badge.id);
+    expect(levels).toEqual(['level-10', 'level-25', 'level-50', 'level-75', 'level-90']);
   });
 
   it('gives Three of a Kind for three characters at level 50', () => {

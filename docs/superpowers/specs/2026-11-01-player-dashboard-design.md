@@ -53,7 +53,7 @@ Earned per account, using the account stats, and grouped into categories.
 
 | Category | ID | Name | Earned at |
 |---|---|---|---|
-| Progress | `level-10`, `25`, `50`, `75`, `90`, `100`, `125` | Level N | Any character at that level |
+| Progress | `level-10`, `25`, `50`, `75`, `90` | Level N | Any character at that level |
 | Progress | `level-50-x3` | Three of a Kind | Three characters at level 50 |
 | Playtime | `hours-10`, `50`, `100`, `500` | N Hours | Account hours played |
 | Playtime | `days-7`, `30`, `100` | N Days Played | Account days played |
