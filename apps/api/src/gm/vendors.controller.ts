@@ -12,6 +12,8 @@ import {
   type ItemPriceInput,
   itemSearchQuerySchema,
   type SessionUser,
+  type VendorShop,
+  vendorShopSchema,
 } from '@4story-portal/shared';
 import type { Request } from 'express';
 import { GmGuard } from '../auth/gm-access.js';
@@ -74,7 +76,10 @@ export class VendorsController {
   }
 
   @Get('items')
-  search(@Query('q', new ZodValidationPipe(itemSearchQuerySchema)) q: string): Promise<GmItemSearchResult[]> {
-    return this.vendors.searchItems(q);
+  search(
+    @Query('q', new ZodValidationPipe(itemSearchQuerySchema)) q: string,
+    @Query('shop', new ZodValidationPipe(vendorShopSchema)) shop: VendorShop,
+  ): Promise<GmItemSearchResult[]> {
+    return this.vendors.searchItems(q, shop);
   }
 }

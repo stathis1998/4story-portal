@@ -161,7 +161,7 @@ export class FakeVendorsRepository implements VendorsRepository {
     return ids.map((id): StockRow => {
       const item = this.items.find((i) => i.itemId === id);
       if (item) return item;
-      return { itemId: id, name: null, level: 0, stack: 0, classMask: 0, itemCountry: 0, money: 0, pvpMoney: 0, fPrice: 0, fPvPrice: 0, soldBy: 0 };
+      return { itemId: id, name: null, level: 0, stack: 0, classMask: 0, itemCountry: 0, money: 0, pvpMoney: 0, fPrice: 0, fPvPrice: 0, sellFlags: 0, moneySoldBy: 0, pvpSoldBy: 0 };
     });
   }
 

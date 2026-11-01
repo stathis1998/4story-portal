@@ -26,7 +26,9 @@ export type ItemRow = {
   pvpMoney: number;
   fPrice: number;
   fPvPrice: number;
-  soldBy: number;
+  sellFlags: number; // TITEMCHART.bIsSell, the game's ITEMTRADE_ bits
+  moneySoldBy: number; // type 2 vendors selling the item
+  pvpSoldBy: number; // type 21 vendors selling the item
 };
 
 /** A row whose item is not in TITEMCHART has name null and zeros for the rest. */
@@ -98,14 +100,16 @@ export class SqlVendorsRepository implements VendorsRepository {
    */
   private itemColumns(idExpr: string, nameExpr: string): string {
     const { npcs, npcItems, levels } = this.db.tables;
+    const soldBy = (type: number) =>
+      `(SELECT COUNT(*) FROM ${npcItems} ni JOIN ${npcs} n ON n.wID = ni.wNpcID
+        WHERE ni.dwItemID = ${idExpr} AND n.bType = ${type})`;
     const level = 'ISNULL(CASE WHEN t.wAttrID <> 0 THEN ISNULL(a.bGrade, 0) ELSE t.bLevel END, 0)';
     return `${idExpr} AS itemId, ${nameExpr} AS name, ${level} AS level,
             ISNULL(t.bStack, 0) AS stack, ISNULL(t.dwClassID, 0) AS classMask, ISNULL(t.bItemCountry, 0) AS itemCountry,
             ISNULL((SELECT l.dwMoney FROM ${levels} l WHERE l.bLevel = ${level}), 0) AS money,
             ISNULL((SELECT l.dwPvPMoney FROM ${levels} l WHERE l.bLevel = ${level}), 0) AS pvpMoney,
-            ISNULL(t.fPrice, 0) AS fPrice, ISNULL(t.fPvPrice, 0) AS fPvPrice,
-            (SELECT COUNT(*) FROM ${npcItems} ni JOIN ${npcs} n ON n.wID = ni.wNpcID
-             WHERE ni.dwItemID = ${idExpr} AND n.bType IN (${VENDOR_TYPE_LIST})) AS soldBy`;
+            ISNULL(t.fPrice, 0) AS fPrice, ISNULL(t.fPvPrice, 0) AS fPvPrice, ISNULL(t.bIsSell, 0) AS sellFlags,
+            ${soldBy(VENDOR_TYPES.money)} AS moneySoldBy, ${soldBy(VENDOR_TYPES.pvp)} AS pvpSoldBy`;
   }
 
   async listStock(vendorId: number): Promise<StockRow[]> {

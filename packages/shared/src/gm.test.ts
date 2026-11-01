@@ -4,16 +4,19 @@ import {
   COIN_SPRITES,
   characterNameSchema,
   chargedPrice,
+  fullStackOverflows,
   gmIdSchema,
   gmLocationInputSchema,
   itemPriceSchema,
   itemSearchQuerySchema,
   joinMoney,
+  MAX_PRICE,
   multiplierForPrice,
   positionSchema,
   sellBackPrice,
   splitMoney,
   teleportRequestSchema,
+  vendorShopSchema,
 } from './gm.js';
 
 const position = { world: 1, channel: 1, mapId: 0, x: 2800, y: 50, z: 5000 };
@@ -116,7 +119,21 @@ describe('sell back and money', () => {
   it('names the coin sprites', () => expect(COIN_SPRITES).toEqual({ rune: 11137, luna: 11138, cron: 11136 }));
 });
 
+describe('fullStackOverflows', () => {
+  it('allows the largest price that fits a full stack', () => expect(fullStackOverflows(42_949_672, 100)).toBe(false));
+  it('rejects one more', () => expect(fullStackOverflows(42_949_673, 100)).toBe(true));
+  it('treats stack 0 as 1', () => {
+    expect(fullStackOverflows(MAX_PRICE, 0)).toBe(false);
+    expect(fullStackOverflows(MAX_PRICE + 1, 0)).toBe(true);
+  });
+  it('catches the Name Change item', () => expect(fullStackOverflows(148_500_000, 200)).toBe(true));
+});
+
 describe('vendor schemas', () => {
+  it.each(['money', 'pvp'])('vendorShopSchema accepts %s', (shop) =>
+    expect(vendorShopSchema.safeParse(shop).success).toBe(true));
+  it.each(['gold', '', undefined])('vendorShopSchema rejects %j', (shop) =>
+    expect(vendorShopSchema.safeParse(shop).success).toBe(false));
   it.each(['abc', '0', '-1', '32768', '1.5'])('gmIdSchema rejects %j', (id) =>
     expect(gmIdSchema.safeParse(id).success).toBe(false));
   it('gmIdSchema coerces a numeric string', () => expect(gmIdSchema.parse('20002')).toBe(20002));

@@ -16,7 +16,7 @@ const vendor = (overrides: Partial<VendorRow> = {}): VendorRow => ({
 
 const item = (overrides: Partial<ItemRow> = {}): ItemRow => ({
   itemId: 8001, name: 'Small Vitality Potion', level: 1, stack: 1, classMask: 0b111111, itemCountry: 3,
-  money: 1, pvpMoney: 1, fPrice: 50, fPvPrice: 0, soldBy: 12, ...overrides,
+  money: 1, pvpMoney: 1, fPrice: 50, fPvPrice: 0, sellFlags: 7, moneySoldBy: 12, pvpSoldBy: 0, ...overrides,
 });
 
 let repo: FakeVendorsRepository;
@@ -61,7 +61,10 @@ describe('stock', () => {
     repo.items = [item({ money: 475, fPrice: 5 })];
     repo.stock.set(20002, [8001]);
     expect(await service.stock(20002)).toEqual([
-      { itemId: 8001, name: 'Small Vitality Potion', level: 1, icon: itemIcons[8001], base: 475, multiplier: 5, price: 2375, soldBy: 12 },
+      {
+        itemId: 8001, name: 'Small Vitality Potion', level: 1, icon: itemIcons[8001], stack: 1,
+        base: 475, multiplier: 5, price: 2375, soldBy: 12, inClient: true, canSellBack: true,
+      },
     ]);
   });
 
@@ -74,7 +77,37 @@ describe('stock', () => {
 
   it('shows an unknown item with a null name, a null icon and price 0', async () => {
     repo.stock.set(20002, [60]);
-    expect(await service.stock(20002)).toMatchObject([{ itemId: 60, name: null, icon: null, price: 0 }]);
+    expect(await service.stock(20002)).toMatchObject([
+      { itemId: 60, name: null, icon: null, price: 0, stack: 0, inClient: false, canSellBack: false },
+    ]);
+  });
+
+  it('counts only vendors using the shop currency in soldBy', async () => {
+    repo.items = [item({ moneySoldBy: 5, pvpSoldBy: 2 })];
+    repo.stock.set(20002, [8001]);
+    expect(await service.stock(20002)).toMatchObject([{ soldBy: 5 }]);
+    repo.vendors = [vendor({ type: 21 })];
+    expect(await service.stock(20002)).toMatchObject([{ soldBy: 2 }]);
+  });
+
+  it.each([
+    [0, false], [1, false], [2, true], [3, true], [4, false], [5, false], [6, true], [7, true], [100, false],
+  ])('reads flags %d as canSellBack %s', async (sellFlags, canSellBack) => {
+    repo.items = [item({ sellFlags })];
+    repo.stock.set(20002, [8001]);
+    expect(await service.stock(20002)).toMatchObject([{ canSellBack }]);
+  });
+
+  it('reports the stack', async () => {
+    repo.items = [item({ stack: 200 })];
+    repo.stock.set(20002, [8001]);
+    expect(await service.stock(20002)).toMatchObject([{ stack: 200 }]);
+  });
+
+  it('still lists a row whose full stack overflows, so it can be repriced', async () => {
+    repo.items = [item({ stack: 200, fPrice: 100_000_000 })];
+    repo.stock.set(20002, [8001]);
+    expect(await service.stock(20002)).toMatchObject([{ price: 100_000_000, stack: 200 }]);
   });
 
   it('404s for a non-vendor', () => expect(service.stock(1)).rejects.toThrow('That NPC is not a vendor'));
@@ -94,6 +127,72 @@ describe('addItem', () => {
     repo.vendors = [vendor({ type: 21 })];
     repo.items = [item({ money: 475, fPrice: 5, pvpMoney: 2, fPvPrice: 75 })];
     expect(await service.addItem(20002, 8001, actor)).toMatchObject({ base: 2, multiplier: 75, price: 150 });
+  });
+
+  it('counts the new vendor in soldBy, only for its currency', async () => {
+    repo.items = [item({ moneySoldBy: 5, pvpSoldBy: 2 })];
+    expect(await service.addItem(20002, 8001, actor)).toMatchObject({ soldBy: 6 });
+    repo.stock.clear();
+    repo.vendors = [vendor({ type: 21 })];
+    expect(await service.addItem(20002, 8001, actor)).toMatchObject({ soldBy: 3 });
+  });
+
+  const fullStackOverflow = {
+    status: 422,
+    message: 'Price too high to sell here: buying a full stack would overflow. Lower its price first.',
+  };
+
+  it('rejects an item whose full stack overflows in a money shop', () => {
+    repo.items = [item({ stack: 200, fPrice: 148_500_000 })];
+    return expectRejected(() => service.addItem(20002, 8001, actor), fullStackOverflow);
+  });
+
+  it('rejects an item whose full stack overflows in a PvP shop', () => {
+    repo.vendors = [vendor({ type: 21 })];
+    repo.items = [item({ stack: 200, pvpMoney: 2, fPvPrice: 74_250_000 })];
+    return expectRejected(() => service.addItem(20002, 8001, actor), fullStackOverflow);
+  });
+
+  it('only looks at the currency the vendor uses', async () => {
+    repo.items = [item({ stack: 200, fPvPrice: 148_500_000 })];
+    await service.addItem(20002, 8001, actor);
+    expect(repo.stock.get(20002)).toEqual([8001]);
+
+    repo.stock.clear();
+    repo.vendors = [vendor({ type: 21 })];
+    repo.items = [item({ stack: 200, fPrice: 148_500_000 })];
+    await service.addItem(20002, 8001, actor);
+    expect(repo.stock.get(20002)).toEqual([8001]);
+  });
+
+  it('allows the largest price that fits a full stack', async () => {
+    repo.items = [item({ stack: 100, fPrice: 42_949_672 })];
+    await service.addItem(20002, 8001, actor);
+    expect(repo.stock.get(20002)).toEqual([8001]);
+  });
+
+  it('rejects the next price a multiplier can reach', () => {
+    repo.items = [item({ stack: 100, fPrice: 42_949_676 })];
+    return expectRejected(() => service.addItem(20002, 8001, actor), fullStackOverflow);
+  });
+
+  it('treats stack 0 as 1', async () => {
+    repo.items = [item({ stack: 0, fPrice: 4_000_000_000 })];
+    await service.addItem(20002, 8001, actor);
+    expect(repo.stock.get(20002)).toEqual([8001]);
+  });
+
+  it('reports a duplicate before an overflow', () => {
+    repo.items = [item({ stack: 200, fPrice: 148_500_000 })];
+    repo.stock.set(20002, [8001]);
+    return expectRejected(() => service.addItem(20002, 8001, actor), { status: 409, message: 'Already sold by this vendor' });
+  });
+
+  it('reports an overflow before a full shop', () => {
+    repo.items = [item({ classMask: 1, stack: 200, fPrice: 148_500_000 })];
+    repo.stock.set(20002, Array.from({ length: 255 }, (_, i) => 100000 + i));
+    for (let i = 0; i < 255; i++) repo.items.push(item({ itemId: 100000 + i, classMask: 1 }));
+    return expectRejected(() => service.addItem(20002, 8001, actor), fullStackOverflow);
   });
 
   it('rejects a non-vendor with 404', () =>
@@ -196,6 +295,12 @@ describe('setPrice', () => {
     expect(gm.audits[0].log).toBe('8001 Small Vitality Potion: fPvPrice 2 -> 3, 100 -> 150 points');
   });
 
+  it('reports only the vendors this edit changes', async () => {
+    repo.items = [item({ pvpMoney: 1, moneySoldBy: 5, pvpSoldBy: 2 })];
+    expect(await service.setPrice(8001, { currency: 'money', amount: 75 }, actor)).toMatchObject({ soldBy: 5 });
+    expect(await service.setPrice(8001, { currency: 'pvp', amount: 75 }, actor)).toMatchObject({ soldBy: 2 });
+  });
+
   it('allows a free item', async () => {
     const result = await service.setPrice(8001, { currency: 'money', amount: 0 }, actor);
     expect(result).toMatchObject({ price: 0, multiplier: 0 });
@@ -252,12 +357,30 @@ describe('setPrice', () => {
 describe('searchItems', () => {
   it('marks items not in the client', async () => {
     repo.items = [item({ itemId: 60 }), item({ itemId: 8001 })];
-    const results = await service.searchItems('x');
+    const results = await service.searchItems('x', 'money');
     expect(results.map((r) => r.inClient)).toEqual([false, true]);
   });
 
-  it('reports both prices', async () => {
-    repo.items = [item({ money: 10, fPrice: 5, pvpMoney: 3, fPvPrice: 7 })];
-    expect(await service.searchItems('x')).toMatchObject([{ price: 50, pvpPrice: 21 }]);
+  const row = () =>
+    item({ stack: 30, sellFlags: 4, money: 10, fPrice: 5, pvpMoney: 3, fPvPrice: 7, moneySoldBy: 5, pvpSoldBy: 2 });
+
+  it('computes a money result the way a money stock row is', async () => {
+    repo.items = [row()];
+    expect(await service.searchItems('x', 'money')).toEqual([
+      {
+        itemId: 8001, name: 'Small Vitality Potion', level: 1, icon: itemIcons[8001], stack: 30,
+        base: 10, multiplier: 5, price: 50, soldBy: 5, inClient: true, canSellBack: false,
+      },
+    ]);
+  });
+
+  it('computes a PvP result the way a PvP stock row is', async () => {
+    repo.items = [row()];
+    expect(await service.searchItems('x', 'pvp')).toMatchObject([{ base: 3, multiplier: 7, price: 21, soldBy: 2 }]);
+  });
+
+  it('keeps an empty name empty', async () => {
+    repo.items = [item({ name: '' })];
+    expect(await service.searchItems('x', 'money')).toMatchObject([{ name: '' }]);
   });
 });

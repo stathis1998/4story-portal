@@ -67,14 +67,23 @@ export type GmLocationInput = z.infer<typeof gmLocationInputSchema>;
 // Vendor prices are 32-bit on the server (dwMoney / dwPvPMoney).
 export const MAX_PRICE = 4_294_967_295;
 
+/**
+ * The buy handler computes price * count in a DWORD and caps count at the stack, so a price whose
+ * full stack passes MAX_PRICE wraps around and becomes cheap.
+ */
+export const fullStackOverflows = (price: number, stack: number): boolean =>
+  price * Math.max(stack, 1) > MAX_PRICE;
+
 /** Route param for a vendor or item id; the game stores these as 16-bit values. */
 export const gmIdSchema = z.coerce.number().int().min(1).max(32767);
 
 export const addVendorItemSchema = z.object({ itemId: z.number().int().min(1).max(32767) });
 export type AddVendorItem = z.infer<typeof addVendorItemSchema>;
 
+export const vendorShopSchema = z.enum(['money', 'pvp']);
+
 export const itemPriceSchema = z.object({
-  currency: z.enum(['money', 'pvp']),
+  currency: vendorShopSchema,
   amount: z.number().int().min(0).max(MAX_PRICE),
 });
 export type ItemPriceInput = z.infer<typeof itemPriceSchema>;

@@ -63,7 +63,7 @@ describe('SqlVendorsRepository against the _TEST copy', () => {
     expect(item?.money).toBe(base.recordset[0].dwMoney);
   });
 
-  it('counts only vendors in soldBy', async () => {
+  it('counts only vendors in the sold-by counts', async () => {
     const { npcs, npcItems } = db.tables;
     const result = await db.pool.request().query<{ itemId: number; vendors: number; all: number }>(
       `SELECT TOP 1 ni.dwItemID AS itemId,
@@ -74,7 +74,40 @@ describe('SqlVendorsRepository against the _TEST copy', () => {
           AND SUM(CASE WHEN n.bType IN (2, 21) THEN 1 ELSE 0 END) > 0`,
     );
     const { itemId, vendors } = result.recordset[0];
-    expect((await repo.findItem(itemId))?.soldBy).toBe(vendors);
+    const item = await repo.findItem(itemId);
+    expect((item?.moneySoldBy ?? 0) + (item?.pvpSoldBy ?? 0)).toBe(vendors);
+  });
+
+  it('splits the sold-by counts by vendor type', async () => {
+    const { npcs, npcItems } = db.tables;
+    const result = await db.pool.request().query<{ itemId: number; money: number; pvp: number; vendorId: number }>(
+      `SELECT TOP 1 ni.dwItemID AS itemId,
+              SUM(CASE WHEN n.bType = 2 THEN 1 ELSE 0 END) AS money,
+              SUM(CASE WHEN n.bType = 21 THEN 1 ELSE 0 END) AS pvp,
+              MIN(n.wID) AS vendorId
+       FROM ${npcItems} ni JOIN ${npcs} n ON n.wID = ni.wNpcID
+       WHERE n.bType IN (2, 21)
+       GROUP BY ni.dwItemID
+       HAVING SUM(CASE WHEN n.bType = 2 THEN 1 ELSE 0 END) > 0
+          AND SUM(CASE WHEN n.bType = 21 THEN 1 ELSE 0 END) > 0
+          AND SUM(CASE WHEN n.bType = 2 THEN 1 ELSE 0 END) <> SUM(CASE WHEN n.bType = 21 THEN 1 ELSE 0 END)`,
+    );
+    const { itemId, money, pvp, vendorId } = result.recordset[0];
+    expect(await repo.findItem(itemId)).toEqual(expect.objectContaining({ moneySoldBy: money, pvpSoldBy: pvp }));
+    const row = (await repo.listStock(vendorId)).find((s) => s.itemId === itemId);
+    expect(row).toEqual(expect.objectContaining({ moneySoldBy: money, pvpSoldBy: pvp }));
+    const found = (await repo.searchItems(String(itemId)))[0];
+    expect(found).toEqual(expect.objectContaining({ itemId, moneySoldBy: money, pvpSoldBy: pvp }));
+  });
+
+  it('exposes the raw trade flags', async () => {
+    const result = await db.pool
+      .request()
+      .query<{ id: number; flags: number }>(
+        `SELECT TOP 1 wItemID AS id, bIsSell AS flags FROM ${db.tables.items} WHERE bIsSell = 5 ORDER BY wItemID`,
+      );
+    const { id, flags } = result.recordset[0];
+    expect((await repo.findItem(id))?.sellFlags).toBe(flags);
   });
 
   it('adds and removes stock', () =>

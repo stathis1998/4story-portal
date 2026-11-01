@@ -80,15 +80,17 @@ export type GmVendor = {
 
 export type GmVendorList = { database: string; vendors: GmVendor[] };
 
-/** name is null for a stock row whose item is not in TITEMCHART. base and multiplier are for the vendor's currency. */
+/**
+ * name is null for a stock row whose item is not in TITEMCHART, and '' when the database holds '_'.
+ * base, multiplier, price and soldBy are for the shop's currency: soldBy counts the vendors a price
+ * edit changes.
+ */
 export type GmVendorItem = {
-  itemId: number; name: string | null; level: number; icon: number | null;
+  itemId: number; name: string | null; level: number; icon: number | null; stack: number;
   base: number; multiplier: number; price: number; soldBy: number;
+  inClient: boolean; canSellBack: boolean;
 };
 
-export type GmItemSearchResult = {
-  itemId: number; name: string; level: number; icon: number | null;
-  price: number; pvpPrice: number; inClient: boolean;
-};
+export type GmItemSearchResult = GmVendorItem & { name: string };
 
 export type GmItemPriceResult = { itemId: number; name: string; price: number; multiplier: number; soldBy: number };

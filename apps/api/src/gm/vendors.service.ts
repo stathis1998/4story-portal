@@ -8,13 +8,14 @@ import {
 } from '@nestjs/common';
 import {
   chargedPrice,
-  MAX_PRICE,
+  fullStackOverflows,
   multiplierForPrice,
   type GmItemPriceResult,
   type GmItemSearchResult,
   type GmVendorItem,
   type GmVendorList,
   type ItemPriceInput,
+  type VendorShop,
 } from '@4story-portal/shared';
 import { className, countryName } from '../characters/character-codes.js';
 import { type AppConfig, CONFIG } from '../config/config.js';
@@ -37,6 +38,7 @@ const SHOP_LIMIT = 255;
 const CLASS_COUNT = 6;
 const COUNTRY_ALL = 3; // TCONTRY_N
 const CONDITION_ALL_COUNTRY = 4; // DCC_ALLCOUNTRY
+const ITEMTRADE_SELL = 2; // TMapType.h, the bIsSell bit CS_ITEMSELL_REQ checks
 
 /** The first class and country whose shop view exceeds 255 items, or null. Mirrors SendCS_NPCITEMLIST_ACK. */
 export function shopOverflow(
@@ -103,6 +105,13 @@ export class VendorsService {
 
     const current = await this.repo.listStock(vendorId);
     if (current.some((row) => row.itemId === itemId)) throw new ConflictException('Already sold by this vendor');
+    const pvp = isPvp(vendor);
+    // The same wraparound setPrice refuses: existing prices were never checked against it.
+    if (fullStackOverflows(this.stockItem(item, pvp).price, item.stack)) {
+      throw new UnprocessableEntityException(
+        'Price too high to sell here: buying a full stack would overflow. Lower its price first.',
+      );
+    }
     const overflow = shopOverflow(vendor.condition, [...current, item]);
     if (overflow) {
       throw new UnprocessableEntityException(
@@ -113,7 +122,8 @@ export class VendorsService {
     // False means another GM added it after the check above.
     if (!(await this.repo.addStock(vendorId, itemId))) throw new ConflictException('Already sold by this vendor');
     await this.audit('VENDORADD', `${vendorLabel(vendor)}: +${itemId} ${item.name}`, actor);
-    return this.stockItem({ ...item, soldBy: item.soldBy + 1 }, isPvp(vendor));
+    const soldBy = pvp ? { pvpSoldBy: item.pvpSoldBy + 1 } : { moneySoldBy: item.moneySoldBy + 1 };
+    return this.stockItem({ ...item, ...soldBy }, pvp);
   }
 
   async removeItem(vendorId: number, itemId: number, actor: Actor): Promise<void> {
@@ -134,7 +144,7 @@ export class VendorsService {
     const multiplier = multiplierForPrice(base, input.amount);
     const price = chargedPrice(base, multiplier);
     // The game multiplies price by count in a DWORD, so a full stack must not wrap around.
-    if (Math.max(input.amount, price) * Math.max(item.stack, 1) > MAX_PRICE) {
+    if (fullStackOverflows(input.amount, item.stack) || fullStackOverflows(price, item.stack)) {
       throw new UnprocessableEntityException('Price too high, buying a full stack would overflow');
     }
 
@@ -146,20 +156,12 @@ export class VendorsService {
       `${itemId} ${item.name}: ${column} ${oldMultiplier} -> ${multiplier}, ${chargedPrice(base, oldMultiplier)} -> ${price} ${pvp ? 'points' : 'cron'}`,
       actor,
     );
-    return { itemId, name: item.name, price, multiplier, soldBy: item.soldBy };
+    return { itemId, name: item.name, price, multiplier, soldBy: pvp ? item.pvpSoldBy : item.moneySoldBy };
   }
 
-  async searchItems(q: string): Promise<GmItemSearchResult[]> {
+  async searchItems(q: string, shop: VendorShop): Promise<GmItemSearchResult[]> {
     const rows = await this.repo.searchItems(q);
-    return rows.map((row) => ({
-      itemId: row.itemId,
-      name: row.name,
-      level: row.level,
-      icon: itemIcons[row.itemId] ?? null,
-      price: chargedPrice(row.money, row.fPrice),
-      pvpPrice: chargedPrice(row.pvpMoney, row.fPvPrice),
-      inClient: Object.hasOwn(itemIcons, row.itemId),
-    }));
+    return rows.map((row) => ({ ...this.stockItem(row, shop === 'pvp'), name: row.name }));
   }
 
   private async requireVendor(id: number): Promise<VendorRow> {
@@ -176,10 +178,13 @@ export class VendorsService {
       name: row.name,
       level: row.level,
       icon: itemIcons[row.itemId] ?? null,
+      stack: row.stack,
       base,
       multiplier,
       price: chargedPrice(base, multiplier),
-      soldBy: row.soldBy,
+      soldBy: pvp ? row.pvpSoldBy : row.moneySoldBy,
+      inClient: Object.hasOwn(itemIcons, row.itemId),
+      canSellBack: (row.sellFlags & ITEMTRADE_SELL) !== 0,
     };
   }
 

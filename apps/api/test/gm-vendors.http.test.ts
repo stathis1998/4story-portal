@@ -13,7 +13,7 @@ const vendor = (overrides: Partial<VendorRow> = {}): VendorRow => ({
 
 const item = (overrides: Partial<ItemRow> = {}): ItemRow => ({
   itemId: 8001, name: 'Small Vitality Potion', level: 1, stack: 1, classMask: 0b111111, itemCountry: 3,
-  money: 1, pvpMoney: 1, fPrice: 50, fPvPrice: 0, soldBy: 12, ...overrides,
+  money: 1, pvpMoney: 1, fPrice: 50, fPvPrice: 0, sellFlags: 7, moneySoldBy: 12, pvpSoldBy: 3, ...overrides,
 });
 
 describe('/api/gm vendors', () => {
@@ -46,7 +46,7 @@ describe('/api/gm vendors', () => {
     ['post', '/api/gm/vendors/20002/items'],
     ['delete', '/api/gm/vendors/20002/items/8001'],
     ['put', '/api/gm/items/8001/price'],
-    ['get', '/api/gm/items?q=potion'],
+    ['get', '/api/gm/items?q=potion&shop=money'],
   ] as const;
 
   it.each(routes)('%s %s is 401 when logged out', async (method, path) => {
@@ -103,13 +103,38 @@ describe('/api/gm vendors', () => {
   });
 
   it('GET /gm/items searches', async () => {
-    const res = await agent.get('/api/gm/items').query({ q: 'potion' });
+    const res = await agent.get('/api/gm/items').query({ q: 'potion', shop: 'money' });
     expect(res.status).toBe(200);
-    expect(res.body[0]).toMatchObject({ itemId: 8001 });
+    expect(res.body[0]).toMatchObject({ itemId: 8001, soldBy: 12 });
   });
 
-  it.each(['/api/gm/items', '/api/gm/items?q=', '/api/gm/items?q=%20%20'])('GET %s requires q', async (path) => {
-    expect((await agent.get(path)).status).toBe(400);
+  it('GET /gm/items computes results for the shop', async () => {
+    const res = await agent.get('/api/gm/items').query({ q: 'potion', shop: 'pvp' });
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ itemId: 8001, price: 0, soldBy: 3 });
+  });
+
+  it.each(['/api/gm/items?shop=money', '/api/gm/items?q=&shop=money', '/api/gm/items?q=%20%20&shop=money'])(
+    'GET %s requires q',
+    async (path) => {
+      expect((await agent.get(path)).status).toBe(400);
+    },
+  );
+
+  it.each(['/api/gm/items?q=potion', '/api/gm/items?q=potion&shop=', '/api/gm/items?q=potion&shop=gold'])(
+    'GET %s requires a valid shop',
+    async (path) => {
+      expect((await agent.get(path)).status).toBe(400);
+    },
+  );
+
+  it('POST of an item whose full stack overflows is 422 and writes nothing', async () => {
+    vendors.items.push(item({ itemId: 8003, stack: 200, fPrice: 148_500_000 }));
+    const res = await agent.post('/api/gm/vendors/20002/items').send({ itemId: 8003 });
+    expect(res.status).toBe(422);
+    expect(res.body.message).toBe('Price too high to sell here: buying a full stack would overflow. Lower its price first.');
+    expect(vendors.stock.get(20002)).toEqual([8001]);
+    expect(gm.audits).toEqual([]);
   });
 
   it('passes the status and message of a rule failure through', async () => {
