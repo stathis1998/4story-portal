@@ -18,6 +18,7 @@ export type AuditEntry = { ip: string; gmId: string; log: string };
 export interface GmRepository {
   listOnlinePlayers(): Promise<OnlinePlayerRow[]>;
   listChannels(): Promise<number[]>;
+  listHostedMaps(): Promise<number[]>;
   isLocationHosted(p: PositionDestination): Promise<boolean>;
   writeAudit(e: AuditEntry): Promise<void>;
 }
@@ -59,6 +60,18 @@ export class SqlGmRepository implements GmRepository {
       `SELECT DISTINCT bLogChannel FROM ${this.db.tables.channelChart} ORDER BY 1`,
     );
     return result.recordset.map((row) => row.bLogChannel);
+  }
+
+  async listHostedMaps(): Promise<number[]> {
+    const { serverChart, channelChart } = this.db.tables;
+    const result = await this.request().query<{ wMapID: number }>(
+      `SELECT DISTINCT s.wMapID
+       FROM ${serverChart} s
+       JOIN ${channelChart} c
+         ON s.bGroup = c.bGroupID AND s.wMapID = c.wMapID AND s.wUnitID = c.wUnitID AND s.bChannel = c.bPhyChannel
+       ORDER BY s.wMapID`,
+    );
+    return result.recordset.map((row) => row.wMapID);
   }
 
   async isLocationHosted(p: PositionDestination): Promise<boolean> {

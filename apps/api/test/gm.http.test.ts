@@ -52,11 +52,43 @@ describe('/api/gm', () => {
   const routes = [
     ['get', '/api/gm/status'],
     ['get', '/api/gm/players'],
+    ['get', '/api/gm/places'],
     ['post', '/api/gm/teleport'],
     ['get', '/api/gm/locations'],
     ['post', '/api/gm/locations'],
     ['delete', '/api/gm/locations/x'],
   ] as const;
+
+  describe('GET /api/gm/places', () => {
+    it('names the hosted maps and falls back to null for a map the client has no name for', async () => {
+      gm.hostedMaps = [0, 13, 65000];
+
+      const res = await agent.get('/api/gm/places');
+
+      expect(res.status).toBe(200);
+      expect(res.body.maps).toEqual([
+        { id: 0, name: 'Overworld' },
+        { id: 13, name: 'Keter Underground' },
+        { id: 65000, name: null },
+      ]);
+    });
+
+    it('offers only destinations on hosted maps', async () => {
+      gm.hostedMaps = [0];
+
+      const res = await agent.get('/api/gm/places');
+
+      expect(res.body.destinations.length).toBeGreaterThan(0);
+      expect(res.body.destinations.every((d: { mapId: number }) => d.mapId === 0)).toBe(true);
+      expect(res.body.destinations).toContainEqual({
+        name: 'Lonbaley Training Camp',
+        mapId: 0,
+        x: 2850.52,
+        y: 68.36,
+        z: 5004.94,
+      });
+    });
+  });
 
   it.each(routes)('rejects %s %s without a session and for non-GMs', async (method, path) => {
     expect((await request(app.getHttpServer())[method](path)).status).toBe(401);

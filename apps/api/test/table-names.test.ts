@@ -12,4 +12,6 @@ it('builds bracketed three-part table names from the configured databases', () =
     serverChart: '[TGAME_GSP_TEST].dbo.TSVRCHART',
     channelChart: '[TGAME_GSP_TEST].dbo.TCHANNELCHART',
     managerLog: '[TGLOBAL_GSP_TEST].dbo.OPTool_ManagerLog',
+    portals: '[TGAME_GSP_TEST].dbo.TPORTALCHART',
+    spawnPositions: '[TGAME_GSP_TEST].dbo.TSPAWNPOSCHART',
   }));

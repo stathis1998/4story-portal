@@ -38,6 +38,14 @@ describe('SqlGmRepository against the _TEST copy', () => {
 
   it('lists the logical channels', async () => expect(await repo.listChannels()).toEqual([1, 2, 3, 50]));
 
+  it('lists the hosted maps in order', async () => {
+    const maps = await repo.listHostedMaps();
+
+    expect(maps).toHaveLength(98);
+    expect(maps.slice(0, 3)).toEqual([0, 3, 4]);
+    expect(maps).toEqual([...maps].sort((a, b) => a - b));
+  });
+
   it('finds a server hosting spawn point 1001', async () =>
     expect(await repo.isLocationHosted({ world: 1, channel: 1, mapId: 0, x: 2850.52, y: 68.36, z: 5004.94 })).toBe(true));
 

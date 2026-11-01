@@ -14,6 +14,8 @@ export function tableNames(config: AppConfig) {
     serverChart: `${game}.TSVRCHART`,
     channelChart: `${game}.TCHANNELCHART`,
     managerLog: `${global}.OPTool_ManagerLog`,
+    portals: `${game}.TPORTALCHART`,
+    spawnPositions: `${game}.TSPAWNPOSCHART`,
   };
 }
 

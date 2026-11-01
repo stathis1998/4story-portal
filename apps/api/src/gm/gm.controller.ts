@@ -17,6 +17,7 @@ import {
   type GmLocation,
   type GmLocationInput,
   gmLocationInputSchema,
+  type GmPlaces,
   type GmStatus,
   type OnlinePlayer,
   type SessionUser,
@@ -29,6 +30,7 @@ import { GmGuard } from '../auth/gm-access.js';
 import { CurrentUser, SessionGuard } from '../auth/session.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ControlClient } from '../control/control-client.js';
+import { gamePlaces } from './game-places.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore, InvalidPresetFileError } from './gm-locations.store.js';
 import { GM_REPOSITORY, type GmRepository } from './gm.repository.js';
 import { TeleportService } from './teleport.service.js';
@@ -51,6 +53,11 @@ export class GmController {
   @Get('players')
   players(): Promise<OnlinePlayer[]> {
     return this.teleports.onlinePlayers();
+  }
+
+  @Get('places')
+  async places(): Promise<GmPlaces> {
+    return gamePlaces(await this.repo.listHostedMaps());
   }
 
   @Post('teleport')

@@ -85,6 +85,7 @@ export class FakeControlClient implements Pick<ControlClient, 'status' | 'moveTo
 export class FakeGmRepository implements GmRepository {
   players: OnlinePlayerRow[] = [];
   channels: number[] = [1, 2, 3, 50];
+  hostedMaps: number[] = [0];
   hosted = true;
   failAudit = false;
   readonly audits: AuditEntry[] = [];
@@ -95,6 +96,9 @@ export class FakeGmRepository implements GmRepository {
 
   async listChannels(): Promise<number[]> {
     return this.channels;
+  }
+  async listHostedMaps(): Promise<number[]> {
+    return this.hostedMaps;
   }
 
   async isLocationHosted(): Promise<boolean> {

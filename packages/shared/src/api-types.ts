@@ -48,3 +48,9 @@ export type OnlinePlayer = {
 export type GmLocation = GmLocationInput & { id: string };
 
 export type TeleportResult = { sent: true; names: string[] };
+
+export type GmMap = { id: number; name: string | null };
+
+export type GmDestination = { name: string; mapId: number; x: number; y: number; z: number };
+
+export type GmPlaces = { maps: GmMap[]; destinations: GmDestination[] };
