@@ -69,3 +69,26 @@ export type GmLogin = {
 };
 
 export type GmLoginClearResult = { outcome: 'logged-out' | 'cleared' };
+
+export type VendorShop = 'money' | 'pvp';
+
+/** name and title are '' when the database holds '_'. */
+export type GmVendor = {
+  id: number; name: string; title: string; shop: VendorShop; country: string;
+  mapId: number; mapName: string | null; itemCount: number; faceIcon: number | null;
+};
+
+export type GmVendorList = { database: string; vendors: GmVendor[] };
+
+/** name is null for a stock row whose item is not in TITEMCHART. base and multiplier are for the vendor's currency. */
+export type GmVendorItem = {
+  itemId: number; name: string | null; level: number; icon: number | null;
+  base: number; multiplier: number; price: number; soldBy: number;
+};
+
+export type GmItemSearchResult = {
+  itemId: number; name: string; level: number; icon: number | null;
+  price: number; pvpPrice: number; inClient: boolean;
+};
+
+export type GmItemPriceResult = { itemId: number; name: string; price: number; multiplier: number; soldBy: number };
