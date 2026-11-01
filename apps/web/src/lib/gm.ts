@@ -6,6 +6,9 @@ import type {
   GmMap,
   GmPlaces,
   GmStatus,
+  GmVendor,
+  GmVendorItem,
+  GmVendorList,
   OnlinePlayer,
   TeleportRequest,
   TeleportResult,
@@ -88,3 +91,17 @@ export function useDeleteLocation() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: gmLocationsQueryOptions.queryKey }),
   })
 }
+
+export const gmVendorsQueryOptions = queryOptions({
+  queryKey: ['gm', 'vendors'],
+  queryFn: () => apiFetch<GmVendorList>('/gm/vendors'),
+})
+
+export const vendorStockQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['gm', 'vendors', id, 'items'],
+    queryFn: () => apiFetch<GmVendorItem[]>(`/gm/vendors/${id}/items`),
+  })
+
+/** The vendor's name, else its title, else "NPC 20002". The API already turns the database's '_' into ''. */
+export const vendorDisplayName = (vendor: GmVendor) => vendor.name || vendor.title || `NPC ${vendor.id}`

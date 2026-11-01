@@ -11,6 +11,9 @@ export function GmNav() {
       <Link to="/gm/logins" className={link} activeProps={{ className: 'text-accent-text' }} inactiveProps={{ className: 'text-muted' }}>
         Logins
       </Link>
+      <Link to="/gm/vendors" className={link} activeProps={{ className: 'text-accent-text' }} inactiveProps={{ className: 'text-muted' }}>
+        Vendors
+      </Link>
     </nav>
   )
 }
