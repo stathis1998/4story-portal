@@ -9,9 +9,10 @@ import {
   splitMoney,
 } from '@4story-portal/shared'
 import { useState } from 'react'
+import { priceText } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
-import { GameIcon } from './GameIcon'
+import { Coin } from './Coin'
 import { Price } from './Price'
 
 type Props = {
@@ -68,7 +69,7 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
               htmlFor={`price-${key}`}
               className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-muted uppercase"
             >
-              {sprite !== null && <GameIcon spriteId={sprite} size={16} />}
+              {sprite !== null && <Coin spriteId={sprite} />}
               {label}
             </label>
             <input
@@ -105,6 +106,11 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
       {usable && charged !== amount && (
         <p className="text-sm font-bold text-accent-text">
           Will charge <Price price={charged!} shop={shop} />
+        </p>
+      )}
+      {amount !== null && !usable && (
+        <p className="text-sm text-danger">
+          Too high: the most a price can be is {priceText(MAX_PRICE, shop)}.
         </p>
       )}
       <FormMessage message={error} />

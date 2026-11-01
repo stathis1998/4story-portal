@@ -1,6 +1,6 @@
 import type { VendorShop } from '@4story-portal/shared'
 import { COIN_SPRITES, splitMoney } from '@4story-portal/shared'
-import { GameIcon } from './GameIcon'
+import { Coin } from './Coin'
 
 type Props = { price: number; shop: VendorShop }
 
@@ -21,7 +21,7 @@ export function Price({ price, shop }: Props) {
       {parts.map(({ name, amount, sprite }) => (
         <span key={name} className="inline-flex items-center gap-0.5">
           {number.format(amount)}
-          <GameIcon spriteId={sprite} size={16} alt={name} />
+          <Coin spriteId={sprite} alt={name} />
         </span>
       ))}
     </span>

@@ -492,6 +492,46 @@ describe('coin prices', () => {
   })
 })
 
+describe('stock table states', () => {
+  it('clips the atlas sliver off every coin', async () => {
+    stockApi([item({ price: 1_002_003 })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    const row = (await screen.findByText('Small Potion')).closest('tr')!
+    for (const img of within(row.querySelector('[data-testid="price"]') as HTMLElement).getAllByRole('img')) {
+      expect(img.className).toContain('clip-path')
+    }
+    await openEditor(user)
+    expect(screen.getByText('Rune').closest('label')!.querySelector('img')!.className).toContain('clip-path')
+  })
+
+  it('explains a price above the maximum', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openEditor(user)
+    await setField(user, 'Rune', '123456')
+    expect(screen.getByText('Too high: the most a price can be is 4,294 Rune 967 Luna 295 Cron.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Will charge/)).not.toBeInTheDocument()
+  })
+
+  it('says an empty shop sells nothing and still allows adding', async () => {
+    stockApi([])
+    renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    expect(await screen.findByText('This vendor sells nothing yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Add item' })).toBeInTheDocument()
+  })
+
+  it('says when the filter matches nothing', async () => {
+    stockApi([item()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await user.type(await screen.findByLabelText('Filter stock'), 'zzz')
+    expect(screen.getByText('No matching items.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})
+
 const found = (o = {}) => ({
   itemId: 8001,
   name: 'Small Potion',
