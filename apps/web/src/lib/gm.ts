@@ -105,6 +105,11 @@ function wallClockParts(value: string) {
   return { day, month: MONTHS[month - 1], date: `${day} ${MONTHS[month - 1]}`, time: value.slice(11) }
 }
 
+export function formatWallClock(value: string) {
+  const { date, time } = wallClockParts(value)
+  return `${date} ${time}`
+}
+
 export function formatEventSchedule({ mode, start, end }: GmEventSchedule) {
   const from = wallClockParts(start)
   const to = wallClockParts(end)

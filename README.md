@@ -45,7 +45,7 @@ DB_GAME_NAME=TGAME_GSP
 
 ## GM tools
 
-Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands to the game's TControlSvr, a logins tool for players stuck after a server was closed without `/exit`, and a vendor tool for editing what NPC shops sell and what it costs.
+Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands to the game's TControlSvr, a logins tool for players stuck after a server was closed without `/exit`, a vendor tool for editing what NPC shops sell and what it costs, and an events tool for running EXP, drop and other bonus events.
 
 - Keep TControlSvr's port 3616 firewalled to localhost.
 - The portal logs in to TControlSvr as the `TMANAGER` account `portal` (authority 3), using `CONTROL_USER` and `CONTROL_PASSWORD` from `.env`. TControlSvr checks logins against the live `TGLOBAL_GSP`, so the account must exist there. Create it, or reset its password after changing `CONTROL_PASSWORD`, with:
@@ -67,6 +67,10 @@ Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands t
 - The client's sell-price tooltip keeps showing the old value until `TItem.tcd` changes, while the server pays the new one.
 - Item and NPC icons and the item lookup come from the client's data files. They are committed in `apps/web/public/game-icons/` and `apps/api/src/gm/game-icons.generated.ts`, so the API does not need the client. After a client update, set `GAME_TCD_DIR`, run `npm run import:icons -w apps/api`, and restart the API. The parent of `GAME_TCD_DIR` must hold `TClientCmd.tif`, `Index/` and `Data/`.
 - Writes are audited in `TMANAGERLOG` as `VENDORADD`, `VENDORDEL` and `ITEMPRICE`.
+- The Events page (`/gm/events`) runs bonus events through TControlSvr, the way Happy does: EXP, item, magic and money drops, refine, refine transfer, item, magic and rare magic upgrades, and gamble option. Special events made in Happy (cash shop sale, monster spawn and regen, lottery, gift time) can be seen and stopped here, not edited. The server starts and stops events on schedule within seconds, with no restart.
+- An event's bonus is +N%, so 100 means double. Times are the server's clock. The portal's `TMANAGER` row needs `bAuthority` 3 or better to list events, and the API must run on the same machine as TControlSvr so their timezones match.
+- The server has no pause: stopping an event removes it. Saving a running event restarts it, so players see the start message again and the bonus drops out for a second or two. To change an event's type, stop it and create a new one, because the server would leave the old bonus on.
+- Finished events delete themselves from `TEVENTCHART`, so `TMANAGERLOG` is the only history, as `EVENT`. The list can't load while TControlSvr is down, and a bonus stays on past its end until TControlSvr comes back.
 
 ## Test databases
 

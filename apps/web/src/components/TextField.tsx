@@ -4,7 +4,7 @@ type Props = {
   label: string
   registration: UseFormRegisterReturn
   error?: string
-  type?: 'text' | 'password' | 'number'
+  type?: 'text' | 'password' | 'number' | 'date' | 'time'
   autoComplete?: string
   step?: string
 }
