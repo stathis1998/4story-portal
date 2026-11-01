@@ -20,7 +20,7 @@ export function Tabs({ tabs, active, onChange }: Props) {
   }
 
   return (
-    <div role="tablist" className="flex gap-1 border-b border-line">
+    <div role="tablist" className="flex flex-wrap gap-1 border-b border-line">
       {tabs.map((tab, index) => {
         const selected = tab.id === active
         return (
