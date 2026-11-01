@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_PRICE } from '@4story-portal/shared';
 import { loadConfig } from '../src/config/config.js';
 import { itemIcons, npcFaces } from '../src/gm/game-icons.generated.js';
 import { MAP_NAMES } from '../src/gm/game-places.generated.js';
@@ -21,6 +22,15 @@ const item = (overrides: Partial<ItemRow> = {}): ItemRow => ({
 let repo: FakeVendorsRepository;
 let gm: FakeGmRepository;
 let service: VendorsService;
+
+const snapshot = () => JSON.stringify([gm.audits, repo.prices, [...repo.stock]]);
+
+/** The call is rejected as described and nothing was written or audited. */
+async function expectRejected(call: () => Promise<unknown>, expected: { status: number; message: string }) {
+  const before = snapshot();
+  await expect(call()).rejects.toMatchObject(expected);
+  expect(snapshot()).toBe(before);
+}
 
 beforeEach(() => {
   repo = new FakeVendorsRepository();
@@ -80,40 +90,47 @@ describe('addItem', () => {
     ]);
   });
 
-  it('rejects a non-vendor with 404', () =>
-    expect(service.addItem(1, 8001, actor)).rejects.toMatchObject({ status: 404, message: 'That NPC is not a vendor' }));
+  it('prices the returned row in PvP for a PvP vendor', async () => {
+    repo.vendors = [vendor({ type: 21 })];
+    repo.items = [item({ money: 475, fPrice: 5, pvpMoney: 2, fPvPrice: 75 })];
+    expect(await service.addItem(20002, 8001, actor)).toMatchObject({ base: 2, multiplier: 75, price: 150 });
+  });
 
-  it('rejects an item not in the client with 422', async () => {
-    await expect(service.addItem(20002, 60, actor)).rejects.toMatchObject({
+  it('rejects a non-vendor with 404', () =>
+    expectRejected(() => service.addItem(1, 8001, actor), { status: 404, message: 'That NPC is not a vendor' }));
+
+  it('rejects an item not in the client with 422', () =>
+    expectRejected(() => service.addItem(20002, 60, actor), {
       status: 422,
       message: 'Not in the game client, adding it would crash players opening this shop',
-    });
-    expect(repo.stock.size).toBe(0);
-  });
+    }));
 
   it('rejects an item not in the database with 422', () => {
     repo.items = [];
-    return expect(service.addItem(20002, 8001, actor)).rejects.toMatchObject({
+    return expectRejected(() => service.addItem(20002, 8001, actor), {
       status: 422,
       message: 'Not in the game database, the server would ignore it',
     });
   });
 
-  it('rejects a duplicate with 409', async () => {
+  it('rejects a duplicate with 409', () => {
     repo.stock.set(20002, [8001]);
-    await expect(service.addItem(20002, 8001, actor)).rejects.toMatchObject({ status: 409, message: 'Already sold by this vendor' });
-    expect(gm.audits).toEqual([]);
+    return expectRejected(() => service.addItem(20002, 8001, actor), { status: 409, message: 'Already sold by this vendor' });
   });
 
-  it('rejects a shop overflow with 422', async () => {
+  it('rejects with 409 when another GM adds it first', () => {
+    vi.spyOn(repo, 'addStock').mockResolvedValue(false);
+    return expectRejected(() => service.addItem(20002, 8001, actor), { status: 409, message: 'Already sold by this vendor' });
+  });
+
+  it('rejects a shop overflow with 422', () => {
     repo.items = [item({ classMask: 1 })];
     repo.stock.set(20002, Array.from({ length: 255 }, (_, i) => 100000 + i));
     for (let i = 0; i < 255; i++) repo.items.push(item({ itemId: 100000 + i, classMask: 1 }));
-    await expect(service.addItem(20002, 8001, actor)).rejects.toMatchObject({
+    return expectRejected(() => service.addItem(20002, 8001, actor), {
       status: 422,
       message: 'Would exceed the 255 item shop limit for Warrior in Defugel',
     });
-    expect(repo.stock.get(20002)).toHaveLength(255);
   });
 
   it('allows reaching exactly 255', async () => {
@@ -132,6 +149,13 @@ describe('shopOverflow', () => {
   it('finds the class over 255', () => expect(shopOverflow(0, many(256, entry(0b100)))).toEqual({ classId: 2, country: 0 }));
   it('ignores classes split across masks', () =>
     expect(shopOverflow(0, [...many(200, entry(1)), ...many(200, entry(2))])).toBeNull());
+  it('finds a faction over 255', () => {
+    expect(shopOverflow(0, many(256, entry(1, 0)))).toEqual({ classId: 0, country: 0 });
+    expect(shopOverflow(0, many(256, entry(1, 1)))).toEqual({ classId: 0, country: 1 });
+  });
+  it('adds neutral items to a faction', () =>
+    expect(shopOverflow(0, [...many(200, entry(1)), ...many(56, entry(1, 1))])).toEqual({ classId: 0, country: 1 }));
+  it('finds the last class', () => expect(shopOverflow(0, many(256, entry(0b100000)))).toEqual({ classId: 5, country: 0 }));
   it('counts faction items only in that faction', () =>
     expect(shopOverflow(0, [...many(200, entry(1, 0)), ...many(200, entry(1, 1))])).toBeNull());
   it('counts every faction item when the vendor is DCC_ALLCOUNTRY', () =>
@@ -149,10 +173,10 @@ describe('removeItem', () => {
   });
 
   it('404s when not sold', () =>
-    expect(service.removeItem(20002, 8001, actor)).rejects.toMatchObject({ status: 404, message: 'Not sold by this vendor' }));
+    expectRejected(() => service.removeItem(20002, 8001, actor), { status: 404, message: 'Not sold by this vendor' }));
 
   it('404s for a non-vendor', () =>
-    expect(service.removeItem(1, 8001, actor)).rejects.toMatchObject({ status: 404, message: 'That NPC is not a vendor' }));
+    expectRejected(() => service.removeItem(1, 8001, actor), { status: 404, message: 'That NPC is not a vendor' }));
 });
 
 describe('setPrice', () => {
@@ -179,24 +203,37 @@ describe('setPrice', () => {
   });
 
   it('404s for a missing item', () =>
-    expect(service.setPrice(9, { currency: 'money', amount: 1 }, actor)).rejects.toMatchObject({ status: 404, message: 'Item not found' }));
+    expectRejected(() => service.setPrice(9, { currency: 'money', amount: 1 }, actor), { status: 404, message: 'Item not found' }));
 
-  it('rejects base 0 with 422', async () => {
+  it('rejects base 0 with 422', () => {
     repo.items = [item({ money: 0 })];
-    await expect(service.setPrice(8001, { currency: 'money', amount: 5 }, actor)).rejects.toMatchObject({
+    return expectRejected(() => service.setPrice(8001, { currency: 'money', amount: 5 }, actor), {
       status: 422,
       message: "This item's level has no price, so it can't be set",
     });
-    expect(repo.prices).toEqual([]);
   });
 
-  it('rejects a stack overflow with 422', async () => {
+  const tooHigh = { status: 422, message: 'Price too high, buying a full stack would overflow' };
+
+  it('rejects a stack overflow with 422', () => {
     repo.items = [item({ stack: 100 })];
-    await expect(service.setPrice(8001, { currency: 'money', amount: 50_000_000 }, actor)).rejects.toMatchObject({
-      status: 422,
-      message: 'Price too high, buying a full stack would overflow',
-    });
-    expect(repo.prices).toEqual([]);
+    return expectRejected(() => service.setPrice(8001, { currency: 'money', amount: 50_000_000 }, actor), tooHigh);
+  });
+
+  it.each([0, 1])('rejects the maximum price at stack %d', (stack) => {
+    repo.items = [item({ stack })];
+    return expectRejected(() => service.setPrice(8001, { currency: 'money', amount: MAX_PRICE }, actor), tooHigh);
+  });
+
+  it('rejects when the amount times the stack overflows', () => {
+    repo.items = [item({ stack: 100 })];
+    return expectRejected(() => service.setPrice(8001, { currency: 'money', amount: 42_949_673 }, actor), tooHigh);
+  });
+
+  it('allows the largest amount that fits a full stack', async () => {
+    repo.items = [item({ stack: 100 })];
+    await service.setPrice(8001, { currency: 'money', amount: 42_949_672 }, actor);
+    expect(repo.prices).toHaveLength(1);
   });
 
   it('treats stack 0 as 1', async () => {
@@ -220,7 +257,7 @@ describe('searchItems', () => {
   });
 
   it('reports both prices', async () => {
-    repo.items = [item({ money: 1, fPrice: 50, pvpMoney: 1, fPvPrice: 0 })];
-    expect(await service.searchItems('x')).toMatchObject([{ price: 50, pvpPrice: 0 }]);
+    repo.items = [item({ money: 10, fPrice: 5, pvpMoney: 3, fPvPrice: 7 })];
+    expect(await service.searchItems('x')).toMatchObject([{ price: 50, pvpPrice: 21 }]);
   });
 });
