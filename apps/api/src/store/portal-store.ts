@@ -29,10 +29,21 @@ const MIGRATIONS = [
      first_seen TEXT,
      PRIMARY KEY (user_id, badge_id)
    );`,
+  // A badge in here has been through its first recording, so anyone holding it from now on gets a date.
+  // A file already in use has done that for the original badges.
+  `CREATE TABLE badge_baselines (badge_id TEXT PRIMARY KEY);
+   WITH original (badge_id) AS (
+     VALUES ('level-10'), ('level-25'), ('level-50'), ('level-75'), ('level-90'),
+            ('hours-10'), ('hours-50'), ('hours-100'), ('hours-500'),
+            ('streak-7'), ('streak-30'), ('night-owl'), ('veteran'),
+            ('upgrade-10'), ('upgrade-15'), ('upgrade-20'), ('geared'),
+            ('titles-5'), ('titles-10'), ('companion-20'), ('wealth-1000')
+   )
+   INSERT INTO badge_baselines (badge_id)
+   SELECT badge_id FROM original WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'badges_baselined');`,
 ];
 
 const HIDE_GMS = 'hide_gms';
-const BADGES_BASELINED = 'badges_baselined';
 
 // The portal's own data, kept out of the game databases. A broken file must not take the stats down
 // with it, so reads fall back to defaults and only saving a setting reports a failure.
@@ -91,18 +102,23 @@ export class PortalStore implements OnModuleDestroy {
     );
   }
 
-  /** Remembers the badges each account holds. Those held at the very first recording get no date. */
-  recordBadges(held: Map<number, string[]>, today: string): void {
+  /**
+   * Remembers the badges each account holds. Those already held the first time a badge exists get no
+   * date, so a newly added badge doesn't look newly earned. `known` is every badge that exists now.
+   */
+  recordBadges(held: Map<number, string[]>, today: string, known: readonly string[]): void {
     const db = this.db;
     if (!db) return;
     try {
       this.transaction(db, () => {
-        const baselined = this.setting(BADGES_BASELINED) !== undefined;
+        const rows = db.prepare('SELECT badge_id AS badgeId FROM badge_baselines').all() as { badgeId: string }[];
+        const baselined = new Set(rows.map((row) => row.badgeId));
         const insert = db.prepare('INSERT OR IGNORE INTO badge_unlocks (user_id, badge_id, first_seen) VALUES (?, ?, ?)');
         for (const [userId, badges] of held) {
-          for (const badge of badges) insert.run(userId, badge, baselined ? today : null);
+          for (const badge of badges) insert.run(userId, badge, baselined.has(badge) ? today : null);
         }
-        if (!baselined) this.saveSetting(db, BADGES_BASELINED, today);
+        const mark = db.prepare('INSERT OR IGNORE INTO badge_baselines (badge_id) VALUES (?)');
+        for (const badge of known) mark.run(badge);
       });
     } catch (error) {
       this.logger.warn(`Could not record badges: ${describe(error)}`);

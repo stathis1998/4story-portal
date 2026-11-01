@@ -25,4 +25,8 @@ it('builds bracketed three-part table names from the configured databases', () =
     companions: '[TGAME_GSP_TEST].dbo.TCOMPANIONTABLE',
     characterTitles: '[TGAME_GSP_TEST].dbo.TTITLETABLE',
     titles: '[TGAME_GSP_TEST].dbo.TTITLECHART',
+    friends: '[TGAME_GSP_TEST].dbo.TFRIENDTABLE',
+    guildMembers: '[TGAME_GSP_TEST].dbo.TGUILDMEMBERTABLE',
+    guilds: '[TGAME_GSP_TEST].dbo.TGUILDTABLE',
+    duelScores: '[TGAME_GSP_TEST].dbo.TDUELSCORETABLE',
   }));

@@ -18,6 +18,7 @@ import {
   type AccountStatsRow,
   BADGES,
   type CharacterStatsRow,
+  COMING_SOON_BADGES,
   type ComputedStats,
   computeStats,
   earnedBadges,
@@ -269,7 +270,7 @@ export class StatsService {
     const mine = snapshot.earned.get(userId);
     const { today } = snapshot.stats;
 
-    return BADGES.map((badge) => {
+    const earnable = BADGES.map((badge) => {
       const earned = mine?.has(badge.id) ?? false;
       const holderIds = new Set(
         ranked.filter((account) => snapshot.earned.get(account.userId)?.has(badge.id)).map((account) => account.userId),
@@ -284,6 +285,8 @@ export class StatsService {
         id: badge.id,
         name: badge.name,
         description: badge.description,
+        category: badge.category,
+        comingSoon: false,
         earned,
         holders: holderIds.size,
         players: ranked.length,
@@ -292,6 +295,20 @@ export class StatsService {
         firstToEarn: firstSeen !== null && rankedIds.has(userId) && allDated && firstSeen === earliest,
       };
     });
+    const comingSoon = COMING_SOON_BADGES.map(({ id, name, description, category }) => ({
+      id,
+      name,
+      description,
+      category,
+      comingSoon: true,
+      earned: false,
+      holders: 0,
+      players: ranked.length,
+      firstSeen: null,
+      isNew: false,
+      firstToEarn: false,
+    }));
+    return [...earnable, ...comingSoon];
   }
 
   private snapshot(): Promise<Snapshot> {
@@ -312,7 +329,11 @@ export class StatsService {
     const stats = computeStats(await this.repo.loadRows(), today);
     const earned = new Map<number, Set<string>>();
     for (const account of stats.accounts.values()) earned.set(account.userId, new Set(earnedBadges(account)));
-    this.store.recordBadges(new Map([...earned].map(([userId, badges]) => [userId, [...badges]])), today);
+    this.store.recordBadges(
+      new Map([...earned].map(([userId, badges]) => [userId, [...badges]])),
+      today,
+      BADGES.map((badge) => badge.id),
+    );
     return { stats, earned, unlocks: this.store.badgeUnlocks() };
   }
 }

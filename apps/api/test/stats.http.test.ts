@@ -57,6 +57,7 @@ const baseRows = (): StatRows => ({
   companions: [{ charId: 1, slot: 0, name: 'Rex', level: 20 }],
   titles: [{ charId: 1, titleId: 1, name: 'Warlord' }],
   titlesTotal: 110,
+  social: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
     { userId: PLAYER, username: 'friend' },
@@ -147,6 +148,22 @@ describe('player stats routes', () => {
       expect(byId.get('level-50')).toMatchObject({ name: 'Level 50', earned: true, holders: 3, players: 4 });
       expect(byId.get('level-90')).toMatchObject({ earned: false, holders: 1, players: 4 });
       expect(byId.get('upgrade-20')).toMatchObject({ earned: true, holders: 1 });
+    });
+
+    it('files each badge under a category', async () => {
+      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
+      const byId = new Map(badges.map((badge) => [badge.id, badge]));
+      expect(byId.get('level-50')).toMatchObject({ category: 'progress', comingSoon: false });
+      expect(byId.get('upgrade-20')).toMatchObject({ category: 'gear', comingSoon: false });
+    });
+
+    it('lists coming soon badges that nobody holds and that are never stored', async () => {
+      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
+      const deaths = badges.find((badge) => badge.id === 'deaths-1');
+      expect(deaths).toMatchObject({ category: 'misfortune', comingSoon: true, earned: false, holders: 0, firstSeen: null, isNew: false, firstToEarn: false });
+      const stored = store.badgeUnlocks();
+      expect(stored.length).toBeGreaterThan(0);
+      expect(stored.some((unlock) => unlock.badgeId === 'deaths-1')).toBe(false);
     });
 
     it('gives zeros to a player with no characters, with rarity still known', async () => {

@@ -15,10 +15,25 @@ export type CharacterStats = {
 
 export type ActivityDay = { date: string; minutes: number };
 
+export const BADGE_CATEGORIES = [
+  { id: 'progress', label: 'Progress' },
+  { id: 'playtime', label: 'Playtime' },
+  { id: 'gear', label: 'Gear' },
+  { id: 'collection', label: 'Collection' },
+  { id: 'social', label: 'Social' },
+  { id: 'combat', label: 'Combat' },
+  { id: 'misfortune', label: 'Misfortune' },
+] as const;
+
+export type BadgeCategoryId = (typeof BADGE_CATEGORIES)[number]['id'];
+
 export type BadgeView = {
   id: string;
   name: string;
   description: string;
+  category: BadgeCategoryId;
+  /** The game doesn't record this yet, so nobody can earn it. */
+  comingSoon: boolean;
   earned: boolean;
   /** Accounts holding it, out of all ranked accounts. */
   holders: number;
