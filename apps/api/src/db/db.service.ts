@@ -16,6 +16,11 @@ export function tableNames(config: AppConfig) {
     managerLog: `${global}.OPTool_ManagerLog`,
     portals: `${game}.TPORTALCHART`,
     spawnPositions: `${game}.TSPAWNPOSCHART`,
+    npcs: `${game}.TNPCCHART`,
+    npcItems: `${game}.TNPCITEMCHART`,
+    items: `${game}.TITEMCHART`,
+    itemAttrs: `${game}.TITEMATTRCHART`,
+    levels: `${game}.TLEVELCHART`,
   };
 }
 

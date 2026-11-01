@@ -1,4 +1,6 @@
 import type {
+  GmItemPriceResult,
+  GmItemSearchResult,
   GmLocation,
   GmLocationInput,
   GmLogin,
@@ -6,10 +8,15 @@ import type {
   GmMap,
   GmPlaces,
   GmStatus,
+  GmVendor,
+  GmVendorItem,
+  GmVendorList,
   OnlinePlayer,
   TeleportRequest,
   TeleportResult,
+  VendorShop,
 } from '@4story-portal/shared'
+import { splitMoney } from '@4story-portal/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
 
@@ -86,5 +93,105 @@ export function useDeleteLocation() {
     mutationKey: ['gm', 'locations', 'delete'],
     mutationFn: (id: string) => apiFetch<void>(`/gm/locations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: gmLocationsQueryOptions.queryKey }),
+  })
+}
+
+export const gmVendorsQueryOptions = queryOptions({
+  queryKey: ['gm', 'vendors'],
+  queryFn: () => apiFetch<GmVendorList>('/gm/vendors'),
+})
+
+export const vendorStockQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['gm', 'vendors', id, 'items'],
+    queryFn: () => apiFetch<GmVendorItem[]>(`/gm/vendors/${id}/items`),
+  })
+
+/** The vendor's name, else its title, else "NPC 20002". The API already turns the database's '_' into ''. */
+export const vendorDisplayName = (vendor: GmVendor) => vendor.name || vendor.title || `NPC ${vendor.id}`
+
+/** The item's name, else "Item #8001" (the database held '_'). A null name is not in TITEMCHART: "Unknown item #8001". */
+export const itemDisplayName = ({ itemId, name }: { itemId: number; name: string | null }) =>
+  name === null ? `Unknown item #${itemId}` : name || `Item #${itemId}`
+
+/** "1 vendor" or "12 vendors". */
+export const vendorCount = (count: number) => `${count} ${count === 1 ? 'vendor' : 'vendors'}`
+
+const number = new Intl.NumberFormat('en-US')
+
+/** A price in words, for notes: `1 Rune 2 Luna 3 Cron`, `75 Cron` or `150 points`. */
+export function priceText(price: number, shop: VendorShop) {
+  if (shop === 'pvp') return `${number.format(price)} points`
+  const { rune, luna, cron } = splitMoney(price)
+  return [
+    [rune, 'Rune'],
+    [luna, 'Luna'],
+    [cron, 'Cron'],
+  ]
+    .filter(([amount]) => amount !== 0)
+    .map(([amount, name]) => `${number.format(amount as number)} ${name}`)
+    .join(' ')
+}
+
+/** The note shown after a price is saved. */
+export function priceNote(name: string, { price, soldBy }: GmItemPriceResult, shop: VendorShop) {
+  return price === 0
+    ? `${name} is now free at ${vendorCount(soldBy)}. Restart TMapSvr to apply.`
+    : `${name} now costs ${priceText(price, shop)} at ${vendorCount(soldBy)}. Restart TMapSvr to apply.`
+}
+
+export function useRemoveVendorItem() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: ['gm', 'vendors', 'remove-item'],
+    mutationFn: ({ vendorId, itemId }: { vendorId: number; itemId: number }) =>
+      apiFetch<void>(`/gm/vendors/${vendorId}/items/${itemId}`, {
+        method: 'DELETE',
+      }),
+    // Also after a failure: "already gone" means the stock is out of date.
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: gmVendorsQueryOptions.queryKey,
+      }),
+  })
+}
+
+export function useSetItemPrice() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: ['gm', 'vendors', 'set-price'],
+    mutationFn: ({ itemId, currency, amount }: { itemId: number; currency: VendorShop; amount: number }) =>
+      apiFetch<GmItemPriceResult>(`/gm/items/${itemId}/price`, {
+        method: 'PUT',
+        body: JSON.stringify({ currency, amount }),
+      }),
+    // Search results carry prices too, and a lowered price can make an item addable.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: gmVendorsQueryOptions.queryKey }),
+        queryClient.invalidateQueries({ queryKey: ['gm', 'items'] }),
+      ]),
+  })
+}
+
+export const itemSearchQueryOptions = (q: string, shop: VendorShop) =>
+  queryOptions({
+    queryKey: ['gm', 'items', q, shop],
+    queryFn: () => apiFetch<GmItemSearchResult[]>(`/gm/items?q=${encodeURIComponent(q)}&shop=${shop}`),
+  })
+
+export function useAddVendorItem() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: ['gm', 'vendors', 'add-item'],
+    mutationFn: ({ vendorId, itemId }: { vendorId: number; itemId: number }) =>
+      apiFetch<GmVendorItem>(`/gm/vendors/${vendorId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ itemId }),
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: gmVendorsQueryOptions.queryKey,
+      }),
   })
 }

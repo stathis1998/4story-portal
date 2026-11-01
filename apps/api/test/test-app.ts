@@ -9,8 +9,9 @@ import { ControlClient } from '../src/control/control-client.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore } from '../src/gm/gm-locations.store.js';
 import { GM_REPOSITORY } from '../src/gm/gm.repository.js';
 import { LOGIN_CLEAR_TIMING } from '../src/gm/logins.service.js';
+import { VENDORS_REPOSITORY } from '../src/gm/vendors.repository.js';
 import { DbService } from '../src/db/db.service.js';
-import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeGmRepository } from './fakes.js';
+import { FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeGmRepository, FakeVendorsRepository } from './fakes.js';
 import { validEnv } from './fixtures.js';
 
 export type TestAppOverrides = {
@@ -19,6 +20,7 @@ export type TestAppOverrides = {
   control?: FakeControlClient;
   gm?: FakeGmRepository;
   locations?: GmLocationsStore;
+  vendors?: FakeVendorsRepository;
 };
 
 // The real AppModule with the database and control server swapped out, configured exactly like main.ts.
@@ -36,6 +38,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.control ?? new FakeControlClient())
     .overrideProvider(GM_REPOSITORY)
     .useValue(overrides.gm ?? new FakeGmRepository())
+    .overrideProvider(VENDORS_REPOSITORY)
+    .useValue(overrides.vendors ?? new FakeVendorsRepository())
     .overrideProvider(GM_LOCATIONS_STORE)
     .useValue(overrides.locations ?? new GmLocationsStore('./data/unused-test-presets.json'))
     .overrideProvider(LOGIN_CLEAR_TIMING)

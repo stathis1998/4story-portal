@@ -13,7 +13,7 @@ const OVERWORLD_MAP = 0;
 // A portal and its database spawn further apart than this are not the same place.
 const MAX_SPAWN_DISTANCE = 100;
 
-class ArchiveReader {
+export class ArchiveReader {
   private offset = 0;
 
   constructor(private readonly buffer: Buffer) {}

@@ -16,6 +16,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
+import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -51,6 +52,11 @@ const AuthedGmTeleportRoute = AuthedGmTeleportRouteImport.update({
   path: '/gm/teleport',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmVendorsRoute = AuthedGmVendorsRouteImport.update({
+  id: '/gm/vendors',
+  path: '/gm/vendors',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/characters': typeof AuthedCharactersRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
+  '/gm/vendors': typeof AuthedGmVendorsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/characters': typeof AuthedCharactersRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
+  '/gm/vendors': typeof AuthedGmVendorsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,14 +85,27 @@ export interface FileRoutesById {
   '/_authed/characters': typeof AuthedCharactersRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
+  '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/register' | '/characters' | '/gm/logins' | '/gm/teleport'
+    | '/'
+    | '/login'
+    | '/register'
+    | '/characters'
+    | '/gm/logins'
+    | '/gm/teleport'
+    | '/gm/vendors'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/login' | '/register' | '/characters' | '/gm/logins' | '/gm/teleport'
+    | '/'
+    | '/login'
+    | '/register'
+    | '/characters'
+    | '/gm/logins'
+    | '/gm/teleport'
+    | '/gm/vendors'
   id:
     | '__root__'
     | '/'
@@ -94,6 +115,7 @@ export interface FileRouteTypes {
     | '/_authed/characters'
     | '/_authed/gm/logins'
     | '/_authed/gm/teleport'
+    | '/_authed/gm/vendors'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -154,6 +176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmTeleportRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/vendors': {
+      id: '/_authed/gm/vendors'
+      path: '/gm/vendors'
+      fullPath: '/gm/vendors'
+      preLoaderRoute: typeof AuthedGmVendorsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
@@ -161,12 +190,14 @@ interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
+  AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
+  AuthedGmVendorsRoute: AuthedGmVendorsRoute,
 }
 
 const AuthedRouteWithChildren =

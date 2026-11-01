@@ -2,6 +2,7 @@ import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
+import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -136,5 +137,57 @@ export class FakeGmRepository implements GmRepository {
   async writeAudit(e: AuditEntry): Promise<void> {
     if (this.failAudit) throw new Error('audit failed');
     this.audits.push(e);
+  }
+}
+
+// In-memory stand-in for the vendor tables. `stock` maps a vendor id to its item ids.
+export class FakeVendorsRepository implements VendorsRepository {
+  vendors: VendorRow[] = [];
+  items: ItemRow[] = [];
+  stock = new Map<number, number[]>();
+  /** Each setPrice call as [itemId, column, multiplier]. */
+  readonly prices: [number, PriceColumn, number][] = [];
+
+  async listVendors(): Promise<VendorRow[]> {
+    return this.vendors;
+  }
+
+  async findVendor(id: number): Promise<VendorRow | null> {
+    return this.vendors.find((v) => v.id === id) ?? null;
+  }
+
+  async listStock(vendorId: number): Promise<StockRow[]> {
+    const ids = [...(this.stock.get(vendorId) ?? [])].sort((a, b) => a - b);
+    return ids.map((id): StockRow => {
+      const item = this.items.find((i) => i.itemId === id);
+      if (item) return item;
+      return { itemId: id, name: null, level: 0, stack: 0, classMask: 0, itemCountry: 0, money: 0, pvpMoney: 0, fPrice: 0, fPvPrice: 0, sellFlags: 0, moneySoldBy: 0, pvpSoldBy: 0 };
+    });
+  }
+
+  async findItem(itemId: number): Promise<ItemRow | null> {
+    return this.items.find((i) => i.itemId === itemId) ?? null;
+  }
+
+  async searchItems(): Promise<ItemRow[]> {
+    return this.items;
+  }
+
+  async addStock(vendorId: number, itemId: number): Promise<boolean> {
+    const ids = this.stock.get(vendorId) ?? [];
+    if (ids.includes(itemId)) return false;
+    this.stock.set(vendorId, [...ids, itemId]);
+    return true;
+  }
+
+  async removeStock(vendorId: number, itemId: number): Promise<boolean> {
+    const ids = this.stock.get(vendorId) ?? [];
+    if (!ids.includes(itemId)) return false;
+    this.stock.set(vendorId, ids.filter((id) => id !== itemId));
+    return true;
+  }
+
+  async setPrice(itemId: number, column: PriceColumn, multiplier: number): Promise<void> {
+    this.prices.push([itemId, column, multiplier]);
   }
 }
