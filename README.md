@@ -45,7 +45,7 @@ DB_GAME_NAME=TGAME_GSP
 
 ## GM tools
 
-Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands to the game's TControlSvr.
+Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands to the game's TControlSvr, and a logins tool for players stuck after a server was closed without `/exit`.
 
 - Keep TControlSvr's port 3616 firewalled to localhost.
 - The portal logs in to TControlSvr as the `TMANAGER` account `portal` (authority 3), using `CONTROL_USER` and `CONTROL_PASSWORD` from `.env`. TControlSvr checks logins against the live `TGLOBAL_GSP`, so the account must exist there. Create it, or reset its password after changing `CONTROL_PASSWORD`, with:
@@ -60,6 +60,7 @@ Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands t
 - List only existing accounts in `GM_USERNAMES`.
 - Map names and the destination search come from the game client's `TRegion.tcd` and `TPortal.tcd`, because the database has no names. They are committed in `apps/api/src/gm/game-places.generated.ts`, so the API does not need the client. After a client update, set `GAME_TCD_DIR` in `.env` to the client's `Tcd` folder, run `npm run import:places -w apps/api`, and restart the API. Maps with no name in those files show as "Map 600".
 - TControlSvr must be running and connected to the world server for teleports to arrive. The portal can only report "sent".
+- The Logins page lists `TCURRENTUSER`. Closing a server without `/exit` leaves rows behind, and the player then gets "An attempt was made to connect to the ID" at every login. "Clear login" kicks the character through TControlSvr and waits up to 5 seconds: a real session logs out normally and removes its own row, and a row still there is deleted. Clears are written to `TMANAGERLOG` as `CLEARLOGIN`.
 
 ## Test databases
 

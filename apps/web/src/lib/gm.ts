@@ -1,6 +1,8 @@
 import type {
   GmLocation,
   GmLocationInput,
+  GmLogin,
+  GmLoginClearResult,
   GmMap,
   GmPlaces,
   GmStatus,
@@ -39,6 +41,26 @@ export const gmPlacesQueryOptions = queryOptions({
 export const mapName = (id: number, name: string | null | undefined) => name ?? `Map ${id}`
 
 export const mapOptionLabel = ({ id, name }: GmMap) => (name ? `${id} – ${name}` : mapName(id, name))
+
+export const gmLoginsQueryOptions = queryOptions({
+  queryKey: ['gm', 'logins'],
+  queryFn: () => apiFetch<GmLogin[]>('/gm/logins'),
+  refetchInterval: 10000,
+})
+
+export function useClearLogin() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: ['gm', 'logins', 'clear'],
+    mutationFn: (key: number) => apiFetch<GmLoginClearResult>(`/gm/logins/${key}/clear`, { method: 'POST' }),
+    // Also after a failure: "already gone" means the list is out of date.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: gmLoginsQueryOptions.queryKey, exact: true }),
+        queryClient.invalidateQueries({ queryKey: onlinePlayersQueryOptions.queryKey }),
+      ]),
+  })
+}
 
 export function useTeleport() {
   return useMutation({

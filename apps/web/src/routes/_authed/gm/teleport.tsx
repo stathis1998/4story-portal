@@ -5,6 +5,7 @@ import type { FieldValues, UseFormSetError } from 'react-hook-form'
 import type { GmPlaces, TeleportRequest } from '@4story-portal/shared'
 import { FormMessage } from '../../../components/FormMessage'
 import { CharacterTargetForm } from '../../../components/gm/CharacterTargetForm'
+import { GmNav } from '../../../components/gm/GmNav'
 import { PlayersPanel } from '../../../components/gm/PlayersPanel'
 import { PositionForm } from '../../../components/gm/PositionForm'
 import { StatusBadge } from '../../../components/StatusBadge'
@@ -113,6 +114,7 @@ function TeleportPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
+      <GmNav />
       <div className="flex items-center gap-4">
         <h1 className="text-4xl">Teleport</h1>
         {status && <StatusBadge state={status.state} />}
