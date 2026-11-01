@@ -3,6 +3,8 @@ import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.rep
 import type { CharacterRow, CharactersRepository } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
+import type { StatRows } from '../src/stats/stats-rules.js';
+import type { StatsRepository } from '../src/stats/stats.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
 
@@ -60,6 +62,18 @@ export class FakeAccountsRepository implements AccountsRepository {
 
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
+export class FakeStatsRepository implements StatsRepository {
+  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, accounts: [] };
+  loads = 0;
+  failWith?: Error;
+
+  async loadRows(): Promise<StatRows> {
+    this.loads++;
+    if (this.failWith) throw this.failWith;
+    return this.rows;
+  }
+}
+
 export class FakeControlClient
   implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'listEvents' | 'changeEvent'>
 {

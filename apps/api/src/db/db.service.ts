@@ -21,6 +21,12 @@ export function tableNames(config: AppConfig) {
     items: `${game}.TITEMCHART`,
     itemAttrs: `${game}.TITEMATTRCHART`,
     levels: `${game}.TLEVELCHART`,
+    allCharacters: `${global}.TALLCHARTABLE`,
+    sessionLog: `${global}.TLOG`,
+    characterItems: `${game}.TITEMTABLE`,
+    companions: `${game}.TCOMPANIONTABLE`,
+    characterTitles: `${game}.TTITLETABLE`,
+    titles: `${game}.TTITLECHART`,
   };
 }
 
