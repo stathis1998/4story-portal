@@ -14,4 +14,9 @@ it('builds bracketed three-part table names from the configured databases', () =
     managerLog: '[TGLOBAL_GSP_TEST].dbo.OPTool_ManagerLog',
     portals: '[TGAME_GSP_TEST].dbo.TPORTALCHART',
     spawnPositions: '[TGAME_GSP_TEST].dbo.TSPAWNPOSCHART',
+    npcs: '[TGAME_GSP_TEST].dbo.TNPCCHART',
+    npcItems: '[TGAME_GSP_TEST].dbo.TNPCITEMCHART',
+    items: '[TGAME_GSP_TEST].dbo.TITEMCHART',
+    itemAttrs: '[TGAME_GSP_TEST].dbo.TITEMATTRCHART',
+    levels: '[TGAME_GSP_TEST].dbo.TLEVELCHART',
   }));
