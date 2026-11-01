@@ -14,6 +14,8 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
+import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
+import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
@@ -43,6 +45,16 @@ const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
   path: '/characters',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedHallOfFameRoute = AuthedHallOfFameRouteImport.update({
+  id: '/hall-of-fame',
+  path: '/hall-of-fame',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
+  id: '/characters_/$id',
+  path: '/characters/$id',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmEventsRoute = AuthedGmEventsRouteImport.update({
   id: '/gm/events',
   path: '/gm/events',
@@ -69,6 +81,8 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
@@ -79,6 +93,8 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
@@ -91,6 +107,8 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
+  '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
@@ -103,6 +121,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/hall-of-fame'
+    | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
     | '/gm/teleport'
@@ -113,6 +133,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/hall-of-fame'
+    | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
     | '/gm/teleport'
@@ -124,6 +146,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authed/characters'
+    | '/_authed/hall-of-fame'
+    | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
     | '/_authed/gm/teleport'
@@ -174,6 +198,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedCharactersRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/hall-of-fame': {
+      id: '/_authed/hall-of-fame'
+      path: '/hall-of-fame'
+      fullPath: '/hall-of-fame'
+      preLoaderRoute: typeof AuthedHallOfFameRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/characters_/$id': {
+      id: '/_authed/characters_/$id'
+      path: '/characters/$id'
+      fullPath: '/characters/$id'
+      preLoaderRoute: typeof AuthedCharactersIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/events': {
       id: '/_authed/gm/events'
       path: '/gm/events'
@@ -207,6 +245,8 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
+  AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
+  AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
@@ -215,6 +255,8 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
+  AuthedHallOfFameRoute: AuthedHallOfFameRoute,
+  AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,

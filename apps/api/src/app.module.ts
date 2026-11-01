@@ -6,6 +6,8 @@ import { ConfigModule } from './config/config.js';
 import { ControlModule } from './control/control.module.js';
 import { DbModule } from './db/db.module.js';
 import { GmModule } from './gm/gm.module.js';
+import { StatsModule } from './stats/stats.module.js';
+import { StoreModule } from './store/store.module.js';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { GmModule } from './gm/gm.module.js';
     AuthModule,
     CharactersModule,
     GmModule,
+    StatsModule,
+    StoreModule,
   ],
 })
 export class AppModule {}
