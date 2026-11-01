@@ -91,7 +91,9 @@ The `Extractor` folder in the source tree already implements the image decoding 
 
 **Measured coverage:**
 - 7,158 of 7,775 client items resolve to an icon, using 1,912 unique sprites (about 4.2 MB). Of the 933 items currently sold, 1 has no icon.
-- 87 of 96 vendors have a portrait. Of the other 9, 1 is in no client NPC file, and 8 have a missing template or face 0.
+- 82 of 96 vendors have a portrait. Of the other 14: 5 have a face index past the end of list `26269`, which has 248 entries (Tranus has 274), 3 have face 0, 5 have a template missing from `TNPCTemp.tcd`, and 1 is in no client NPC file. The game has no portrait for these. The client never shows NPC faces, only monster ones, so nothing in it depends on them.
+
+**Coins:** sprites 11137, 11138 and 11136 are the 18×18 Rune, Luna and Cron coins, placed next to the money fields in the client's frame `0x4BB`.
 
 **Chart file quality:** the client skips unreadable `TNPC` unit files silently (`LoadTNPC` catches everything). Several are older layouts or empty: `TNPC00000004`, `TNPC00000101`, `TNPC00002202`, `TNPC03850000` to `TNPC038a0000`. Others in the folder are not unit files at all (`TNPCPOS.tcd`, `TNPC02bf00000.tcd`).
 
@@ -217,7 +219,8 @@ Changes reach players after TMapSvr restarts.
 - The first banner line appears only when `database` ends in `_TEST`. The restart line is always shown.
 - `GameIcon` builds `/game-icons/<spriteId>.png`, sets `loading="lazy"`, and shows a neutral placeholder when the sprite ID is `null` or the image fails to load.
 - **Vendor list:** filters as you type on name, title or ID, and has a PvP-only checkbox. Rows show the portrait, name, title and item count. A vendor with no name shows its title as the name.
-- **Stock table:** filters in the browser. Money prices are shown as Rune, Luna and Cron, and PvP shops show points. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there.
+- **Stock table:** filters in the browser. Money prices show each non-zero denomination as a number followed by its coin icon, the way the game lays them out, for example `5 [luna] 200 [cron]`. PvP shops show `1,200 points`. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there.
+- **Vendor list:** from the two-column width up it scrolls inside its own pane, so selecting a vendor far down the list never leaves the stock off-screen.
 
 ### 5.2 Editing a price
 
@@ -225,14 +228,14 @@ The row becomes an inline editor:
 
 ```
 [i] Small Potion   [0] Rune [0] Luna [75] Cron    [Save] [Cancel]
-    Sells back for 18 cron. Sold by 12 vendors: this changes all of them.
+    Sells back for 18 [cron]. Sold by 12 vendors: this changes all of them.
 ```
 
 - PvP shops show one points field and no sell-back line, since sell-back is always paid from `fPrice`.
 - The sell-back line updates as you type.
 - The vendor count warning appears only when more than one vendor sells the item.
 - Save is disabled when the price is unchanged.
-- If `chargedPrice` can't reach the amount, the editor shows `Will charge 1,234,567,936 cron` before saving.
+- If `chargedPrice` can't reach the amount, the editor shows `Will charge` and the charged price with coins before saving.
 - Items with base 0 have no edit button, only `Price can't be set: level 0 item`.
 - A failed save shows its error in the row and keeps the typed values.
 
@@ -252,7 +255,7 @@ The trash button asks for confirmation inline, naming the item and the vendor, l
 
 ### 5.5 After a change
 
-The stock and vendor queries refresh. A note confirms the change, for example `Small Potion now costs 75 cron at 12 vendors. Restart TMapSvr to apply.`
+The stock and vendor queries refresh. A note confirms the change, for example `Small Potion now costs 75 Cron at 12 vendors. Restart TMapSvr to apply.`, or `is now free at 12 vendors` for a price of 0
 
 Load failures use `FormMessage` (`Could not load vendors.`).
 

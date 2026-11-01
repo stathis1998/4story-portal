@@ -836,3 +836,76 @@ Expected: all pass.
   3. Restart every `TMapSvr`.
   4. In game: open the shop and confirm it opens, the price shows correctly, buying charges that price, and selling pays a quarter of it.
   5. Confirm the audit rows exist, then revert the changes in the tool.
+
+---
+
+### Task 12: Coin icons and vendor list pane
+
+Added after the user saw the page: `10R 50L 10C` looks wrong, so prices use the game's coin icons. Spec sections 2.7, 5.1, 5.2 and 5.5 were updated.
+
+**Files:**
+- Modify: `packages/shared/src/gm.ts`, `apps/api/src/gm/import-game-icons.ts`, `apps/web/src/components/gm/GameIcon.tsx`, `apps/web/src/components/gm/VendorItemsTable.tsx`, `apps/web/src/components/gm/PriceEditor.tsx`, `apps/web/src/components/gm/AddItemSearch.tsx`, `apps/web/src/components/gm/VendorList.tsx` or the route for the pane classes, `apps/web/src/lib/gm.ts`
+- Create: `apps/web/src/components/gm/Price.tsx`
+- Generate: `apps/web/public/game-icons/{11136,11137,11138}.png`
+- Test: `packages/shared/src/gm.test.ts`, `apps/web/src/routes/gm-vendors.test.tsx`
+
+**Interfaces:**
+- Produces, in shared `gm.ts`: `COIN_SPRITES = { rune: 11137, luna: 11138, cron: 11136 } as const`.
+- `GameIcon` gains an optional `alt` prop, default `''`.
+- `Price`, props `{ price: number; shop: VendorShop }`. Inline, no wrapping, `tabular-nums`. Price 0: `Free`. PvP: `1,200 points`. Money: for each non-zero of rune, luna, cron in that order, the number with thousands separators then a 16px `GameIcon` with `alt` `Rune`, `Luna` or `Cron`.
+- `priceLabel` is removed; everything that used it renders `Price`.
+- `priceText(price, shop)` is words for notes: `1 Rune 2 Luna 3 Cron`, only non-zero parts, `75 Cron`, `150 points`, with thousands separators.
+
+Copy:
+- Save note: `Small Potion now costs 75 Cron at 12 vendors. Restart TMapSvr to apply.` For 0: `Small Potion is now free at 12 vendors. Restart TMapSvr to apply.`
+- Editor: `Sells back for` then `<Price>`. When sell-back is 0: `Sells back for nothing.`
+- Editor: `Will charge` then `<Price>`.
+- The editor's Rune, Luna and Cron labels each show their coin next to the word, with an empty `alt` since the word is the label.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// shared
+it('names the coin sprites', () => expect(COIN_SPRITES).toEqual({ rune: 11137, luna: 11138, cron: 11136 }));
+```
+
+```tsx
+it('shows only non-zero denominations with their coins', async () => {
+  // item price 5_200 in the stock table
+  const cell = within(row).getByTestId('price')
+  expect(cell).toHaveTextContent('5200')          // '5' + '200' with no R, L or C letters
+  expect(within(cell).getByRole('img', { name: 'Luna' })).toHaveAttribute('src', '/game-icons/11138.png')
+  expect(within(cell).getByRole('img', { name: 'Cron' })).toHaveAttribute('src', '/game-icons/11136.png')
+  expect(within(cell).queryByRole('img', { name: 'Rune' })).not.toBeInTheDocument()
+})
+it('shows all three coins for a price with all three', /* 1_002_003: Rune 11137 too */)
+it('uses no coins for a PvP price', /* '1,200 points', no img */)
+it('shows Free with no coins for 0')
+it('renders the sell-back with a coin', /* text 'Sells back for 18', img named Cron */)
+it('says a free sell-back is nothing', /* price 3 sells back 0: 'Sells back for nothing.' */)
+it('renders Will charge with coins', /* base 53750, Rune 16: 15 Rune, 999 Luna, 999 Cron */)
+it('words the save note', /* 'now costs 1 Rune 2 Luna 3 Cron at 12 vendors' */)
+it('says when an item becomes free', /* 'is now free at 12 vendors' */)
+it('uses coins in add search results')
+```
+
+Update existing tests that assert `0R 5L 0C` or `cron` copy to the new forms.
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `npm test -w packages/shared; npx vitest run src/routes/gm-vendors.test.tsx` (the second in `apps/web`)
+Expected: new tests FAIL.
+
+- [ ] **Step 3: Implement.** The import script adds `COIN_SPRITES`' values to the wanted set, so they are written and never removed as stale, and fails with a clear error if any is absent from the extraction. From the two-column breakpoint up, the vendor list scrolls in its own pane using `md:max-h-[calc(100vh-…)]` and `md:overflow-y-auto`, keeping the search box and PvP checkbox outside the scrolling part.
+
+- [ ] **Step 4: Run the import**
+
+Run: `npm run import:icons -w apps/api`
+Expected: PNGs written 2125, removed 0, and `git status` shows only the three new PNGs under `game-icons/`, with `game-icons.generated.ts` unchanged.
+
+- [ ] **Step 5: Run the checks**
+
+Run: `npm run build -w packages/shared; npm run lint; npm test`
+Expected: PASS.
+
+- [ ] **Step 6: Commit** as `feat(web): show prices with the game's coin icons`, staging by explicit path.
