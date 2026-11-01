@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { FieldValues, UseFormSetError } from 'react-hook-form'
-import type { TeleportRequest } from '@4story-portal/shared'
+import type { GmPlaces, TeleportRequest } from '@4story-portal/shared'
 import { FormMessage } from '../../../components/FormMessage'
 import { CharacterTargetForm } from '../../../components/gm/CharacterTargetForm'
 import { PlayersPanel } from '../../../components/gm/PlayersPanel'
@@ -13,7 +13,9 @@ import { ApiError } from '../../../lib/api'
 import { applyServerError } from '../../../lib/form-errors'
 import {
   gmLocationsQueryOptions,
+  gmPlacesQueryOptions,
   gmStatusQueryOptions,
+  mapName,
   onlinePlayersQueryOptions,
   useDeleteLocation,
   useSaveLocation,
@@ -35,11 +37,14 @@ const PRESET_FILE_INVALID = 'Preset file is invalid'
 const POSITION_FIELDS = new Set(['world', 'channel', 'mapId', 'x', 'y', 'z'])
 const CHARACTER_FIELDS = new Set(['target'])
 
+const nameOf = (id: number, places: GmPlaces) => mapName(id, places.maps.find((map) => map.id === id)?.name)
+
 function TeleportPage() {
   const queryClient = useQueryClient()
   const { data: status, isError: statusFailed } = useQuery(gmStatusQueryOptions)
   const { data: players, isFetching, isError: playersFailed } = useQuery(onlinePlayersQueryOptions)
   const { data: locations, error: locationsError, isError: locationsFailed } = useQuery(gmLocationsQueryOptions)
+  const { data: places, isPending: placesLoading, isError: placesFailed } = useQuery(gmPlacesQueryOptions)
   const teleport = useTeleport()
   const saveLocation = useSaveLocation()
   const deleteLocation = useDeleteLocation()
@@ -55,6 +60,10 @@ function TeleportPage() {
   )
 
   const worldNames = useMemo(() => new Map(status?.worlds.map((world) => [world.id, world.name])), [status])
+  const mapNames = useMemo(
+    () => places && new Map(players?.map((player) => [player.mapId, nameOf(player.mapId, places)])),
+    [places, players],
+  )
 
   // Characters are looked up per world: use the first selected player's, else the first world.
   const targetWorld =
@@ -110,7 +119,15 @@ function TeleportPage() {
       </div>
 
       <div className="mt-4">
-        <FormMessage message={statusFailed ? 'Could not load the game server status.' : null} />
+        <FormMessage
+          message={
+            statusFailed
+              ? 'Could not load the game server status.'
+              : placesFailed
+                ? 'Could not load map names.'
+                : null
+          }
+        />
       </div>
 
       <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[3fr_2fr]">
@@ -118,12 +135,13 @@ function TeleportPage() {
           players={players ?? []}
           loadError={playersFailed ? 'Could not load online players.' : null}
           worldNames={worldNames}
+          mapNames={mapNames}
           selected={selected}
           onChange={setChosen}
           onRefresh={() => queryClient.refetchQueries({ queryKey: onlinePlayersQueryOptions.queryKey })}
           refreshing={isFetching}
         />
-        {status && (
+        {status && !placesLoading && (
           <div className="flex flex-col gap-4">
             <Tabs
               tabs={[
@@ -135,8 +153,10 @@ function TeleportPage() {
             />
             <div role="tabpanel" id="panel-position" aria-labelledby="tab-position" hidden={tab !== 'position'}>
               <PositionForm
+                  key={places ? 'named' : 'numeric'}
                   worlds={status.worlds}
                   channels={status.channels}
+                  places={places}
                   selectedCount={selected.length}
                   disabledReason={disabledReason}
                   locations={locations ?? []}

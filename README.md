@@ -58,6 +58,7 @@ Accounts listed in `GM_USERNAMES` get a teleport tool that sends move commands t
   It prints `Inserted TMANAGER portal in TGLOBAL_GSP` (or `Updated …` when the account exists). Then restart TControlSvr; the API reconnects by itself within about 30 seconds. `DB`, `ALLOW_LIVE` and `PORTAL_PASSWORD` are required, and a non-`_TEST` database is refused unless `ALLOW_LIVE=1`.
 - The online player list and the audit come from `DB_GLOBAL_NAME` / `DB_GAME_NAME`. Point them at the databases the game servers use (see "Going live"); the `_TEST` copies have no one online.
 - List only existing accounts in `GM_USERNAMES`.
+- Map names and the destination search come from the game client's `TRegion.tcd` and `TPortal.tcd`, because the database has no names. They are committed in `apps/api/src/gm/game-places.generated.ts`, so the API does not need the client. After a client update, set `GAME_TCD_DIR` in `.env` to the client's `Tcd` folder, run `npm run import:places -w apps/api`, and restart the API. Maps with no name in those files show as "Map 600".
 - TControlSvr must be running and connected to the world server for teleports to arrive. The portal can only report "sent".
 
 ## Test databases

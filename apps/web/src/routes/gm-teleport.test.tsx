@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
@@ -46,15 +46,26 @@ describe('teleport page: sending', () => {
     { charId: 2, name: 'Moosey', level: 40, className: 'Warrior', world: 1, channel: 2, mapId: 3 },
   ]
   const connected = () => json(200, { state: 'connected', worlds: [{ id: 1, name: 'Lapiris' }], channels: [1, 2] })
+  const lonbaley = { name: 'Lonbaley Training Camp', mapId: 0, x: 2850.52, y: 68.36, z: 5004.94 }
+  const kokuma = { name: 'Old Kokuma (Past)', mapId: 3, x: 100, y: 5, z: 200 }
+  const places = {
+    maps: [
+      { id: 0, name: 'Overworld' },
+      { id: 3, name: 'Kobold Mines' },
+      { id: 7, name: null },
+    ],
+    destinations: [lonbaley, kokuma],
+  }
   const base = (extra: Parameters<typeof mockApi>[0] = {}) => ({
     'GET /gm/status': connected,
     'GET /gm/players': () => json(200, players),
     'GET /gm/locations': () => json(200, []),
+    'GET /gm/places': () => json(200, places),
     ...extra,
   })
 
   async function fill(user: ReturnType<typeof renderRoute>['user']) {
-    await user.type(screen.getByLabelText('Map ID'), '0')
+    await user.selectOptions(screen.getByLabelText('Map'), '0')
     await user.type(screen.getByLabelText('X'), '2800')
     await user.type(screen.getByLabelText('Height (Y)'), '50')
     await user.type(screen.getByLabelText('Z'), '5000')
@@ -182,6 +193,131 @@ describe('teleport page: sending', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Names must be unique')
   })
 
+  describe('places', () => {
+    it('lists hosted maps by name in the map dropdown', async () => {
+      mockApi(base())
+      renderRoute('/gm/teleport', { me: gm })
+
+      const map = await screen.findByLabelText('Map')
+
+      const labels = within(map).getAllByRole('option').map((option) => option.textContent)
+      expect(labels).toEqual(['0 – Overworld', '3 – Kobold Mines', 'Map 7'])
+    })
+
+    it('shows map names in the players table', async () => {
+      const onMap7 = { charId: 3, name: 'Thornwick', level: 9, className: 'Archer', world: 1, channel: 1, mapId: 7 }
+      mockApi(base({ 'GET /gm/players': () => json(200, [...players, onMap7]) }))
+      renderRoute('/gm/teleport', { me: gm })
+
+      expect(await screen.findByRole('cell', { name: 'Overworld' })).toBeInTheDocument()
+      expect(screen.getByRole('cell', { name: 'Kobold Mines' })).toBeInTheDocument()
+      expect(screen.getByRole('cell', { name: 'Map 7' })).toBeInTheDocument()
+    })
+
+    it('fills map and coordinates from a destination, leaving the channel alone and sending nothing', async () => {
+      const fetchMock = mockApi(base())
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.selectOptions(await screen.findByLabelText('Channel'), '2')
+
+      await user.type(screen.getByLabelText('Find a destination'), 'lonb')
+      await user.click(screen.getByRole('button', { name: /Lonbaley Training Camp/ }))
+
+      expect(screen.getByLabelText('Map')).toHaveValue('0')
+      expect(screen.getByLabelText('X')).toHaveValue(2850.52)
+      expect(screen.getByLabelText('Height (Y)')).toHaveValue(68.36)
+      expect(screen.getByLabelText('Z')).toHaveValue(5004.94)
+      expect(screen.getByLabelText('Channel')).toHaveValue('2')
+      expect(screen.getByLabelText('Find a destination')).toHaveValue('')
+      expect(screen.queryByRole('button', { name: /Lonbaley Training Camp/ })).not.toBeInTheDocument()
+      expect(sentBodies(fetchMock, 'POST /gm/teleport')).toEqual([])
+    })
+
+    it('sends the destination it filled in', async () => {
+      const fetchMock = mockApi(base({ 'POST /gm/teleport': () => json(202, { sent: true, names: ['Kaelith'] }) }))
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+      await user.click(await screen.findByRole('checkbox', { name: 'Select Kaelith' }))
+
+      await user.type(await screen.findByLabelText('Find a destination'), 'kokuma')
+      await user.click(screen.getByRole('button', { name: /Old Kokuma/ }))
+      await user.click(screen.getByRole('button', { name: 'Teleport 1 player' }))
+
+      await screen.findByText(/^Sent to Kaelith/)
+      expect(sentBodies(fetchMock, 'POST /gm/teleport')).toEqual([
+        {
+          names: ['Kaelith'],
+          destination: { kind: 'position', world: 1, channel: 1, mapId: 3, x: 100, y: 5, z: 200 },
+        },
+      ])
+    })
+
+    it('matches any part of a name, ignoring case, and shows which map it is on', async () => {
+      mockApi(base())
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+
+      await user.type(await screen.findByLabelText('Find a destination'), 'TRAINING')
+
+      expect(screen.getByRole('button', { name: /Lonbaley Training Camp.*Overworld/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Old Kokuma/ })).not.toBeInTheDocument()
+    })
+
+    it('says when nothing matches', async () => {
+      mockApi(base())
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+
+      await user.type(await screen.findByLabelText('Find a destination'), 'nowhere')
+
+      expect(screen.getByText('No matching destination.')).toBeInTheDocument()
+    })
+
+    it('shows at most 8 matches and says how many there are', async () => {
+      const camps = Array.from({ length: 10 }, (_, i) => ({ ...lonbaley, name: `Camp ${i}` }))
+      mockApi(base({ 'GET /gm/places': () => json(200, { ...places, destinations: camps }) }))
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+
+      await user.type(await screen.findByLabelText('Find a destination'), 'camp')
+
+      expect(screen.getAllByRole('button', { name: /^Camp \d/ })).toHaveLength(8)
+      expect(screen.getByText('Showing 8 of 10. Keep typing to narrow it down.')).toBeInTheDocument()
+    })
+
+    it('keeps a preset on a map that is no longer hosted selectable', async () => {
+      const old = { id: 'loc9', name: 'Old spot', world: 1, channel: 1, mapId: 700, x: 1, y: 2, z: 3 }
+      mockApi(base({ 'GET /gm/locations': () => json(200, [old]) }))
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+
+      await user.click(await screen.findByRole('button', { name: 'Old spot' }))
+
+      expect(screen.getByLabelText('Map')).toHaveValue('700')
+      expect(screen.getByRole('option', { name: 'Map 700 (not hosted)' })).toBeInTheDocument()
+    })
+
+    it('falls back to typing a map ID and bare IDs in the table when places fail to load', async () => {
+      const fetchMock = mockApi(
+        base({
+          'GET /gm/places': () => json(500, { statusCode: 500, message: 'Internal server error' }),
+          'POST /gm/teleport': () => json(202, { sent: true, names: ['Kaelith'] }),
+        }),
+      )
+      const { user } = renderRoute('/gm/teleport', { me: gm })
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not load map names.')
+      expect(screen.queryByLabelText('Find a destination')).not.toBeInTheDocument()
+      expect(await screen.findByRole('cell', { name: '3' })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('checkbox', { name: 'Select Kaelith' }))
+      await user.type(await screen.findByLabelText('Map ID'), '13')
+      await user.type(screen.getByLabelText('X'), '2800')
+      await user.type(screen.getByLabelText('Height (Y)'), '50')
+      await user.type(screen.getByLabelText('Z'), '5000')
+      await user.click(screen.getByRole('button', { name: 'Teleport 1 player' }))
+
+      await screen.findByText(/^Sent to Kaelith/)
+      expect(sentBodies(fetchMock, 'POST /gm/teleport')).toEqual([
+        { names: ['Kaelith'], destination: expect.objectContaining({ mapId: 13 }) },
+      ])
+    })
+  })
+
   describe('presets and character target', () => {
     const town = { id: 'loc1', name: 'Town square', world: 1, channel: 2, mapId: 7, x: 2800, y: 50, z: 5000 }
 
@@ -189,7 +325,7 @@ describe('teleport page: sending', () => {
       mockApi(base({ 'GET /gm/locations': () => json(200, [town]) }))
       const { user } = renderRoute('/gm/teleport', { me: gm })
       await user.click(await screen.findByRole('button', { name: 'Town square' }))
-      expect(screen.getByLabelText('Map ID')).toHaveValue(7)
+      expect(screen.getByLabelText('Map')).toHaveValue('7')
       expect(screen.getByLabelText('X')).toHaveValue(2800)
       expect(screen.getByLabelText('Height (Y)')).toHaveValue(50)
       expect(screen.getByLabelText('Z')).toHaveValue(5000)

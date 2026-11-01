@@ -1,6 +1,8 @@
 import type {
   GmLocation,
   GmLocationInput,
+  GmMap,
+  GmPlaces,
   GmStatus,
   OnlinePlayer,
   TeleportRequest,
@@ -25,6 +27,18 @@ export const gmLocationsQueryOptions = queryOptions({
   queryKey: ['gm', 'locations'],
   queryFn: () => apiFetch<GmLocation[]>('/gm/locations'),
 })
+
+// Chart data: it only changes when the import is rerun and the API restarted.
+export const gmPlacesQueryOptions = queryOptions({
+  queryKey: ['gm', 'places'],
+  queryFn: () => apiFetch<GmPlaces>('/gm/places'),
+  staleTime: Infinity,
+})
+
+/** A map's name, or "Map 600" for the maps the client has no name for. */
+export const mapName = (id: number, name: string | null | undefined) => name ?? `Map ${id}`
+
+export const mapOptionLabel = ({ id, name }: GmMap) => (name ? `${id} – ${name}` : mapName(id, name))
 
 export function useTeleport() {
   return useMutation({

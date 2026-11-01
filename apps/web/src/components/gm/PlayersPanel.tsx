@@ -9,6 +9,8 @@ type Props = {
   /** Set when the list could not be loaded, so an empty list is not mistaken for no players. */
   loadError?: string | null
   worldNames: Map<number, string>
+  /** Undefined until map names have loaded, and if they fail to: the table then shows bare IDs. */
+  mapNames?: ReadonlyMap<number, string>
   selected: string[]
   onChange: (names: string[]) => void
   onRefresh: () => void
@@ -18,7 +20,16 @@ type Props = {
 const th = 'px-3 py-2 text-left text-xs font-bold tracking-wider text-muted uppercase'
 const td = 'px-3 py-2'
 
-export function PlayersPanel({ players, loadError, worldNames, selected, onChange, onRefresh, refreshing }: Props) {
+export function PlayersPanel({
+  players,
+  loadError,
+  worldNames,
+  mapNames,
+  selected,
+  onChange,
+  onRefresh,
+  refreshing,
+}: Props) {
   const [search, setSearch] = useState('')
   const needle = search.trim().toLowerCase()
   const visible = players.filter((player) => player.name.toLowerCase().includes(needle))
@@ -87,7 +98,7 @@ export function PlayersPanel({ players, loadError, worldNames, selected, onChang
                   <td className={td}>{player.className}</td>
                   <td className={td}>{worldNames.get(player.world) ?? player.world}</td>
                   <td className={td}>{player.channel}</td>
-                  <td className={td}>{player.mapId}</td>
+                  <td className={td}>{mapNames?.get(player.mapId) ?? player.mapId}</td>
                 </tr>
               ))}
             </tbody>
