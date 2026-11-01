@@ -28,6 +28,8 @@ import { GM_REPOSITORY, type GmRepository } from './gm.repository.js';
 type Actor = { username: string; ip: string };
 
 const ALL_MAPS = 255;
+// Happy can target every world. The portal never does, because announcements then go through the relay server.
+const ALL_WORLDS = 0;
 const WORLD_SERVER = 3;
 const NOT_CONNECTED = 'Game server is not connected';
 const GONE = 'That event has already ended or been removed';
@@ -48,6 +50,7 @@ export class EventsService {
       const events = await this.control.listEvents();
       return { serverNow: currentWallClock(), events: events.map(toGmEvent) };
     } catch (error) {
+      if (error instanceof ControlTimeoutError) throw new HttpException('The game server did not reply.', 503);
       const failure = controlFailure(error);
       if (!failure) throw error;
       throw new HttpException(failure.message, failure.status);
@@ -65,6 +68,10 @@ export class EventsService {
     if (!isPercentEvent(current.type)) {
       await this.reject('special', text, actor);
       throw new UnprocessableEntityException('Special events can only be stopped');
+    }
+    if (current.groupId === ALL_WORLDS) {
+      await this.reject('all-worlds', text, actor);
+      throw new UnprocessableEntityException('Events made for all worlds can only be stopped');
     }
     // The server stops a running event using the packet's type and world, so changing them would
     // leave the old bonus on until the map server restarts.
@@ -239,7 +246,7 @@ function toGmEvent(event: ControlEvent): GmEvent {
     index: event.index,
     type: event.type,
     typeName: typeName(event.type),
-    editable: isPercentEvent(event.type),
+    editable: isPercentEvent(event.type) && event.groupId !== ALL_WORLDS,
     running: event.state !== 0,
     world: event.groupId,
     title: event.title,

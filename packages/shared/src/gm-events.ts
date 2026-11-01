@@ -76,7 +76,7 @@ const messageSchema = z
 export const gmEventInputSchema = z
   .object({
     type: z.literal(PERCENT_EVENT_TYPES, 'Choose an event type'),
-    world: z.number().int().min(1).max(255),
+    world: z.number().int().min(1, 'Choose a world').max(255),
     // TControlSvr copies the title into a 51-character buffer with lstrcpy.
     title: z
       .string()
@@ -130,7 +130,7 @@ export type GmEvent = {
   index: number;
   type: number;
   typeName: string;
-  /** A percentage type. The others can only be stopped. */
+  /** A percentage type for one world. The others can only be stopped. */
   editable: boolean;
   running: boolean;
   /** 0 is all worlds. */

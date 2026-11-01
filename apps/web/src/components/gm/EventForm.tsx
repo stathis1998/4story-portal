@@ -48,8 +48,10 @@ type FormValues = {
 const FIELD_FOR_PATH: Record<string, keyof FormValues> = {
   'schedule.start': 'startDate',
   'schedule.end': 'endDate',
-  'schedule.mode': 'mode',
 }
+
+// These may not be on screen, and an error set on a field that isn't would block every later save.
+const FORM_LEVEL_PATHS = new Set(['type', 'world', 'schedule.mode'])
 
 const BONUS_MEANING: Record<number, string> = {
   1: '+100% = double EXP from kills',
@@ -111,12 +113,13 @@ function defaultValues(event: GmEvent | undefined, worlds: Props['worlds']): For
   }
 }
 
-function toInput(values: FormValues, event: GmEvent | undefined) {
+function toInput(values: FormValues, event: GmEvent | undefined, worlds: Props['worlds']) {
   // The type and world of an existing event can't change: see section 2.6 of the design.
   const type = event?.type ?? values.type
   return {
     type,
-    world: event?.world ?? values.world,
+    // The worlds can arrive after the form opened with none to default to.
+    world: event?.world ?? (values.world || (worlds[0]?.id ?? 0)),
     title: values.title,
     bonus: values.bonus,
     mapId: isDropEvent(type) && values.mapId !== '' ? Number(values.mapId) : null,
@@ -162,12 +165,12 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
 
   async function submit(values: FormValues) {
     setMessage(null)
-    const parsed = gmEventInputSchema.safeParse(toInput(values, event))
+    const parsed = gmEventInputSchema.safeParse(toInput(values, event, worlds))
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const path = issue.path.join('.')
-        const field = FIELD_FOR_PATH[path] ?? (path as keyof FormValues)
-        setError(field, { message: issue.message })
+        if (FORM_LEVEL_PATHS.has(path)) setMessage(issue.message)
+        else setError(FIELD_FOR_PATH[path] ?? (path as keyof FormValues), { message: issue.message })
       }
       return
     }
@@ -231,7 +234,9 @@ export function EventForm({ event, worlds, maps, serverNow, onSubmit, onCancel }
           />
           <p className="text-xs text-muted">{BONUS_MEANING[type] ?? CHANCE_MEANING}</p>
         </div>
-        {isDropEvent(type) && <Select label="Map" registration={register('mapId')} options={mapOptions} />}
+        {isDropEvent(type) && (
+          <Select label="Map" registration={register('mapId')} error={errors.mapId?.message} options={mapOptions} />
+        )}
       </div>
 
       <fieldset className="flex flex-col gap-4">

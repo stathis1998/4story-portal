@@ -74,7 +74,8 @@ function EventsPage() {
         {status && <StatusBadge state={status.state} />}
       </div>
       <p className="mt-2 text-sm text-muted">
-        Bonus events the game server runs on a schedule: EXP, drops, upgrades and more. Times are the server's.
+        Bonus events the game server runs on a schedule: EXP, drops, upgrades and more. Times are the server's. Special
+        events, and events made in Happy for all worlds, can only be stopped.
       </p>
 
       <div className="mt-6 flex flex-col gap-3">

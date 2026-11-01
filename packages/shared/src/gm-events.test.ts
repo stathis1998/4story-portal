@@ -91,6 +91,12 @@ describe('gmEventInputSchema', () => {
     expect(errorPaths({ type })).toEqual(['type']);
   });
 
+  it('asks for a world, because 0 means all worlds', () => {
+    const result = parse({ world: 0 });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe('Choose a world');
+  });
+
   it('only lets drop types name a map', () => {
     expect(errorPaths({ type: 1, mapId: 5 })).toEqual(['mapId']);
     expect(parse({ type: 3, mapId: null }).success).toBe(true);

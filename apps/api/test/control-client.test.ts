@@ -382,6 +382,46 @@ describe('ControlClient', () => {
       await expect(client.changeEvent(EVENT_KIND.ADD, event())).rejects.toThrow(ControlUnavailableError);
     });
 
+    // TManager::CheckAuthority drops the request with no reply above authority 4, so these must not wait for one.
+    const loggedInAt = async (authority: number) => {
+      const seen: number[] = [];
+      const login = encodeFrame(MSG.OPLOGIN_ACK, Buffer.concat([hex('00'), Buffer.from([authority]), hex('07000000')]));
+      server = await startFakeServer(
+        (socket) => socket.write(login),
+        (_socket, frame) => seen.push(frame.id),
+      );
+      const c = connect(server.port);
+      await vi.waitFor(() => expect(c.status().state).toBe('connected'));
+      return { c, seen };
+    };
+
+    it('refuses to list at once when the authority is too low for the server to answer', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { c, seen } = await loggedInAt(5);
+
+      await expect(c.listEvents()).rejects.toThrow(ControlRefusedError);
+      expect(seen).toEqual([]);
+      warn.mockRestore();
+    });
+
+    it('still sends a change at an authority that may change but not list', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { c, seen } = await loggedInAt(7);
+
+      await expect(c.changeEvent(EVENT_KIND.ADD, event())).rejects.toThrow(ControlTimeoutError);
+      expect(seen).toEqual([MSG.EVENTCHANGE_REQ]);
+      warn.mockRestore();
+    });
+
+    it('refuses a change at once when the authority is too low for it', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { c, seen } = await loggedInAt(8);
+
+      await expect(c.changeEvent(EVENT_KIND.ADD, event())).rejects.toThrow(ControlRefusedError);
+      expect(seen).toEqual([]);
+      warn.mockRestore();
+    });
+
     it('rejects a waiting request when the server refuses the authority', async () => {
       const c = await connected((socket) => socket.write(encodeFrame(MSG.AUTHORITY_ACK, Buffer.alloc(0))));
 

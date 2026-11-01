@@ -160,6 +160,19 @@ describe('/api/gm/events', () => {
       expect(event).toMatchObject({ typeName: 'Monster spawn', editable: false, bonus: null, mapId: null, world: 0 });
     });
 
+    it('shows a Happy event for all worlds as stop-only, keeping its bonus', async () => {
+      control.events = [wire({ groupId: 0 })];
+      const [event] = (await agent.get('/api/gm/events')).body.events;
+      expect(event).toMatchObject({ editable: false, bonus: 100, world: 0 });
+    });
+
+    it('does not talk about a change when the list gets no reply', async () => {
+      control.failWith = new ControlTimeoutError();
+      const res = await agent.get('/api/gm/events');
+      expect(res.status).toBe(503);
+      expect(res.body.message).toBe('The game server did not reply.');
+    });
+
     it('names a type it does not know', async () => {
       control.events = [wire({ type: 16 })];
       const [event] = (await agent.get('/api/gm/events')).body.events;
@@ -317,6 +330,14 @@ describe('/api/gm/events', () => {
       const res = await agent.put('/api/gm/events/7').send(input());
       expect(res.status).toBe(422);
       expect(res.body.message).toBe('Special events can only be stopped');
+    });
+
+    it('is 422 for a Happy event for all worlds', async () => {
+      control.events = [wire({ groupId: 0 })];
+      const res = await agent.put('/api/gm/events/4').send(input());
+      expect(res.status).toBe(422);
+      expect(res.body.message).toBe('Events made for all worlds can only be stopped');
+      expect(control.changes).toEqual([]);
     });
 
     it('refuses to change the type, which would leave the old bonus on', async () => {

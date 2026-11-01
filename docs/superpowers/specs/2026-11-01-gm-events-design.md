@@ -227,7 +227,7 @@ The API always sends `serverType` 3, `serverId` 0, `state` 0, and map 255 for ty
   index: number,
   type: number,
   typeName: string,            // `Type 16` for an ID we don't know
-  editable: boolean,           // percentage type
+  editable: boolean,           // percentage type for one world
   running: boolean,
   world: number,               // 0 is all worlds
   title: string,
@@ -247,7 +247,9 @@ The API always sends `serverType` 3, `serverId` 0, `state` 0, and map 255 for ty
 |---|---|---|
 | Not connected | 503 | `Game server is not connected` |
 | No reply in 5 seconds | 503 | `The game server did not reply. The change may or may not have applied, so check the list.` |
-| `CT_AUTHORITY_ACK` | 503 | `The portal's control account does not have enough authority for events` |
+| Authority too low: `CT_AUTHORITY_ACK`, or above authority 4 when the server just drops the request, so the client refuses without sending | 503 | `The portal's control account does not have enough authority for events` |
+| Listing gets no reply in 5 seconds | 503 | `The game server did not reply.` |
+| Editing a Happy event made for all worlds (`groupId` 0) | 422 | `Events made for all worlds can only be stopped` |
 | Result 4 | 409 | `Overlaps <title>: only one <type> event can be on at a time.` The title is found by listing events and applying the overlap rule. Without a match: `The game server refused those times.` |
 | Other non-zero result | 502 | `The game server could not save the event` |
 | Event not found | 404 | `That event has already ended or been removed` |

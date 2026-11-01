@@ -22,6 +22,9 @@ import {
 
 const DEFAULT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
+// What OnCT_EVENTLIST_REQ and OnCT_EVENTCHANGE_REQ check. Lower is stronger.
+const EVENT_LIST_AUTHORITY = 3;
+const EVENT_CHANGE_AUTHORITY = 7;
 
 export class ControlUnavailableError extends Error {
   constructor() {
@@ -65,6 +68,7 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
   private readonly retryDelaysMs: number[];
   private readonly requestTimeoutMs: number;
   private state: ControlState = 'connecting';
+  private authority = 0;
   private worlds: { id: number; name: string }[] = [];
   // Only events from this socket count; late events from a replaced or stopped socket are ignored.
   private socket: net.Socket | null = null;
@@ -125,12 +129,13 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
   }
 
   listEvents(): Promise<ControlEvent[]> {
-    return this.request(encodeEventList(), MSG.EVENTLIST_ACK, decodeEventList, () => true);
+    return this.request(encodeEventList(), EVENT_LIST_AUTHORITY, MSG.EVENTLIST_ACK, decodeEventList, () => true);
   }
 
   async changeEvent(kind: EventKind, event: ControlEvent): Promise<{ result: number; event: ControlEvent }> {
     const ack = await this.request(
       encodeEventChange(kind, event),
+      EVENT_CHANGE_AUTHORITY,
       MSG.EVENTCHANGE_ACK,
       decodeEventChangeAck,
       // A reply that arrives after its request timed out must not answer the next change.
@@ -141,11 +146,12 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
 
   private request<T>(
     frame: Buffer,
+    authority: number,
     ackId: number,
     decode: (body: Buffer) => T,
     matches: (reply: T) => boolean,
   ): Promise<T> {
-    const send = () => this.sendAndWait(frame, ackId, decode, matches);
+    const send = () => this.sendAndWait(frame, authority, ackId, decode, matches);
     const result = this.queue.then(send, send);
     this.queue = result.catch(() => undefined);
     return result;
@@ -153,12 +159,15 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
 
   private sendAndWait<T>(
     frame: Buffer,
+    authority: number,
     ackId: number,
     decode: (body: Buffer) => T,
     matches: (reply: T) => boolean,
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const socket = this.connectedSocket();
+      // CheckAuthority drops the request without a reply above MANAGER_SERVICE, so don't wait for one.
+      if (this.authority > authority) throw new ControlRefusedError();
       const finish = () => {
         clearTimeout(timer);
         this.pending = null;
@@ -243,6 +252,7 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
       const ack = decodeLoginAck(frame.body);
       if (ack.ok) {
         this.retryIndex = 0;
+        this.authority = ack.authority;
         this.setState('connected', `authority ${ack.authority}`);
         if (ack.authority > 6) {
           this.logger.warn(`portal manager authority ${ack.authority} is too low for teleports (needs 1-6)`);

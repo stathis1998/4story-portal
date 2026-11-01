@@ -1,6 +1,7 @@
 import type { GmEvent } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { gmStatusQueryOptions } from '../lib/gm'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
@@ -479,6 +480,51 @@ describe('event form', () => {
 
     await waitFor(() => expect(sentBodies(fetchMock, 'POST /gm/events')).toHaveLength(1))
     expect(sentBodies(fetchMock, 'POST /gm/events')[0]).toMatchObject({ world: 2 })
+  })
+
+  it('says a world is missing while none is known, and saves once the world arrives', async () => {
+    const fetchMock = mockApi(
+      base([], {
+        'GET /gm/status': () => json(200, { state: 'connected', worlds: [], channels: [1] }),
+        'POST /gm/events': saved,
+      }),
+    )
+    const { user, queryClient } = renderRoute('/gm/events', { me: gm })
+
+    await open(user)
+    await replace(user, 'Title', 'Early')
+    await replace(user, 'Bonus (%)', '50')
+    await fillPeriod(user)
+    await user.click(screen.getByRole('button', { name: 'Save event' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a world')
+    expect(sentBodies(fetchMock, 'POST /gm/events')).toHaveLength(0)
+
+    queryClient.setQueryData(gmStatusQueryOptions.queryKey, {
+      state: 'connected',
+      worlds: [{ id: 1, name: 'Lapiris' }],
+      channels: [1],
+    })
+    await user.click(screen.getByRole('button', { name: 'Save event' }))
+
+    await waitFor(() => expect(sentBodies(fetchMock, 'POST /gm/events')).toHaveLength(1))
+    expect(sentBodies(fetchMock, 'POST /gm/events')[0]).toMatchObject({ world: 1 })
+  })
+
+  it('shows an error on the map field', async () => {
+    const withMap255 = { maps: [{ id: 255, name: 'Odd' }], destinations: [] }
+    mockApi(base([], { 'GET /gm/places': () => json(200, withMap255) }))
+    const { user } = renderRoute('/gm/events', { me: gm })
+
+    await open(user)
+    await user.selectOptions(screen.getByLabelText('Type'), 'Item drop')
+    await user.selectOptions(await screen.findByLabelText('Map'), '255 – Odd')
+    await replace(user, 'Title', 'Drops')
+    await replace(user, 'Bonus (%)', '50')
+    await fillPeriod(user)
+    await user.click(screen.getByRole('button', { name: 'Save event' }))
+
+    expect(await screen.findByText('That number means all maps')).toBeInTheDocument()
   })
 
   it('has no world field with one world', async () => {
