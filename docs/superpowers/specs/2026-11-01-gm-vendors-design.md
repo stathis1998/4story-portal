@@ -138,7 +138,7 @@ Names come from the database (`szNAME`, `szName`, `NC_szName2`). A name of `_` c
 | `POST /gm/vendors/:id/items` | Body `{ itemId }`. Adds the item to this vendor. |
 | `DELETE /gm/vendors/:id/items/:itemId` | Removes the item from this vendor only. Returns 204. |
 | `PUT /gm/items/:itemId/price` | Body `{ currency: 'money' \| 'pvp', amount }`. Returns the new price, multiplier and sold-by count. |
-| `GET /gm/items?q=` | Item search by name or exact ID, up to 50 results. Each row has ID, name, level, icon, money price and whether it is in the client. |
+| `GET /gm/items?q=` | Item search by name or exact ID, up to 50 results. Each row has ID, name, level, icon, money price, PvP price and whether it is in the client. |
 
 The vendor list is small enough to filter in the browser.
 
@@ -217,7 +217,7 @@ Changes reach players after TMapSvr restarts.
 - The first banner line appears only when `database` ends in `_TEST`. The restart line is always shown.
 - `GameIcon` builds `/game-icons/<spriteId>.png`, sets `loading="lazy"`, and shows a neutral placeholder when the sprite ID is `null` or the image fails to load.
 - **Vendor list:** filters as you type on name, title or ID, and has a PvP-only checkbox. Rows show the portrait, name, title and item count. A vendor with no name shows its title as the name.
-- **Stock table:** filters in the browser. Money prices are shown as Rune, Luna and Cron, and PvP shops show points.
+- **Stock table:** filters in the browser. Money prices are shown as Rune, Luna and Cron, and PvP shops show points. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there.
 
 ### 5.2 Editing a price
 
@@ -244,8 +244,8 @@ The trash button asks for confirmation inline, naming the item and the vendor, l
 
 `+ Add item` opens a search box above the table, debounced.
 
-- Results show icon, name, ID, level and current price.
-- Clicking a result adds it immediately, because removing it is one click.
+- Results show icon, name, ID, level and the current price in this shop's currency.
+- Clicking a result adds it immediately, because removing it is one click. If its price in this shop is 0, the confirmation says it is free until a price is set.
 - Items this vendor already sells are greyed out with `Already sold`.
 - Items not in the client are greyed out with `Not in client`.
 - The API enforces these checks too.
@@ -260,7 +260,7 @@ Load failures use `FormMessage` (`Could not load vendors.`).
 
 | Layer | Where | Covers |
 |---|---|---|
-| Price functions | `packages/shared/src/gm.test.ts` | Real rows (item 8001: base 1, multiplier 50, price 50), a case needing a float nudge (base 53750, 16,000,000), very large prices, sell-back, base 0, money split and join |
+| Price functions | `packages/shared/src/gm.test.ts` | Real rows (item 8001: base 1, multiplier 50, price 50), a case needing a float nudge (base 475, 499,650), a price no float can reach (base 53750, 16,000,000 charges 15,999,999), sell-back, base 0, money split and join |
 | Import parsing | `apps/api/test/game-icons-import.test.ts` | Small built buffers for each chart format, list and sprite lookup, DXT decoding, strict failure on leftover bytes, best-effort NPC files |
 | Service rules | `apps/api/test/` with fakes | Every rejection in section 4.3, the 255 limit including `DCC_ALLCOUNTRY`, audit text |
 | HTTP | `apps/api/test/gm-vendors.http.test.ts` | Non-GMs get 403, validation, status codes |
