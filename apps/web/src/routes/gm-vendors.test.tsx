@@ -341,6 +341,7 @@ describe('vendor stock', () => {
     await openEditor(user)
     await setField(user, 'Rune', '16')
     expect(screen.getByText('Will charge 15,999,999 cron')).toBeInTheDocument()
+    expect(screen.getByText('Sells back for 3,999,999 cron.')).toBeInTheDocument()
     await setField(user, 'Rune', '0')
     await setField(user, 'Cron', '75')
     expect(screen.queryByText(/Will charge/)).not.toBeInTheDocument()

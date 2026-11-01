@@ -83,7 +83,7 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
         </Button>
       </div>
       <div className="flex flex-wrap gap-x-2 text-sm text-muted">
-        {shop === 'money' && usable && <p>Sells back for {priceText(sellBackPrice(amount), shop)}.</p>}
+        {shop === 'money' && usable && <p>Sells back for {priceText(sellBackPrice(charged!), shop)}.</p>}
         {item.soldBy > 1 && <p>Sold by {item.soldBy} vendors: this changes all of them.</p>}
       </div>
       {usable && charged !== amount && (
