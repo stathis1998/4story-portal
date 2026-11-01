@@ -1,5 +1,6 @@
 import type {
   GmItemPriceResult,
+  GmItemSearchResult,
   GmLocation,
   GmLocationInput,
   GmLogin,
@@ -147,6 +148,28 @@ export function useSetItemPrice() {
       apiFetch<GmItemPriceResult>(`/gm/items/${itemId}/price`, {
         method: 'PUT',
         body: JSON.stringify({ currency, amount }),
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: gmVendorsQueryOptions.queryKey,
+      }),
+  })
+}
+
+export const itemSearchQueryOptions = (q: string) =>
+  queryOptions({
+    queryKey: ['gm', 'items', q],
+    queryFn: () => apiFetch<GmItemSearchResult[]>(`/gm/items?q=${encodeURIComponent(q)}`),
+  })
+
+export function useAddVendorItem() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: ['gm', 'vendors', 'add-item'],
+    mutationFn: ({ vendorId, itemId }: { vendorId: number; itemId: number }) =>
+      apiFetch<GmVendorItem>(`/gm/vendors/${vendorId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ itemId }),
       }),
     onSettled: () =>
       queryClient.invalidateQueries({

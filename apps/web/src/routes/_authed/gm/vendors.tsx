@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { FormMessage } from '../../../components/FormMessage'
+import { AddItemSearch } from '../../../components/gm/AddItemSearch'
 import { GameIcon } from '../../../components/gm/GameIcon'
 import { GmNav } from '../../../components/gm/GmNav'
 import { VendorItemsTable } from '../../../components/gm/VendorItemsTable'
@@ -71,7 +72,15 @@ function VendorsPage() {
                   {note && <p className="mt-3 text-sm font-bold text-accent-text">{note}</p>}
                   <FormMessage message={stock.isError ? 'Could not load stock.' : null} />
                   {stock.data && (
-                    <VendorItemsTable key={selected.id} vendor={selected} items={stock.data} onNote={setNote} />
+                    <>
+                      <AddItemSearch
+                        key={selected.id}
+                        vendor={selected}
+                        soldItemIds={new Set(stock.data.map((item) => item.itemId))}
+                        onNote={setNote}
+                      />
+                      <VendorItemsTable key={selected.id} vendor={selected} items={stock.data} onNote={setNote} />
+                    </>
                   )}
                 </>
               ) : selectedId ? (

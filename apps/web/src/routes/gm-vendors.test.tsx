@@ -415,3 +415,133 @@ describe('vendor stock', () => {
     ).toBeGreaterThan(1)
   })
 })
+
+const found = (o = {}) => ({
+  itemId: 8001,
+  name: 'Small Potion',
+  level: 1,
+  icon: 500,
+  price: 50,
+  pvpPrice: 150,
+  inClient: true,
+  ...o,
+})
+
+const searchApi = (results: unknown[], extra: Parameters<typeof mockApi>[0] = {}) =>
+  stockApi([item({ itemId: 9000, name: 'Old Sword' })], {
+    'GET /gm/items?q=potion': () => json(200, results),
+    ...extra,
+  })
+
+const openSearch = async (user: User, text = 'potion') => {
+  await user.click(await screen.findByRole('button', { name: '+ Add item' }))
+  await user.type(screen.getByLabelText('Find an item'), text)
+}
+
+describe('adding items', () => {
+  it('opens from + Add item and searches as you type', async () => {
+    const fetchMock = searchApi([found()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    expect(screen.queryByLabelText('Find an item')).not.toBeInTheDocument()
+    await openSearch(user)
+    expect(await screen.findByRole('button', { name: /^Small Potion/ })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/gm/items?q='))).toHaveLength(1)
+  })
+
+  it('encodes the search text', async () => {
+    const fetchMock = searchApi([], { 'GET /gm/items?q=a%26b': () => json(200, []) })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user, 'a&b')
+    await waitFor(() => expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain('/api/gm/items?q=a%26b'))
+  })
+
+  it('shows icon, name, id, level and the price for this shop', async () => {
+    searchApi([found()])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    const result = await screen.findByRole('button', { name: /^Small Potion/ })
+    expect(result.querySelector('img')).toHaveAttribute('src', '/game-icons/500.png')
+    expect(result).toHaveTextContent('#8001')
+    expect(result).toHaveTextContent('Lv 1')
+    expect(result).toHaveTextContent('0R 0L 50C')
+  })
+
+  it('shows the points price on a PvP shop', async () => {
+    searchApi([found()])
+    const { user } = renderRoute('/gm/vendors?vendor=20003', { me: gm })
+    await openSearch(user)
+    expect(await screen.findByRole('button', { name: /^Small Potion/ })).toHaveTextContent('150 points')
+  })
+
+  it('adds on click and shows a note', async () => {
+    let added = false
+    const fetchMock = searchApi([found()], {
+      'GET /gm/vendors/20002/items': () => json(200, added ? [item({ itemId: 9000, name: 'Old Sword' }), item()] : [item({ itemId: 9000, name: 'Old Sword' })]),
+      'POST /gm/vendors/20002/items': () => {
+        added = true
+        return json(201, item())
+      },
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    await user.click(await screen.findByRole('button', { name: /^Small Potion/ }))
+    expect(await screen.findByText('Small Potion added to Mr Bab. Restart TMapSvr to apply.')).toBeInTheDocument()
+    expect(sentBodies(fetchMock, 'POST /gm/vendors/20002/items')).toEqual([{ itemId: 8001 }])
+    expect(await screen.findByRole('button', { name: 'Remove Small Potion' })).toBeInTheDocument()
+  })
+
+  it('says a newly added item is free', async () => {
+    searchApi([found()], { 'POST /gm/vendors/20002/items': () => json(201, item({ price: 0 })) })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    await user.click(await screen.findByRole('button', { name: /^Small Potion/ }))
+    expect(
+      await screen.findByText(
+        'Small Potion added to Mr Bab. Restart TMapSvr to apply. It is free in this shop until you set a price.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('greys out items already sold', async () => {
+    searchApi([found({ itemId: 9000, name: 'Old Sword' })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    const result = await screen.findByRole('button', { name: /^Old Sword/ })
+    expect(result).toBeDisabled()
+    expect(result).toHaveTextContent('Already sold')
+  })
+
+  it('greys out items not in the client', async () => {
+    searchApi([found({ inClient: false })])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    const result = await screen.findByRole('button', { name: /^Small Potion/ })
+    expect(result).toBeDisabled()
+    expect(result).toHaveTextContent('Not in client')
+  })
+
+  it('shows the error when adding fails', async () => {
+    searchApi([found()], {
+      'POST /gm/vendors/20002/items': () => json(422, { statusCode: 422, message: 'This shop is full' }),
+    })
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    await user.click(await screen.findByRole('button', { name: /^Small Potion/ }))
+    expect(await screen.findByText('This shop is full')).toBeInTheDocument()
+  })
+
+  it('says when nothing matches', async () => {
+    searchApi([])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user)
+    expect(await screen.findByText('No matching items.')).toBeInTheDocument()
+  })
+
+  it('does not search for a blank query', async () => {
+    const fetchMock = searchApi([])
+    const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
+    await openSearch(user, '  ')
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/gm/items?q='))).toBe(false)
+  })
+})
