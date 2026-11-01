@@ -12,7 +12,8 @@
     "lint": "oxlint src/ test/ && tsc --noEmit",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.db.config.ts",
-    "import:places": "nest build && node dist/gm/import-game-places.js"
+    "import:places": "nest build && node dist/gm/import-game-places.js",
+    "import:icons": "nest build && node dist/gm/import-game-icons.js"
   },
   "dependencies": {
     "@4story-portal/shared": "^0.0.0",
