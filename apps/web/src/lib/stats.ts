@@ -1,4 +1,4 @@
-import type { ActiveEvents, CharacterProfile, HallOfFame, HallOfFameSettings, PlayerOverview } from '@4story-portal/shared'
+import type { ActiveEvents, CharacterProfile, HallOfFame, HallOfFameSettings, Leaderboard, PlayerOverview } from '@4story-portal/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from './api'
 
@@ -25,6 +25,11 @@ export const hallOfFameQueryOptions = queryOptions({
   queryFn: () => apiFetch<HallOfFame>('/hall-of-fame'),
 })
 
+export const leaderboardQueryOptions = queryOptions({
+  queryKey: ['leaderboard'],
+  queryFn: () => apiFetch<Leaderboard>('/leaderboard'),
+})
+
 export function useSetHideGms() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -33,6 +38,7 @@ export function useSetHideGms() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hallOfFameQueryOptions.queryKey }),
+        queryClient.invalidateQueries({ queryKey: leaderboardQueryOptions.queryKey }),
         queryClient.invalidateQueries({ queryKey: overviewQueryOptions.queryKey }),
         queryClient.invalidateQueries({ queryKey: ['characters'] }),
       ]),

@@ -7,6 +7,7 @@ import {
   type HallOfFame,
   type HallOfFameSettings,
   hallOfFameSettingsSchema,
+  type Leaderboard,
   type PlayerOverview,
   type SessionUser,
 } from '@4story-portal/shared';
@@ -40,6 +41,11 @@ export class StatsController {
   @Get('hall-of-fame')
   hallOfFame(@CurrentUser() user: SessionUser): Promise<HallOfFame> {
     return this.stats.hallOfFame(user);
+  }
+
+  @Get('leaderboard')
+  leaderboard(@CurrentUser() user: SessionUser): Promise<Leaderboard> {
+    return this.stats.leaderboard(user);
   }
 
   @Get('events/active')

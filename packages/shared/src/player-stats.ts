@@ -139,6 +139,15 @@ export type HallOfFame = {
   gm: { hideGms: boolean } | null;
 };
 
+export type LeaderboardCategoryId = 'damage' | 'kills';
+
+export type Leaderboard = {
+  /** Every ranked character is listed, so `you` is always null. */
+  categories: (Omit<HallCategory, 'id'> & { id: LeaderboardCategoryId })[];
+  /** False for a GM while GM accounts are hidden. */
+  ranked: boolean;
+};
+
 export type ActiveEvent = {
   type: number;
   typeName: string;

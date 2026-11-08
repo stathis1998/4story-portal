@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
+import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
@@ -49,6 +50,11 @@ const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
 const AuthedHallOfFameRoute = AuthedHallOfFameRouteImport.update({
   id: '/hall-of-fame',
   path: '/hall-of-fame',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedLeaderboardRoute = AuthedLeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedShopRoute = AuthedShopRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/shop': typeof AuthedShopRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/characters'
     | '/hall-of-fame'
+    | '/leaderboard'
     | '/shop'
     | '/characters/$id'
     | '/gm/events'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/characters'
     | '/hall-of-fame'
+    | '/leaderboard'
     | '/shop'
     | '/characters/$id'
     | '/gm/events'
@@ -158,6 +169,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/_authed/characters'
     | '/_authed/hall-of-fame'
+    | '/_authed/leaderboard'
     | '/_authed/shop'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
@@ -217,6 +229,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedHallOfFameRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/leaderboard': {
+      id: '/_authed/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof AuthedLeaderboardRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/shop': {
       id: '/_authed/shop'
       path: '/shop'
@@ -265,6 +284,7 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
+  AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedShopRoute: typeof AuthedShopRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
@@ -276,6 +296,7 @@ interface AuthedRouteChildren {
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
+  AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedShopRoute: AuthedShopRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,

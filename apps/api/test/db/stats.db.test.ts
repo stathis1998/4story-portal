@@ -1,3 +1,4 @@
+import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { DbService } from '../../src/db/db.service.js';
 import { computeStats, type StatRows } from '../../src/stats/stats-rules.js';
@@ -62,6 +63,20 @@ describe('SqlStatsRepository against the _TEST copy', () => {
       expect(row.duelWins).toBeGreaterThanOrEqual(0);
       expect(typeof row.inGuild).toBe('boolean');
       expect(typeof row.leadsGuild).toBe('boolean');
+    }
+  });
+
+  it('reads kills and damage as numbers, even damage too big for 32 bits', async () => {
+    const charId = rows.characters[0].id;
+    const row = () => db.pool.request().input('charId', sql.Int, charId);
+    await row().query(
+      `INSERT INTO ${db.tables.characterStats} (dwCharID, dwTotalKills, nDamageDealt) VALUES (@charId, 7, 5000000000)`,
+    );
+    try {
+      const { combat } = await new SqlStatsRepository(db).loadRows();
+      expect(combat).toContainEqual({ charId, kills: 7, damageDealt: 5_000_000_000 });
+    } finally {
+      await row().query(`DELETE FROM ${db.tables.characterStats} WHERE dwCharID = @charId`);
     }
   });
 

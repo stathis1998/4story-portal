@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
-import type { AccountRow, CharacterRow, CompanionRow, GearRow, SessionRow, SocialRow, StatRows, TitleRow } from './stats-rules.js';
+import type { AccountRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, StatRows, TitleRow } from './stats-rules.js';
 
 export interface StatsRepository {
   loadRows(): Promise<StatRows>;
@@ -18,7 +18,7 @@ export class SqlStatsRepository implements StatsRepository {
   constructor(private readonly db: DbService) {}
 
   async loadRows(): Promise<StatRows> {
-    const [characters, sessions, gear, companions, titles, titlesTotal, social, accounts] = await Promise.all([
+    const [characters, sessions, gear, companions, titles, titlesTotal, social, combat, accounts] = await Promise.all([
       this.characters(),
       this.sessions(),
       this.gear(),
@@ -26,9 +26,21 @@ export class SqlStatsRepository implements StatsRepository {
       this.titles(),
       this.titlesTotal(),
       this.social(),
+      this.combat(),
       this.accounts(),
     ]);
-    return { characters, sessions, gear, companions, titles, titlesTotal, social, accounts };
+    return { characters, sessions, gear, companions, titles, titlesTotal, social, combat, accounts };
+  }
+
+  private async combat(): Promise<CombatRow[]> {
+    const { characters, characterStats } = this.db.tables;
+    const result = await this.db.pool.request().query<Omit<CombatRow, 'damageDealt'> & { damageDealt: string }>(
+      `SELECT s.dwCharID AS charId, s.dwTotalKills AS kills, s.nDamageDealt AS damageDealt
+       FROM ${characterStats} s
+       JOIN ${characters} c ON c.dwCharID = s.dwCharID AND c.bDelete = 0`,
+    );
+    // The driver returns bigint as text.
+    return result.recordset.map((row) => ({ ...row, damageDealt: Number(row.damageDealt) }));
   }
 
   private async characters(): Promise<CharacterRow[]> {

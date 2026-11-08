@@ -27,6 +27,9 @@ function AuthedLayout() {
               <Link to="/hall-of-fame" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Hall of Fame
               </Link>
+              <Link to="/leaderboard" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
+                Leaderboard
+              </Link>
               <Link to="/shop" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Shop
               </Link>
