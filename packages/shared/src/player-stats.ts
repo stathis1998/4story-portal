@@ -3,6 +3,22 @@ import { z } from 'zod';
 /** Route param for a character; the game stores it as a signed 32-bit value. */
 export const characterIdSchema = z.coerce.number().int().min(1).max(2147483647);
 
+/** Level 90 is already every character's cap, so a freeze stops below it. */
+export const MAX_FREEZE_LEVEL = 89;
+
+/** A null level removes the freeze. */
+export const levelFreezeRequestSchema = z.object({
+  level: z.number().int().min(1).max(MAX_FREEZE_LEVEL).nullable(),
+});
+export type LevelFreezeRequest = z.infer<typeof levelFreezeRequestSchema>;
+
+export type LevelFreeze = {
+  level: number;
+  freezeLevel: number | null;
+  /** A character that's online can't be changed: the game only reads the freeze when it loads one. */
+  online: boolean;
+};
+
 export const hallOfFameSettingsSchema = z.object({ hideGms: z.boolean() });
 export type HallOfFameSettings = z.infer<typeof hallOfFameSettingsSchema>;
 

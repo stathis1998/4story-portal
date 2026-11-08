@@ -1,6 +1,6 @@
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
-import type { CharacterRow, CharactersRepository } from '../src/characters/characters.repository.js';
+import type { CharacterRow, CharactersRepository, LevelFreezeRow } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
 import type { StatRows } from '../src/stats/stats-rules.js';
@@ -35,6 +35,18 @@ export class FakeCharactersRepository implements CharactersRepository {
   async listByUser(userId: number): Promise<CharacterRow[]> {
     this.requestedUserIds.push(userId);
     return this.rowsByUser.get(userId) ?? [];
+  }
+
+  readonly freezes = new Map<number, LevelFreezeRow & { userId: number }>();
+
+  async findLevelFreeze(userId: number, charId: number): Promise<LevelFreezeRow | null> {
+    const row = this.freezes.get(charId);
+    if (!row || row.userId !== userId) return null;
+    return { level: row.level, freezeLevel: row.freezeLevel, online: row.online };
+  }
+
+  async saveLevelFreeze(charId: number, level: number | null): Promise<void> {
+    this.freezes.get(charId)!.freezeLevel = level;
   }
 }
 

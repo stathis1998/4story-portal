@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { Button } from '../../components/Button'
 import { GameIcon } from '../../components/gm/GameIcon'
+import { LevelFreezeSection } from '../../components/stats/LevelFreezeSection'
 import { LevelProgress } from '../../components/stats/LevelProgress'
 import { formatMinutes, isNotFound, ordinal, plural, profileQueryOptions } from '../../lib/stats'
 
@@ -101,6 +102,10 @@ function Profile({ profile }: { profile: CharacterProfile }) {
             ))}
           </ul>
         )}
+      </Section>
+
+      <Section title="Level freeze">
+        <LevelFreezeSection characterId={String(profile.id)} />
       </Section>
 
       <div className="grid gap-4 md:grid-cols-2">
