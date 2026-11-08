@@ -31,6 +31,7 @@ export function tableNames(config: AppConfig) {
     guildMembers: `${game}.TGUILDMEMBERTABLE`,
     guilds: `${game}.TGUILDTABLE`,
     duelScores: `${game}.TDUELSCORETABLE`,
+    levelFreezes: `${game}.TCHARLEVELFREEZETABLE`,
   };
 }
 
