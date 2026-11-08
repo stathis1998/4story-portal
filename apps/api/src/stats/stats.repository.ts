@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
-import type { AccountRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, StatRows, TitleRow } from './stats-rules.js';
+import type { AccountRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, SpendingRow, StatRows, TitleRow } from './stats-rules.js';
 
 export interface StatsRepository {
   loadRows(): Promise<StatRows>;
@@ -11,6 +11,7 @@ export const STATS_REPOSITORY = Symbol('STATS_REPOSITORY');
 const INVEN_EQUIP = 254; // NetCode.h
 const STORAGE_INVEN = 0;
 const TOWNER_CHAR = 0;
+const COUNTER_MONEY_SPENT = 3; // enum CHARCOUNTER in TMapType.h
 
 // Only ever reads: the portal's own data goes in PortalStore, not the game databases.
 @Injectable()
@@ -18,7 +19,7 @@ export class SqlStatsRepository implements StatsRepository {
   constructor(private readonly db: DbService) {}
 
   async loadRows(): Promise<StatRows> {
-    const [characters, sessions, gear, companions, titles, titlesTotal, social, combat, accounts] = await Promise.all([
+    const [characters, sessions, gear, companions, titles, titlesTotal, social, combat, spending, accounts] = await Promise.all([
       this.characters(),
       this.sessions(),
       this.gear(),
@@ -27,9 +28,22 @@ export class SqlStatsRepository implements StatsRepository {
       this.titlesTotal(),
       this.social(),
       this.combat(),
+      this.spending(),
       this.accounts(),
     ]);
-    return { characters, sessions, gear, companions, titles, titlesTotal, social, combat, accounts };
+    return { characters, sessions, gear, companions, titles, titlesTotal, social, combat, spending, accounts };
+  }
+
+  private async spending(): Promise<SpendingRow[]> {
+    const { characters, characterCounters } = this.db.tables;
+    const result = await this.db.pool.request().query<{ charId: number; copper: string }>(
+      `SELECT s.dwCharID AS charId, s.nValue AS copper
+       FROM ${characterCounters} s
+       JOIN ${characters} c ON c.dwCharID = s.dwCharID AND c.bDelete = 0
+       WHERE s.wStatID = ${COUNTER_MONEY_SPENT}`,
+    );
+    // The driver returns bigint as text.
+    return result.recordset.map((row) => ({ ...row, copper: Number(row.copper) }));
   }
 
   private async combat(): Promise<CombatRow[]> {

@@ -75,7 +75,7 @@ export class FakeAccountsRepository implements AccountsRepository {
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
 export class FakeStatsRepository implements StatsRepository {
-  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, social: [], combat: [], accounts: [] };
+  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, social: [], combat: [], spending: [], accounts: [] };
   loads = 0;
   failWith?: Error;
 

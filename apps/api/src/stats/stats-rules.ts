@@ -30,6 +30,7 @@ export type TitleRow = { charId: number; titleId: number; name: string };
 export type AccountRow = { userId: number; username: string };
 export type SocialRow = { charId: number; friends: number; inGuild: boolean; leadsGuild: boolean; duelWins: number };
 export type CombatRow = { charId: number; kills: number; damageDealt: number };
+export type SpendingRow = { charId: number; copper: number };
 
 export type StatRows = {
   characters: CharacterRow[];
@@ -40,6 +41,7 @@ export type StatRows = {
   titlesTotal: number;
   social: SocialRow[];
   combat: CombatRow[];
+  spending: SpendingRow[];
   accounts: AccountRow[];
 };
 
@@ -62,6 +64,7 @@ export type CharacterStatsRow = {
   duelWins: number;
   kills: number;
   damageDealt: number;
+  copperSpent: number;
 };
 
 export type AccountStatsRow = {
@@ -168,6 +171,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
   const companions = groupBy(rows.companions, (companion) => companion.charId);
   const titles = groupBy(rows.titles, (title) => title.charId);
   const social = new Map(rows.social.map((row) => [row.charId, row]));
+  const spending = new Map(rows.spending.map((row) => [row.charId, row.copper]));
   const combat = new Map(rows.combat.map((row) => [row.charId, row]));
 
   const characters = new Map<number, CharacterStatsRow>();
@@ -221,6 +225,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       duelWins: social.get(row.id)?.duelWins ?? 0,
       kills: combat.get(row.id)?.kills ?? 0,
       damageDealt: combat.get(row.id)?.damageDealt ?? 0,
+      copperSpent: spending.get(row.id) ?? 0,
     });
   }
 

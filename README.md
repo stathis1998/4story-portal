@@ -79,7 +79,7 @@ Logged-in players see their own progress and how they compare, all worked out fr
 - `/characters`: an event banner while one runs, hours and streaks, an activity calendar, badges with their rarity, and a level bar on each card.
 - `/characters/:id`: equipped gear, companions, titles, records and rankings, for your own characters only.
 - `/hall-of-fame`: the top three in each category, with your place. Gold and account names never appear. GMs get a **Hide GM accounts** switch, which removes GM accounts from the rankings and rarity for everyone.
-- `/leaderboard`: every character ranked by damage dealt to monsters and by monsters killed, from the counters `TMapSvr` saves in `TCHARSTATTABLE`. It follows the same rules as the Hall of Fame: no gold or account names, banned characters left out, and the **Hide GM accounts** switch applies.
+- `/leaderboard`: every character ranked by damage dealt to monsters, monsters killed and gold spent on NPCs and fees, from the counters `TMapSvr` saves in `TCHARSTATTABLE` and `TCHARCOUNTERTABLE`. It follows the same rules as the Hall of Fame: no gold balances or account names, banned characters left out, and the **Hide GM accounts** switch applies.
 - `/shop`: a joke Gold store. The Buy buttons only show a funny message; nothing is charged or given.
 
 At most 12 hours of one session count, so a character left logged in for days doesn't bury everyone else. Stats change when the game saves a session, and the API reads them at most once a minute.

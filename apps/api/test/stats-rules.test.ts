@@ -45,6 +45,7 @@ const rows = (overrides: Partial<StatRows> = {}): StatRows => ({
   titlesTotal: 110,
   social: [],
   combat: [],
+  spending: [],
   accounts: [{ userId: 10, username: 'friend' }],
   ...overrides,
 });

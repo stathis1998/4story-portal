@@ -59,6 +59,7 @@ const baseRows = (): StatRows => ({
   titlesTotal: 110,
   social: [],
   combat: [],
+  spending: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
     { userId: PLAYER, username: 'friend' },
@@ -422,6 +423,23 @@ describe('player stats routes', () => {
         { charId: 5, kills: 0, damageDealt: 0 },
         { charId: 6, kills: 999, damageDealt: 999_999 },
       ];
+      repo.rows.spending = [
+        { charId: 1, copper: 914_083_717 },
+        { charId: 2, copper: 5 },
+        { charId: 3, copper: 1_000_000 },
+        { charId: 4, copper: 15_961_642 },
+        { charId: 5, copper: 0 },
+        { charId: 6, copper: 999_000_000 },
+      ];
+    });
+
+    it('ranks gold spent on its own, converting from copper', async () => {
+      expect(places(board(await load(player), 'gold').entries)).toEqual([
+        [1, 'Kaelith', '914.08 gold'],
+        [2, 'Rival', '15.96 gold'],
+        [3, 'Moosey', '1 gold'],
+        [4, 'Alt', '<0.01 gold'],
+      ]);
     });
 
     it('ranks damage dealt on its own, past the Hall of Fame top three', async () => {
@@ -458,10 +476,12 @@ describe('player stats routes', () => {
 
     it('is empty until the game has recorded something', async () => {
       repo.rows.combat = [];
+      repo.rows.spending = [];
       const body = await load(player);
       expect(body.categories.map((c) => [c.id, c.entries])).toEqual([
         ['damage', []],
         ['kills', []],
+        ['gold', []],
       ]);
     });
 
@@ -471,7 +491,7 @@ describe('player stats routes', () => {
       expect(entries.filter((entry) => entry.mine).map((entry) => entry.name)).toEqual(['Kaelith', 'Alt']);
     });
 
-    it('never shows account names or gold', async () => {
+    it('never shows account names or gold balances', async () => {
       const text = JSON.stringify(await load(player));
       expect(text).not.toContain('rivalaccount');
       expect(text).not.toContain('12345');

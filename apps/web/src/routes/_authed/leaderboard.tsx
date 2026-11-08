@@ -15,8 +15,9 @@ function LeaderboardPage() {
     <main className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-4xl">Leaderboard</h1>
       <p className="mt-1 mb-6 text-muted">
-        Every monster you have fought, per character. Every party member near a kill gets credit for it. Damage is the HP actually
-        removed, and pets and summons count for their owner. Counted since 5 November 2026 and saved every 5 minutes and at logout.
+        Totals per character. Every party member near a kill gets credit for it. Damage is the HP actually removed, and pets and
+        summons count for their owner. Gold spent is what was paid to NPCs and in fees, not trades, player stores, mail or auctions.
+        Counted since 6 November 2026 and saved every 5 minutes and at logout.
       </p>
 
       {data && !data.ranked && <p className="mb-4 text-sm text-muted">GM, not ranked.</p>}

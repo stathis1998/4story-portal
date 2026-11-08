@@ -80,6 +80,20 @@ describe('SqlStatsRepository against the _TEST copy', () => {
     }
   });
 
+  it('reads only the money spent counter, as a number', async () => {
+    const charId = rows.characters[0].id;
+    const row = () => db.pool.request().input('charId', sql.Int, charId);
+    await row().query(
+      `INSERT INTO ${db.tables.characterCounters} (dwCharID, wStatID, nValue) VALUES (@charId, 2, 999), (@charId, 3, 5000000000)`,
+    );
+    try {
+      const { spending } = await new SqlStatsRepository(db).loadRows();
+      expect(spending.filter((entry) => entry.charId === charId)).toEqual([{ charId, copper: 5_000_000_000 }]);
+    } finally {
+      await row().query(`DELETE FROM ${db.tables.characterCounters} WHERE dwCharID = @charId`);
+    }
+  });
+
   it('feeds the rules without errors', () => {
     const stats = computeStats(rows, '2026-11-01');
     expect(stats.characters.size).toBe(rows.characters.length);

@@ -33,6 +33,7 @@ export function tableNames(config: AppConfig) {
     duelScores: `${game}.TDUELSCORETABLE`,
     levelFreezes: `${game}.TCHARLEVELFREEZETABLE`,
     characterStats: `${game}.TCHARSTATTABLE`,
+    characterCounters: `${game}.TCHARCOUNTERTABLE`,
   };
 }
 
