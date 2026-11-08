@@ -5,8 +5,11 @@ import type {
   CharacterRanking,
   HallCategory,
   HallCategoryId,
+  HallEntry,
   HallOfFame,
   HallOfFameSettings,
+  Leaderboard,
+  LeaderboardCategoryId,
   PlayerOverview,
   SessionUser,
 } from '@4story-portal/shared';
@@ -62,8 +65,8 @@ type Snapshot = {
   unlocks: BadgeUnlock[];
 };
 
-type Category = {
-  id: HallCategoryId;
+type Category<Id extends string = HallCategoryId> = {
+  id: Id;
   label: string;
   value: (character: CharacterStatsRow) => number;
   display: (value: number) => string;
@@ -89,6 +92,13 @@ const CHARACTER_CATEGORIES: Category[] = [
   { id: 'companion', label: 'Top companion', value: (c) => c.companionLevel, display: (v) => `Lv. ${v}` },
 ];
 const BADGE_CATEGORY = { id: 'badges' as const, label: 'Most achievements', display: (v: number) => plural(v, 'badge') };
+
+const total = (value: number) => value.toLocaleString('en-US');
+
+const LEADERBOARD_CATEGORIES: Category<LeaderboardCategoryId>[] = [
+  { id: 'damage', label: 'Damage dealt', value: (c) => c.damageDealt, display: total },
+  { id: 'kills', label: 'Monsters killed', value: (c) => c.kills, display: total },
+];
 
 // Reads through the 60-second cache and shapes the responses. The hide switch is applied per request,
 // so it works at once.
@@ -176,6 +186,25 @@ export class StatsService {
     return { categories, ranked, gm: this.gm.isGm(user.username) ? { hideGms: this.store.hideGms() } : null };
   }
 
+  async leaderboard(user: SessionUser): Promise<Leaderboard> {
+    const snapshot = await this.snapshot();
+    const ranked = this.isRanked(user);
+    const contenders = this.contenders(snapshot);
+    const { characters } = snapshot.stats;
+
+    return {
+      ranked,
+      categories: LEADERBOARD_CATEGORIES.map((category) => ({
+        id: category.id,
+        label: category.label,
+        entries: rankCategory(contenders.map((c) => candidate(c, category.value(c)))).map((place) =>
+          hallEntry(category, place, characters.get(place.key)!, ranked && characters.get(place.key)!.row.userId === user.userId),
+        ),
+        you: null,
+      })),
+    };
+  }
+
   setHideGms(hideGms: boolean, changedBy: string): HallOfFameSettings {
     try {
       this.store.setHideGms(hideGms, changedBy);
@@ -228,18 +257,7 @@ export class StatsService {
     return {
       id: category.id,
       label: category.label,
-      entries: listed.map(({ key, name, value, place }) => {
-        const character = characters.get(key)!;
-        return {
-          place,
-          name,
-          className: className(character.row.classCode),
-          level: character.row.level,
-          display: category.display(value),
-          detail: category.detail?.(character) ?? null,
-          mine: key === mine?.key,
-        };
-      }),
+      entries: listed.map((place) => hallEntry(category, place, characters.get(place.key)!, place.key === mine?.key)),
       you:
         mine && !listed.some(({ key }) => key === mine.key)
           ? { place: mine.place, name: mine.name, display: category.display(mine.value) }
@@ -339,6 +357,23 @@ export class StatsService {
 }
 
 const candidate = (character: CharacterStatsRow, value: number) => ({ key: character.row.id, name: character.row.name, value });
+
+function hallEntry(
+  category: Pick<Category, 'display' | 'detail'>,
+  { place, name, value }: Ranked<number>,
+  character: CharacterStatsRow,
+  mine: boolean,
+): HallEntry {
+  return {
+    place,
+    name,
+    className: className(character.row.classCode),
+    level: character.row.level,
+    display: category.display(value),
+    detail: category.detail?.(character) ?? null,
+    mine,
+  };
+}
 
 const daysBetween = (from: string, to: string) => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
 

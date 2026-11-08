@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import type { BadgeView, HallOfFame } from '@4story-portal/shared';
+import type { BadgeView, HallEntry, HallOfFame, Leaderboard } from '@4story-portal/shared';
 import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha1Hex } from '../src/auth/sha1.js';
@@ -58,6 +58,7 @@ const baseRows = (): StatRows => ({
   titles: [{ charId: 1, titleId: 1, name: 'Warlord' }],
   titlesTotal: 110,
   social: [],
+  combat: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
     { userId: PLAYER, username: 'friend' },
@@ -111,6 +112,7 @@ describe('player stats routes', () => {
     ['get', '/api/me/overview'],
     ['get', '/api/characters/1/profile'],
     ['get', '/api/hall-of-fame'],
+    ['get', '/api/leaderboard'],
     ['get', '/api/events/active'],
     ['put', '/api/gm/hall-of-fame/settings'],
   ] as const;
@@ -403,6 +405,87 @@ describe('player stats routes', () => {
       expect(body.ranked).toBe(true);
       expect(category(body, 'level').you).toBeNull();
       expect(category(body, 'level').entries.some((entry) => entry.mine)).toBe(false);
+    });
+  });
+
+  describe('GET /leaderboard', () => {
+    const load = async (agent: ReturnType<typeof request.agent>) => (await agent.get('/api/leaderboard')).body as Leaderboard;
+    const board = (body: Leaderboard, id: string) => body.categories.find((c) => c.id === id)!;
+    const places = (entries: HallEntry[]) => entries.map(({ place, name, display }) => [place, name, display]);
+
+    beforeEach(() => {
+      repo.rows.combat = [
+        { charId: 1, kills: 120, damageDealt: 5_000_000_000 },
+        { charId: 2, kills: 300, damageDealt: 1_000 },
+        { charId: 3, kills: 1, damageDealt: 1 },
+        { charId: 4, kills: 120, damageDealt: 7_000 },
+        { charId: 5, kills: 0, damageDealt: 0 },
+        { charId: 6, kills: 999, damageDealt: 999_999 },
+      ];
+    });
+
+    it('ranks damage dealt on its own, past the Hall of Fame top three', async () => {
+      expect(places(board(await load(player), 'damage').entries)).toEqual([
+        [1, 'Kaelith', '5,000,000,000'],
+        [2, 'Rival', '7,000'],
+        [3, 'Alt', '1,000'],
+        [4, 'Moosey', '1'],
+      ]);
+    });
+
+    it('ranks kills on its own, with ties sharing a place', async () => {
+      expect(places(board(await load(player), 'kills').entries)).toEqual([
+        [1, 'Alt', '300'],
+        [2, 'Kaelith', '120'],
+        [2, 'Rival', '120'],
+        [4, 'Moosey', '1'],
+      ]);
+    });
+
+    it('lists every ranked character, however many there are', async () => {
+      for (let id = 10; id < 18; id++) {
+        repo.rows.characters.push(character({ id, name: `Extra${id}`, userId: 51 }));
+        repo.rows.combat.push({ charId: id, kills: id, damageDealt: id });
+      }
+      expect(board(await load(player), 'kills').entries).toHaveLength(12);
+    });
+
+    it('leaves out banned characters and those with nothing to rank', async () => {
+      const text = JSON.stringify(await load(player));
+      expect(text).not.toContain('Banned');
+      expect(text).not.toContain('Fourth');
+    });
+
+    it('is empty until the game has recorded something', async () => {
+      repo.rows.combat = [];
+      const body = await load(player);
+      expect(body.categories.map((c) => [c.id, c.entries])).toEqual([
+        ['damage', []],
+        ['kills', []],
+      ]);
+    });
+
+    it('describes each entry, marking all of your characters and nobody else', async () => {
+      const entries = board(await load(player), 'damage').entries;
+      expect(entries[0]).toMatchObject({ name: 'Kaelith', level: 50, detail: null, mine: true });
+      expect(entries.filter((entry) => entry.mine).map((entry) => entry.name)).toEqual(['Kaelith', 'Alt']);
+    });
+
+    it('never shows account names or gold', async () => {
+      const text = JSON.stringify(await load(player));
+      expect(text).not.toContain('rivalaccount');
+      expect(text).not.toContain('12345');
+    });
+
+    it('drops GMs at once when they are hidden, and tells the GM', async () => {
+      expect(JSON.stringify(await load(player))).toContain('Moosey');
+
+      await moose.put('/api/gm/hall-of-fame/settings').send({ hideGms: true }).expect(200);
+
+      expect(JSON.stringify(await load(player))).not.toContain('Moosey');
+      const body = await load(moose);
+      expect(body.ranked).toBe(false);
+      expect(body.categories.every((c) => c.entries.every((entry) => !entry.mine))).toBe(true);
     });
   });
 

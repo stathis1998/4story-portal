@@ -30,4 +30,5 @@ it('builds bracketed three-part table names from the configured databases', () =
     guilds: '[TGAME_GSP_TEST].dbo.TGUILDTABLE',
     duelScores: '[TGAME_GSP_TEST].dbo.TDUELSCORETABLE',
     levelFreezes: '[TGAME_GSP_TEST].dbo.TCHARLEVELFREEZETABLE',
+    characterStats: '[TGAME_GSP_TEST].dbo.TCHARSTATTABLE',
   }));

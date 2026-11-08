@@ -1,10 +1,10 @@
-import type { HallCategory } from '@4story-portal/shared'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { FormMessage } from '../../components/FormMessage'
-import { hallOfFameQueryOptions, ordinal, settingsErrorMessage, useSetHideGms } from '../../lib/stats'
+import { RankingCard } from '../../components/stats/RankingCard'
+import { hallOfFameQueryOptions, settingsErrorMessage, useSetHideGms } from '../../lib/stats'
 
 export const Route = createFileRoute('/_authed/hall-of-fame')({
   component: HallOfFamePage,
@@ -59,53 +59,10 @@ function HallOfFamePage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {data.categories.map((category) => (
-            <Category key={category.id} category={category} />
+            <RankingCard key={category.id} category={category} />
           ))}
         </div>
       )}
     </main>
-  )
-}
-
-function Category({ category }: { category: HallCategory }) {
-  const headingId = `hall-${category.id}`
-  return (
-    <section aria-labelledby={headingId} className="rounded-xs border border-line bg-surface p-5">
-      <h2 id={headingId} className="mb-3 text-2xl">
-        {category.label}
-      </h2>
-      {category.entries.length === 0 ? (
-        <p className="text-sm text-muted">Nobody yet.</p>
-      ) : (
-        <ol className="flex flex-col gap-2.5">
-          {category.entries.map((entry) => (
-            <li
-              key={`${entry.place}-${entry.name}`}
-              className={`flex items-center gap-3 ${entry.mine ? 'rounded-xs border-l-2 border-accent pl-2' : ''}`}
-            >
-              <span className="w-8 shrink-0 font-display text-accent-text">{ordinal(entry.place)}</span>
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 font-bold">
-                  <span className="truncate">{entry.name}</span>
-                  {entry.mine && <span className="rounded-xs border border-accent px-1.5 text-xs text-accent-text">You</span>}
-                </p>
-                <p className="text-xs text-muted">
-                  {entry.className}, level {entry.level}
-                </p>
-              </div>
-              <div className="ml-auto text-right">
-                <p>{entry.display}</p>
-                {entry.detail && <p className="text-xs text-muted">{entry.detail}</p>}
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-      {category.you && (
-        <p className="mt-3 border-t border-line pt-2 text-sm text-muted">
-          You: {ordinal(category.you.place)}, {category.you.name}, {category.you.display}
-        </p>
-      )}
-    </section>
   )
 }
