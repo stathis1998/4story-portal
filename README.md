@@ -79,6 +79,7 @@ Logged-in players see their own progress and how they compare, all worked out fr
 - `/characters`: an event banner while one runs, hours and streaks, an activity calendar, badges with their rarity, and a level bar on each card.
 - `/characters/:id`: equipped gear, companions, titles, records and rankings, for your own characters only.
 - `/hall-of-fame`: the top three in each category, with your place. Gold and account names never appear. GMs get a **Hide GM accounts** switch, which removes GM accounts from the rankings and rarity for everyone.
+- `/shop`: a joke Gold store. The Buy buttons only show a funny message; nothing is charged or given.
 
 At most 12 hours of one session count, so a character left logged in for days doesn't bury everyone else. Stats change when the game saves a session, and the API reads them at most once a minute.
 

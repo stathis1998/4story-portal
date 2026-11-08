@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
+import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
@@ -50,6 +51,11 @@ const AuthedHallOfFameRoute = AuthedHallOfFameRouteImport.update({
   path: '/hall-of-fame',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedShopRoute = AuthedShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   id: '/characters_/$id',
   path: '/characters/$id',
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/shop': typeof AuthedShopRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/shop': typeof AuthedShopRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
+  '/_authed/shop': typeof AuthedShopRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/characters'
     | '/hall-of-fame'
+    | '/shop'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/characters'
     | '/hall-of-fame'
+    | '/shop'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/_authed/characters'
     | '/_authed/hall-of-fame'
+    | '/_authed/shop'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
@@ -205,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedHallOfFameRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/shop': {
+      id: '/_authed/shop'
+      path: '/shop'
+      fullPath: '/shop'
+      preLoaderRoute: typeof AuthedShopRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -246,6 +265,7 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
+  AuthedShopRoute: typeof AuthedShopRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
@@ -256,6 +276,7 @@ interface AuthedRouteChildren {
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
+  AuthedShopRoute: AuthedShopRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
