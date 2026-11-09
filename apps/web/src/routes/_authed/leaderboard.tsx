@@ -17,7 +17,8 @@ function LeaderboardPage() {
       <p className="mt-1 mb-6 text-muted">
         Totals per character. Every party member near a kill gets credit for it. Damage is the HP actually removed, and pets and
         summons count for their owner. Gold spent is what was paid to NPCs and in fees, not trades, player stores, mail or auctions.
-        Counted since 6 November 2026 and saved every 5 minutes and at logout.
+        Counted since 6 November 2026 and saved every 5 minutes and at logout. Soul lotteries are counted since November 2026, and
+        soul lottery gold includes consolation prizes.
       </p>
 
       {data && !data.ranked && <p className="mb-4 text-sm text-muted">GM, not ranked.</p>}

@@ -60,6 +60,7 @@ const baseRows = (): StatRows => ({
   social: [],
   combat: [],
   spending: [],
+  soulLottery: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
     { userId: PLAYER, username: 'friend' },
@@ -431,6 +432,44 @@ describe('player stats routes', () => {
         { charId: 5, copper: 0 },
         { charId: 6, copper: 999_000_000 },
       ];
+      repo.rows.soulLottery = [
+        { charId: 1, won: 3, lost: 40, copperWon: 150_000_000, copperConsolation: 2_000_000 },
+        { charId: 2, won: 0, lost: 5, copperWon: 0, copperConsolation: 50_000 },
+        { charId: 4, won: 7, lost: 0, copperWon: 700_000_000, copperConsolation: 0 },
+        { charId: 5, won: 0, lost: 0, copperWon: 0, copperConsolation: 0 },
+        { charId: 6, won: 99, lost: 99, copperWon: 999_000_000, copperConsolation: 999_000 },
+      ];
+    });
+
+    it('ranks soul lotteries won, leaving out anyone with none', async () => {
+      expect(places(board(await load(player), 'lotteryWon').entries)).toEqual([
+        [1, 'Rival', '7'],
+        [2, 'Kaelith', '3'],
+      ]);
+    });
+
+    it('ranks soul lotteries lost', async () => {
+      expect(places(board(await load(player), 'lotteryLost').entries)).toEqual([
+        [1, 'Kaelith', '40'],
+        [2, 'Alt', '5'],
+      ]);
+    });
+
+    it('ranks soul lottery gold on wins and consolation prizes together', async () => {
+      expect(places(board(await load(player), 'lotteryGold').entries)).toEqual([
+        [1, 'Rival', '700 gold'],
+        [2, 'Kaelith', '152 gold'],
+        [3, 'Alt', '0.05 gold'],
+      ]);
+    });
+
+    it('splits soul lottery gold into wins and consolation prizes', async () => {
+      const details = board(await load(player), 'lotteryGold').entries.map((entry) => entry.detail);
+      expect(details).toEqual([
+        '700 gold from wins, 0 gold consolation',
+        '150 gold from wins, 2 gold consolation',
+        '0 gold from wins, 0.05 gold consolation',
+      ]);
     });
 
     it('ranks gold spent on its own, converting from copper', async () => {
@@ -477,11 +516,15 @@ describe('player stats routes', () => {
     it('is empty until the game has recorded something', async () => {
       repo.rows.combat = [];
       repo.rows.spending = [];
+      repo.rows.soulLottery = [];
       const body = await load(player);
       expect(body.categories.map((c) => [c.id, c.entries])).toEqual([
         ['damage', []],
         ['kills', []],
         ['gold', []],
+        ['lotteryWon', []],
+        ['lotteryLost', []],
+        ['lotteryGold', []],
       ]);
     });
 

@@ -94,6 +94,23 @@ describe('SqlStatsRepository against the _TEST copy', () => {
     }
   });
 
+  it('reads only the soul lottery counters, as numbers per character', async () => {
+    const charId = rows.characters[0].id;
+    const row = () => db.pool.request().input('charId', sql.Int, charId);
+    await row().query(
+      `INSERT INTO ${db.tables.characterCounters} (dwCharID, wStatID, nValue)
+       VALUES (@charId, 3, 999), (@charId, 4, 2), (@charId, 5, 9), (@charId, 6, 5000000000), (@charId, 7, 123000)`,
+    );
+    try {
+      const { soulLottery } = await new SqlStatsRepository(db).loadRows();
+      expect(soulLottery.filter((entry) => entry.charId === charId)).toEqual([
+        { charId, won: 2, lost: 9, copperWon: 5_000_000_000, copperConsolation: 123_000 },
+      ]);
+    } finally {
+      await row().query(`DELETE FROM ${db.tables.characterCounters} WHERE dwCharID = @charId`);
+    }
+  });
+
   it('feeds the rules without errors', () => {
     const stats = computeStats(rows, '2026-11-01');
     expect(stats.characters.size).toBe(rows.characters.length);
