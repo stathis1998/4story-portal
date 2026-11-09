@@ -18,7 +18,7 @@ const TCML_TYPE_IMAGELIST = 0x0a;
 // ITEM_FIELDS and ITEM_VISUAL_FIELDS. The index names the field we keep.
 export const ITEM_LAYOUT = 'wbbwswddbbbbdbfdbbbbbbbbbbbbwdbbbwbbffdbwwwwwwwwwbdbdbwbbdb';
 const ITEM_VISUAL0_FIELD = 40;
-const ITEM_VISUAL_LAYOUT = 'wddddddddwbbbddfddd';
+export const ITEM_VISUAL_LAYOUT = 'wddddddddwbbbddfddd';
 const ITEM_VISUAL_ICON_FIELD = 9;
 
 export function readLayout(reader: ArchiveReader, layout: string): number[] {

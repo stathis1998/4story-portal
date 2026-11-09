@@ -1,10 +1,18 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CHAKRAS, MOUNTS } from '../lib/mounts-chakras'
 import { mockApi } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
+// WebGL doesn't exist in the test environment.
+vi.mock('../components/mounts/MountViewer', () => ({
+  default: ({ src, name }: { src: string; name: string }) => <div role="img" aria-label={`3D model of ${name}`} data-src={src} />,
+}))
+
 const me = { userId: 1, username: 'friend', isGm: false }
+
+/** A card's name runs straight into its durations, and some names start with another mount's name. */
+const mountButton = (name: string) => new RegExp(String.raw`^${name}\s*(Permanent|\d)`)
 
 const open = async () => {
   mockApi()
@@ -49,6 +57,28 @@ describe('mounts and chakras page', () => {
     const blackBuffalo = within(list).getByText('Black Buffalo').closest('li') as HTMLElement
     expect(blackBuffalo).toHaveTextContent('Permanent')
     expect(blackBuffalo).toHaveTextContent('30 days')
+  })
+
+  it('starts by showing the first mount that has a model', async () => {
+    await open()
+
+    const first = MOUNTS.find((mount) => mount.model !== null)!
+    const preview = screen.getByRole('complementary', { name: '3D preview' })
+    expect(await within(preview).findByRole('img', { name: `3D model of ${first.name}` })).toHaveAttribute('data-src', `/mount-models/${first.model}.glb`)
+    expect(screen.getByRole('button', { name: mountButton(first.name), pressed: true })).toBeInTheDocument()
+  })
+
+  it('shows the model of the mount you pick', async () => {
+    mockApi()
+    const { user } = renderRoute('/mounts-chakras', { me })
+    await screen.findByRole('heading', { name: 'Mounts & Chakras', level: 1 })
+    const picked = MOUNTS.filter((mount) => mount.model !== null)[1]
+
+    await user.click(screen.getByRole('button', { name: mountButton(picked.name) }))
+
+    const preview = screen.getByRole('complementary', { name: '3D preview' })
+    expect(await within(preview).findByRole('img', { name: `3D model of ${picked.name}` })).toHaveAttribute('data-src', `/mount-models/${picked.model}.glb`)
+    expect(screen.getByRole('button', { name: mountButton(picked.name), pressed: true })).toBeInTheDocument()
   })
 
   it('shows the item icon when there is one', async () => {
