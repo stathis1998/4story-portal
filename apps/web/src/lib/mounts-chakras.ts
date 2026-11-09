@@ -1,0 +1,57 @@
+// A copy of the game's item chart (TITEMCHART: mounts are bType 12 bKind 23, chakras bType 17 bKind 250) as of 2026-11-09.
+// Icons are the sprites in game-icons.generated.ts. Mounts that differ only by rental time are one entry here.
+export type Chakra = { name: string; icon: number | null }
+export type Mount = Chakra & { durations: readonly string[] }
+
+export const CHAKRAS: readonly Chakra[] = [
+  { name: 'Blue Chakra', icon: 7689 },
+  { name: 'Enhanced Blue Chakra', icon: 7689 },
+  { name: 'Enhanced Fire Chakra', icon: 7689 },
+  { name: 'Enhanced Pink Chakra', icon: 7689 },
+  { name: 'Fire Chakra', icon: 7689 },
+  { name: 'Green Chakra', icon: 7689 },
+  { name: 'Neon Blue Chakra', icon: 7689 },
+  { name: 'Neon Violet Chakra', icon: 7689 },
+  { name: 'Red Chakra', icon: 7689 },
+  { name: 'Violet Chakra', icon: 5896 },
+]
+
+export const MOUNTS: readonly Mount[] = [
+  { name: 'Albino Tarantula', icon: 10496, durations: ['Permanent', '30 days'] },
+  { name: 'Behemoth', icon: 9888, durations: ['Permanent', '7 days'] },
+  { name: 'Behemoth Scroll', icon: 9888, durations: ['Permanent'] },
+  { name: 'Bell of Darkness', icon: 9871, durations: ['1 hour'] },
+  { name: 'Black Buffalo', icon: 9894, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Black Caribou', icon: 9897, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Black Horse', icon: 9891, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Black Panda', icon: null, durations: ['Permanent'] },
+  { name: 'Brown Horse', icon: 9889, durations: ['Permanent'] },
+  { name: 'Buffalo', icon: 9892, durations: ['Permanent'] },
+  { name: 'Caribou', icon: 9895, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Fast Caribou', icon: 9870, durations: ['1 day', '7 days', '14 days', '30 days'] },
+  { name: 'Forest Tarantula', icon: 10495, durations: ['Permanent', '30 days'] },
+  { name: 'Gift of the Gods - Rudolf', icon: 9870, durations: ['3 days'] },
+  { name: 'Gorilla', icon: 12287, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Grey Horse', icon: 9889, durations: ['7 days'] },
+  { name: 'Hopping Cow', icon: 11572, durations: ['Permanent', '30 days'] },
+  { name: 'Hopping Heart Cow', icon: 12348, durations: ['Permanent'] },
+  { name: 'Hopping Horse', icon: 11571, durations: ['Permanent', '30 days'] },
+  { name: 'Infuriated Behemoth', icon: 10034, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Miracle Broom', icon: 12415, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Obsidian Dragon', icon: 12367, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Pendatron\'s Shadow', icon: 9871, durations: ['Permanent', '7 days'] },
+  { name: 'Ratha Panda', icon: 10036, durations: ['Permanent', '30 days'] },
+  { name: 'Rudolph', icon: 9870, durations: ['3 days', '30 days'] },
+  { name: 'Rudolph Scroll', icon: 8523, durations: ['1 hour'] },
+  { name: 'Sapphire Dragon', icon: 12366, durations: ['Permanent', '30 days'] },
+  { name: 'Silver Bells', icon: 8854, durations: ['1 hour'] },
+  { name: 'Snow Kitsune', icon: 12368, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Snowmobile', icon: 12453, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Tarantula', icon: 10496, durations: ['Permanent'] },
+  { name: 'Tiger Tarantula', icon: 10494, durations: ['Permanent', '30 days'] },
+  { name: 'White Buffalo', icon: 9893, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'White Caribou', icon: 9896, durations: ['Permanent', '7 days'] },
+  { name: 'White Horse', icon: 9890, durations: ['Permanent', '7 days', '30 days', '90 days'] },
+  { name: 'White Majestic Horse', icon: 9871, durations: ['Permanent', '7 days', '30 days'] },
+  { name: 'Wooden Rudolph', icon: 9890, durations: ['Permanent', '30 days'] },
+]
