@@ -441,35 +441,17 @@ describe('player stats routes', () => {
       ];
     });
 
-    it('ranks soul lotteries won, leaving out anyone with none', async () => {
-      expect(places(board(await load(player), 'lotteryWon').entries)).toEqual([
-        [1, 'Rival', '7'],
-        [2, 'Kaelith', '3'],
-      ]);
-    });
-
-    it('ranks soul lotteries lost', async () => {
-      expect(places(board(await load(player), 'lotteryLost').entries)).toEqual([
-        [1, 'Kaelith', '40'],
-        [2, 'Alt', '5'],
-      ]);
-    });
-
-    it('ranks soul lottery gold on wins and consolation prizes together', async () => {
-      expect(places(board(await load(player), 'lotteryGold').entries)).toEqual([
+    it('ranks the soul lottery by gold from wins and consolation prizes together', async () => {
+      expect(places(board(await load(player), 'lottery').entries)).toEqual([
         [1, 'Rival', '700 gold'],
         [2, 'Kaelith', '152 gold'],
         [3, 'Alt', '0.05 gold'],
       ]);
     });
 
-    it('splits soul lottery gold into wins and consolation prizes', async () => {
-      const details = board(await load(player), 'lotteryGold').entries.map((entry) => entry.detail);
-      expect(details).toEqual([
-        '700 gold from wins, 0 gold consolation',
-        '150 gold from wins, 2 gold consolation',
-        '0 gold from wins, 0.05 gold consolation',
-      ]);
+    it('shows soul lotteries won and lost under each gold total', async () => {
+      const details = board(await load(player), 'lottery').entries.map((entry) => entry.detail);
+      expect(details).toEqual(['7 won, 0 lost', '3 won, 40 lost', '0 won, 5 lost']);
     });
 
     it('ranks gold spent on its own, converting from copper', async () => {
@@ -522,9 +504,7 @@ describe('player stats routes', () => {
         ['damage', []],
         ['kills', []],
         ['gold', []],
-        ['lotteryWon', []],
-        ['lotteryLost', []],
-        ['lotteryGold', []],
+        ['lottery', []],
       ]);
     });
 
