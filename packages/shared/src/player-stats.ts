@@ -3,6 +3,9 @@ import { z } from 'zod';
 /** Route param for a character; the game stores it as a signed 32-bit value. */
 export const characterIdSchema = z.coerce.number().int().min(1).max(2147483647);
 
+/** The `q` of a character search: enough letters to be useful, and no longer than a name can be. */
+export const characterSearchSchema = z.string().trim().min(2).max(16);
+
 /** Level 90 is already every character's cap, so a freeze stops below it. */
 export const MAX_FREEZE_LEVEL = 89;
 
@@ -73,6 +76,20 @@ export type PlayerOverview = {
   characters: CharacterStats[];
 };
 
+export type TooltipLine = { text: string; color: string };
+
+export type ItemQuality = 'normal' | 'magic' | 'rare' | 'grade' | 'wrap';
+
+/** An item's in-game tooltip, ready to draw. */
+export type ItemTooltip = {
+  title: TooltipLine;
+  /** The number the game prints on the tooltip's icon, null when it shows none. */
+  competence: number | null;
+  /** Picks the icon's border. */
+  quality: ItemQuality;
+  lines: TooltipLine[];
+};
+
 export type GearItem = {
   slot: number;
   slotName: string;
@@ -81,6 +98,7 @@ export type GearItem = {
   /** Sprite ID for `/game-icons`, null when the client has no icon. */
   icon: number | null;
   upgrade: number;
+  tooltip: ItemTooltip;
 };
 
 export type CompanionView = { slot: number; name: string; level: number };
@@ -111,7 +129,21 @@ export type CharacterProfile = {
   rankings: CharacterRanking[];
 };
 
+/** What anyone can see of a character. Everything else on the profile is private to its owner. */
+export type CharacterInspect = {
+  id: number;
+  name: string;
+  level: number;
+  className: string;
+  race: string;
+  country: string;
+  gear: GearItem[];
+};
+
+export type CharacterSearchResult = { id: number; name: string; level: number; className: string };
+
 export type HallEntry = {
+  characterId: number;
   place: number;
   name: string;
   className: string;

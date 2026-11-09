@@ -1,3 +1,4 @@
+import type { ItemInstance, OptionRule } from './item-tooltip.js';
 // How player stats and badges are worked out, from rows the game already stores. Section 3 of the
 // design defines each one. No database or clock in here: `today` is passed in.
 
@@ -24,7 +25,8 @@ export type CharacterRow = {
 // The game's times are server local, and the driver returns them as if they were UTC, so getUTC*
 // reads the wall clock.
 export type SessionRow = { charId: number; login: Date; logout: Date | null };
-export type GearRow = { charId: number; slot: number; itemId: number; name: string | null; upgrade: number };
+export type GearRow = ItemInstance & { charId: number; slot: number; name: string | null };
+export type OptionRuleRow = OptionRule & { magic: number };
 export type CompanionRow = { charId: number; slot: number; name: string; level: number };
 export type TitleRow = { charId: number; titleId: number; name: string };
 export type AccountRow = { userId: number; username: string };
@@ -44,6 +46,7 @@ export type StatRows = {
   combat: CombatRow[];
   spending: SpendingRow[];
   soulLottery: SoulLotteryRow[];
+  optionRules: OptionRuleRow[];
   accounts: AccountRow[];
 };
 

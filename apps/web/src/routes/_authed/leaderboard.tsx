@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '../../components/Button'
+import { CharacterSearch } from '../../components/stats/CharacterSearch'
 import { RankingCard } from '../../components/stats/RankingCard'
 import { leaderboardQueryOptions } from '../../lib/stats'
 
@@ -20,6 +21,8 @@ function LeaderboardPage() {
         Counted since 6 November 2026 and saved every 5 minutes and at logout. Soul lotteries are counted since November 2026, and
         soul lottery gold includes consolation prizes.
       </p>
+
+      <CharacterSearch />
 
       {data && !data.ranked && <p className="mb-4 text-sm text-muted">GM, not ranked.</p>}
 

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { Button } from '../../components/Button'
-import { GameIcon } from '../../components/gm/GameIcon'
+import { CharacterGear } from '../../components/items/CharacterGear'
 import { LevelFreezeSection } from '../../components/stats/LevelFreezeSection'
 import { LevelProgress } from '../../components/stats/LevelProgress'
 import { formatMinutes, isNotFound, ordinal, plural, profileQueryOptions } from '../../lib/stats'
@@ -84,24 +84,7 @@ function Profile({ profile }: { profile: CharacterProfile }) {
       </header>
 
       <Section title="Gear">
-        {profile.gear.length === 0 ? (
-          empty('Nothing equipped yet.')
-        ) : (
-          <ul aria-label="Equipped gear" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {profile.gear.map((item) => (
-              <li key={item.slot} className="flex items-center gap-3">
-                <GameIcon spriteId={item.icon} size={36} />
-                <div className="min-w-0">
-                  <p className="truncate font-bold" title={item.name}>
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-muted">{item.slotName}</p>
-                </div>
-                {item.upgrade > 0 && <span className="ml-auto font-display text-accent-text">+{item.upgrade}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
+        <CharacterGear gear={profile.gear} caption={`Lv. ${profile.level} ${profile.className}`} />
       </Section>
 
       <Section title="Level freeze">

@@ -1,4 +1,4 @@
-import type { ActiveEvents, CharacterProfile, HallOfFame, HallOfFameSettings, Leaderboard, PlayerOverview } from '@4story-portal/shared'
+import type { ActiveEvents, CharacterInspect, CharacterProfile, CharacterSearchResult, HallOfFame, HallOfFameSettings, Leaderboard, PlayerOverview } from '@4story-portal/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from './api'
 
@@ -18,6 +18,18 @@ export const profileQueryOptions = (id: string) =>
   queryOptions({
     queryKey: ['characters', id, 'profile'],
     queryFn: () => apiFetch<CharacterProfile>(`/characters/${encodeURIComponent(id)}/profile`),
+  })
+
+export const inspectQueryOptions = (id: string) =>
+  queryOptions({
+    queryKey: ['characters', id, 'inspect'],
+    queryFn: () => apiFetch<CharacterInspect>(`/characters/${encodeURIComponent(id)}/inspect`),
+  })
+
+export const characterSearchQueryOptions = (query: string) =>
+  queryOptions({
+    queryKey: ['characters', 'search', query],
+    queryFn: () => apiFetch<CharacterSearchResult[]>(`/characters/search?q=${encodeURIComponent(query)}`),
   })
 
 export const hallOfFameQueryOptions = queryOptions({

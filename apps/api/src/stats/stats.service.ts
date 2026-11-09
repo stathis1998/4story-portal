@@ -1,8 +1,11 @@
 import { HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   BadgeView,
+  CharacterInspect,
   CharacterProfile,
   CharacterRanking,
+  CharacterSearchResult,
+  GearItem,
   HallCategory,
   HallCategoryId,
   HallEntry,
@@ -16,6 +19,8 @@ import type {
 import { GmAccess } from '../auth/gm-access.js';
 import { className, countryName, raceName } from '../characters/character-codes.js';
 import { itemIcons } from '../gm/game-icons.generated.js';
+import { tooltipCharts } from '../gm/game-tooltips.generated.js';
+import { buildItemTooltip, type OptionRule } from './item-tooltip.js';
 import { type BadgeUnlock, PortalStore, StoreUnavailableError } from '../store/portal-store.js';
 import {
   type AccountStatsRow,
@@ -34,6 +39,7 @@ const CACHE_MS = 60_000;
 const NEW_FOR_DAYS = 7;
 const TOP_PLACES = 3;
 const MAX_ROWS = 5;
+const MAX_SEARCH_RESULTS = 20;
 
 // ES_* in NetCode.h.
 const SLOT_NAMES = [
@@ -63,6 +69,7 @@ type Snapshot = {
   /** Badge IDs each account holds now. */
   earned: Map<number, Set<string>>;
   unlocks: BadgeUnlock[];
+  optionRules: Map<number, OptionRule>;
 };
 
 type Category<Id extends string = HallCategoryId> = {
@@ -167,16 +174,7 @@ export class StatsService {
       daysPlayed: character.daysPlayed,
       longestStreak: character.longestStreak,
       longestSessionMinutes: character.longestSessionMinutes,
-      gear: [...character.gear]
-        .sort((a, b) => a.slot - b.slot)
-        .map((item) => ({
-          slot: item.slot,
-          slotName: SLOT_NAMES[item.slot] ?? `Slot ${item.slot}`,
-          itemId: item.itemId,
-          name: itemName(item.itemId, item.name),
-          icon: itemIcons[item.itemId] ?? null,
-          upgrade: item.upgrade,
-        })),
+      gear: gearViews(character, snapshot.optionRules),
       companions: [...character.companions]
         .sort((a, b) => a.slot - b.slot)
         .map(({ slot, name, level }) => ({ slot, name, level })),
@@ -185,6 +183,37 @@ export class StatsService {
       ranked,
       rankings: ranked ? this.rankings(snapshot, character) : [],
     };
+  }
+
+  async inspect(user: SessionUser, id: number): Promise<CharacterInspect> {
+    const snapshot = await this.snapshot();
+    const character = snapshot.stats.characters.get(id);
+    // One answer for banned, hidden and missing, so IDs can't be probed.
+    const visible = character && (character.row.userId === user.userId || this.contenders(snapshot).includes(character));
+    if (!character || !visible) throw new NotFoundException('Character not found');
+    const { row } = character;
+
+    // Named field by field: nothing private can arrive here by being added to the row.
+    return {
+      id: row.id,
+      name: row.name,
+      level: row.level,
+      className: className(row.classCode),
+      race: raceName(row.raceCode),
+      country: countryName(row.countryCode),
+      gear: gearViews(character, snapshot.optionRules),
+    };
+  }
+
+  async searchCharacters(query: string): Promise<CharacterSearchResult[]> {
+    const snapshot = await this.snapshot();
+    const needle = query.toLowerCase();
+    const isExact = ({ row }: CharacterStatsRow) => row.name.toLowerCase() === needle;
+    return this.contenders(snapshot)
+      .filter(({ row }) => row.name.toLowerCase().includes(needle))
+      .sort((a, b) => Number(isExact(b)) - Number(isExact(a)) || a.row.name.localeCompare(b.row.name))
+      .slice(0, MAX_SEARCH_RESULTS)
+      .map(({ row }) => ({ id: row.id, name: row.name, level: row.level, className: className(row.classCode) }));
   }
 
   async hallOfFame(user: SessionUser): Promise<HallOfFame> {
@@ -359,7 +388,8 @@ export class StatsService {
 
   private async load(): Promise<Snapshot> {
     const today = serverToday();
-    const stats = computeStats(await this.repo.loadRows(), today);
+    const rows = await this.repo.loadRows();
+    const stats = computeStats(rows, today);
     const earned = new Map<number, Set<string>>();
     for (const account of stats.accounts.values()) earned.set(account.userId, new Set(earnedBadges(account)));
     this.store.recordBadges(
@@ -367,8 +397,27 @@ export class StatsService {
       today,
       BADGES.map((badge) => badge.id),
     );
-    return { stats, earned, unlocks: this.store.badgeUnlocks() };
+    const optionRules = new Map(rows.optionRules.map(({ magic, ...rule }) => [magic, rule]));
+    return { stats, earned, unlocks: this.store.badgeUnlocks(), optionRules };
   }
+}
+
+function gearViews(character: CharacterStatsRow, optionRules: ReadonlyMap<number, OptionRule>): GearItem[] {
+  const now = serverNow();
+  return [...character.gear]
+    .sort((a, b) => a.slot - b.slot)
+    .map((item) => {
+      const name = itemName(item.itemId, item.name);
+      return {
+        slot: item.slot,
+        slotName: SLOT_NAMES[item.slot] ?? `Slot ${item.slot}`,
+        itemId: item.itemId,
+        name,
+        icon: itemIcons[item.itemId] ?? null,
+        upgrade: item.upgrade,
+        tooltip: buildItemTooltip(item, name, tooltipCharts, optionRules, now),
+      };
+    });
 }
 
 const candidate = (character: CharacterStatsRow, value: number) => ({ key: character.row.id, name: character.row.name, value });
@@ -380,6 +429,7 @@ function hallEntry(
   mine: boolean,
 ): HallEntry {
   return {
+    characterId: character.row.id,
     place,
     name,
     className: className(character.row.classCode),
@@ -393,6 +443,12 @@ function hallEntry(
 const daysBetween = (from: string, to: string) => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
 
 // The API runs on the same machine as the game, so its clock is the server's.
+/** The server's wall clock held as UTC, the same way the database driver reads its dates. */
+function serverNow(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()));
+}
+
 function serverToday(): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');

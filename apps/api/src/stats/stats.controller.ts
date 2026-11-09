@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   type ActiveEvents,
+  type CharacterInspect,
   type CharacterProfile,
+  type CharacterSearchResult,
   characterIdSchema,
+  characterSearchSchema,
   type HallOfFame,
   type HallOfFameSettings,
   hallOfFameSettingsSchema,
@@ -36,6 +39,21 @@ export class StatsController {
     @CurrentUser() user: SessionUser,
   ): Promise<CharacterProfile> {
     return this.stats.profile(user, id);
+  }
+
+  @Get('characters/:id/inspect')
+  inspect(
+    @Param('id', new ZodValidationPipe(characterIdSchema)) id: number,
+    @CurrentUser() user: SessionUser,
+  ): Promise<CharacterInspect> {
+    return this.stats.inspect(user, id);
+  }
+
+  @Get('characters/search')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  search(@Query('q', new ZodValidationPipe(characterSearchSchema)) query: string): Promise<CharacterSearchResult[]> {
+    return this.stats.searchCharacters(query);
   }
 
   @Get('hall-of-fame')

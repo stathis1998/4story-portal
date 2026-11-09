@@ -20,6 +20,7 @@ export function tableNames(config: AppConfig) {
     npcItems: `${game}.TNPCITEMCHART`,
     items: `${game}.TITEMCHART`,
     itemAttrs: `${game}.TITEMATTRCHART`,
+    itemMagics: `${game}.TITEMMAGICCHART`,
     levels: `${game}.TLEVELCHART`,
     allCharacters: `${global}.TALLCHARTABLE`,
     sessionLog: `${global}.TLOG`,

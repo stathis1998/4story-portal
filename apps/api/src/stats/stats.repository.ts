@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
-import type { AccountRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, SoulLotteryRow, SpendingRow, StatRows, TitleRow } from './stats-rules.js';
+import type { AccountRow, OptionRuleRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, SoulLotteryRow, SpendingRow, StatRows, TitleRow } from './stats-rules.js';
 
 export interface StatsRepository {
   loadRows(): Promise<StatRows>;
@@ -18,16 +18,83 @@ const COUNTER_SOULLOT_LOST = 5;
 const COUNTER_SOULLOT_MONEY_WON = 6;
 const COUNTER_SOULLOT_MONEY_CONSOLATION = 7;
 
+/** A row of the equipped-items query. The dwTime columns hold the server's IEV_* extended values. */
+export type RawGearRow = {
+  charId: number;
+  slot: number;
+  itemId: number;
+  name: string | null;
+  upgrade: number;
+  gem: number;
+  gLevel: number;
+  duraMax: number;
+  duraCur: number;
+  refine: number;
+  endsAt: Date | null;
+  gradeEffect: number;
+  moggItemId: number;
+  magic1: number;
+  magic2: number;
+  magic3: number;
+  magic4: number;
+  magic5: number;
+  magic6: number;
+  value1: number;
+  value2: number;
+  value3: number;
+  value4: number;
+  value5: number;
+  value6: number;
+  eld: number;
+  wrap: number;
+  customTex: number;
+  revision: number;
+  magicRevision: number;
+};
+
+const OPTION_COLUMNS = [1, 2, 3, 4, 5, 6] as const;
+/** The game stores "never expires" as this year's zero date. */
+const NO_EXPIRY_YEAR = 1900;
+
+export function toGearRow(raw: RawGearRow): GearRow {
+  const options = OPTION_COLUMNS.flatMap((n) => {
+    const id = raw[`magic${n}`];
+    // The columns are signed smallints holding the game's unsigned WORDs.
+    return id ? [{ id, value: raw[`value${n}`] & 0xffff }] : [];
+  });
+  return {
+    charId: raw.charId,
+    slot: raw.slot,
+    name: raw.name,
+    itemId: raw.itemId,
+    upgrade: raw.upgrade,
+    gem: raw.gem,
+    sealed: raw.gLevel !== 0,
+    duraMax: raw.duraMax,
+    duraCur: raw.duraCur,
+    refine: raw.refine,
+    endsAt: raw.endsAt && raw.endsAt.getUTCFullYear() > NO_EXPIRY_YEAR ? raw.endsAt : null,
+    gradeEffect: raw.gradeEffect,
+    moggItemId: raw.moggItemId & 0xffff,
+    eld: raw.eld,
+    wrap: raw.wrap,
+    customTex: raw.customTex,
+    options,
+    revision: [raw.revision, raw.magicRevision],
+  };
+}
+
 // Only ever reads: the portal's own data goes in PortalStore, not the game databases.
 @Injectable()
 export class SqlStatsRepository implements StatsRepository {
   constructor(private readonly db: DbService) {}
 
   async loadRows(): Promise<StatRows> {
-    const [characters, sessions, gear, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts] = await Promise.all([
+    const [characters, sessions, gear, optionRules, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts] = await Promise.all([
       this.characters(),
       this.sessions(),
       this.gear(),
+      this.optionRules(),
       this.companions(),
       this.titles(),
       this.titlesTotal(),
@@ -37,7 +104,7 @@ export class SqlStatsRepository implements StatsRepository {
       this.soulLottery(),
       this.accounts(),
     ]);
-    return { characters, sessions, gear, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts };
+    return { characters, sessions, gear, optionRules, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts };
   }
 
   private async soulLottery(): Promise<SoulLotteryRow[]> {
@@ -116,16 +183,29 @@ export class SqlStatsRepository implements StatsRepository {
     return result.recordset;
   }
 
+  private async optionRules(): Promise<OptionRuleRow[]> {
+    const result = await this.db.pool
+      .request()
+      .query<OptionRuleRow>(`SELECT bMagic AS magic, bRvType AS rvType, wMaxValue AS maxValue FROM ${this.db.tables.itemMagics}`);
+    return result.recordset;
+  }
+
   private async gear(): Promise<GearRow[]> {
     const { characters, characterItems, items } = this.db.tables;
-    const result = await this.db.pool.request().query<GearRow>(
-      `SELECT i.dwOwnerID AS charId, i.bItemID AS slot, i.wItemID AS itemId, chart.szNAME AS name, i.bLevel AS upgrade
+    const result = await this.db.pool.request().query<RawGearRow>(
+      `SELECT i.dwOwnerID AS charId, i.bItemID AS slot, i.wItemID AS itemId, chart.szNAME AS name, i.bLevel AS upgrade,
+              i.bGem AS gem, i.bGLevel AS gLevel, i.dwDuraMax AS duraMax, i.dwDuraCur AS duraCur, i.bRefineCur AS refine,
+              i.dEndTime AS endsAt, i.bGradeEffect AS gradeEffect, i.wMoggItemID AS moggItemId,
+              i.bMagic1 AS magic1, i.bMagic2 AS magic2, i.bMagic3 AS magic3, i.bMagic4 AS magic4, i.bMagic5 AS magic5, i.bMagic6 AS magic6,
+              i.wValue1 AS value1, i.wValue2 AS value2, i.wValue3 AS value3, i.wValue4 AS value4, i.wValue5 AS value5, i.wValue6 AS value6,
+              i.dwTime1 AS eld, i.dwTime2 AS wrap, i.dwTime6 AS customTex,
+              ISNULL(chart.fRevision, 1) AS revision, ISNULL(chart.fMRevision, 1) AS magicRevision
        FROM ${characterItems} i
        JOIN ${characters} c ON c.dwCharID = i.dwOwnerID AND c.bDelete = 0
        LEFT JOIN ${items} chart ON chart.wItemID = i.wItemID
        WHERE i.bStorageType = ${STORAGE_INVEN} AND i.bOwnerType = ${TOWNER_CHAR} AND i.dwStorageID = ${INVEN_EQUIP}`,
     );
-    return result.recordset;
+    return result.recordset.map(toGearRow);
   }
 
   private async companions(): Promise<CompanionRow[]> {

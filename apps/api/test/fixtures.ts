@@ -1,3 +1,19 @@
+export const gearDefaults = {
+  gem: 0,
+  sealed: false,
+  duraMax: 0,
+  duraCur: 0,
+  refine: 0,
+  endsAt: null,
+  gradeEffect: 0,
+  moggItemId: 0,
+  eld: 0,
+  wrap: 0,
+  customTex: 0,
+  options: [],
+  revision: [1, 1] as [number, number],
+};
+
 export const validEnv = {
   DB_HOST: 'localhost',
   DB_PORT: '1433',

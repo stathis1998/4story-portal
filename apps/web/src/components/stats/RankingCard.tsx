@@ -1,4 +1,5 @@
 import type { HallCategory } from '@4story-portal/shared'
+import { Link } from '@tanstack/react-router'
 import { ordinal } from '../../lib/stats'
 
 export function RankingCard({ category }: { category: Omit<HallCategory, 'id'> & { id: string } }) {
@@ -20,7 +21,13 @@ export function RankingCard({ category }: { category: Omit<HallCategory, 'id'> &
               <span className="w-8 shrink-0 font-display text-accent-text">{ordinal(entry.place)}</span>
               <div className="min-w-0">
                 <p className="flex items-center gap-2 font-bold">
-                  <span className="truncate">{entry.name}</span>
+                  <Link
+                    to={entry.mine ? '/characters/$id' : '/inspect/$id'}
+                    params={{ id: String(entry.characterId) }}
+                    className="truncate hover:underline"
+                  >
+                    {entry.name}
+                  </Link>
                   {entry.mine && <span className="rounded-xs border border-accent px-1.5 text-xs text-accent-text">You</span>}
                 </p>
                 <p className="text-xs text-muted">

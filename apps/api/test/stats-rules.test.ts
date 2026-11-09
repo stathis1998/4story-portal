@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gearDefaults } from './fixtures.js';
 import {
   BADGES,
   type CharacterRow,
@@ -40,6 +41,7 @@ const rows = (overrides: Partial<StatRows> = {}): StatRows => ({
   characters: [character()],
   sessions: [],
   gear: [],
+  optionRules: [],
   companions: [],
   titles: [],
   titlesTotal: 110,
@@ -254,7 +256,7 @@ describe('badges', () => {
     expect(earned({ characters: [character({ createdAt: at('2025-11-01T00:00:00') })] })).toContain('veteran');
   });
 
-  const item = (slot: number, upgrade = 0, charId = 1) => ({ charId, slot, itemId: 100 + slot, name: `Item ${slot}`, upgrade });
+  const item = (slot: number, upgrade = 0, charId = 1) => ({ ...gearDefaults, charId, slot, itemId: 100 + slot, name: `Item ${slot}`, upgrade });
 
   it('gives upgrade badges from equipped items', () => {
     expect(earned({ gear: [item(0, 9)] }).filter((id) => id.startsWith('upgrade-'))).toEqual([]);
@@ -400,7 +402,7 @@ describe('achievement categories', () => {
     expect(earned({ sessions: [session('2026-10-01T06:00:00', '2026-10-01T14:00:00')] })).toContain('marathon');
   });
 
-  const item = (slot: number, charId = 1) => ({ charId, slot, itemId: 1, name: 'Thing', upgrade: 0 });
+  const item = (slot: number, charId = 1) => ({ ...gearDefaults, charId, slot, itemId: 1, name: 'Thing', upgrade: 0 });
 
   it('gives Fully Jewelled only with all five jewellery slots on one character', () => {
     const characters = [character({ id: 1 }), character({ id: 2 })];

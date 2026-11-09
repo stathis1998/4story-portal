@@ -47,6 +47,26 @@ describe('SqlStatsRepository against the _TEST copy', () => {
     }
   });
 
+  it('reads every option rule with a usable scale', () => {
+    expect(rows.optionRules.length).toBeGreaterThan(0);
+    for (const rule of rows.optionRules) {
+      expect(rule.magic).toBeGreaterThanOrEqual(0);
+      expect(rule.maxValue).toEqual(expect.any(Number));
+      expect(rule.rvType).toEqual(expect.any(Number));
+    }
+  });
+
+  it('reads the details a tooltip needs for equipped gear', () => {
+    expect(rows.gear.length).toBeGreaterThan(0);
+    for (const item of rows.gear) {
+      expect(item.gem).toEqual(expect.any(Number));
+      expect(item.duraCur).toEqual(expect.any(Number));
+      expect(item.revision.every((rate) => typeof rate === 'number')).toBe(true);
+      expect(item.options.every(({ id, value }) => id > 0 && value >= 0 && value <= 65535)).toBe(true);
+      if (item.endsAt) expect(item.endsAt.getUTCFullYear()).toBeGreaterThan(1900);
+    }
+  });
+
   it('reads equipped gear with real slots', () => {
     for (const item of rows.gear) {
       expect(item.slot).toBeGreaterThanOrEqual(0);
