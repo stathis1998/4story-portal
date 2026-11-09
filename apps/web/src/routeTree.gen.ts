@@ -17,6 +17,7 @@ import { Route as AuthedCharactersRouteImport } from './routes/_authed/character
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
+import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
@@ -62,6 +63,11 @@ const AuthedShopRoute = AuthedShopRouteImport.update({
   path: '/shop',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
+  id: '/soul-lottery',
+  path: '/soul-lottery',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   id: '/characters_/$id',
   path: '/characters/$id',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
+  '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
+  '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/shop': typeof AuthedShopRoute
+  '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/hall-of-fame'
     | '/leaderboard'
     | '/shop'
+    | '/soul-lottery'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/hall-of-fame'
     | '/leaderboard'
     | '/shop'
+    | '/soul-lottery'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/_authed/hall-of-fame'
     | '/_authed/leaderboard'
     | '/_authed/shop'
+    | '/_authed/soul-lottery'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
@@ -243,6 +255,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedShopRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/soul-lottery': {
+      id: '/_authed/soul-lottery'
+      path: '/soul-lottery'
+      fullPath: '/soul-lottery'
+      preLoaderRoute: typeof AuthedSoulLotteryRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -286,6 +305,7 @@ interface AuthedRouteChildren {
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedShopRoute: typeof AuthedShopRoute
+  AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
@@ -298,6 +318,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedShopRoute: AuthedShopRoute,
+  AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
