@@ -33,6 +33,9 @@ function AuthedLayout() {
               <Link to="/soul-lottery" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Soul Lottery
               </Link>
+              <Link to="/upgrade-simulator" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
+                Upgrades
+              </Link>
               <Link to="/shop" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Shop
               </Link>
