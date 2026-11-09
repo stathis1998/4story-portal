@@ -20,7 +20,7 @@ function AuthedLayout() {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <span className="font-display text-sm tracking-[0.35em] text-accent-text uppercase">4Story</span>
-            <nav aria-label="Main" className="flex gap-4 text-sm font-bold">
+            <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-bold">
               <Link to="/characters" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Characters
               </Link>
@@ -35,6 +35,9 @@ function AuthedLayout() {
               </Link>
               <Link to="/upgrade-simulator" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Upgrades
+              </Link>
+              <Link to="/mounts-chakras" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
+                Mounts &amp; Chakras
               </Link>
               <Link to="/shop" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Shop
