@@ -98,7 +98,7 @@ const total = (value: number) => value.toLocaleString('en-US');
 const COPPER_PER_GOLD = 1_000_000;
 const SMALLEST_SHOWN_COPPER = COPPER_PER_GOLD / 100;
 const gold = (copper: number) =>
-  copper < SMALLEST_SHOWN_COPPER
+  copper > 0 && copper < SMALLEST_SHOWN_COPPER
     ? '<0.01 gold'
     : `${(copper / COPPER_PER_GOLD).toLocaleString('en-US', { maximumFractionDigits: 2 })} gold`;
 
@@ -106,6 +106,15 @@ const LEADERBOARD_CATEGORIES: Category<LeaderboardCategoryId>[] = [
   { id: 'damage', label: 'Damage dealt', value: (c) => c.damageDealt, display: total },
   { id: 'kills', label: 'Monsters killed', value: (c) => c.kills, display: total },
   { id: 'gold', label: 'Gold spent', value: (c) => c.copperSpent, display: gold },
+  { id: 'lotteryWon', label: 'Soul lotteries won', value: (c) => c.lotteriesWon, display: total },
+  { id: 'lotteryLost', label: 'Soul lotteries lost', value: (c) => c.lotteriesLost, display: total },
+  {
+    id: 'lotteryGold',
+    label: 'Soul lottery gold',
+    value: (c) => c.lotteryCopperWon + c.lotteryCopperConsolation,
+    display: gold,
+    detail: (c) => `${gold(c.lotteryCopperWon)} from wins, ${gold(c.lotteryCopperConsolation)} consolation`,
+  },
 ];
 
 // Reads through the 60-second cache and shapes the responses. The hide switch is applied per request,

@@ -56,6 +56,13 @@ describe('leaderboard page', () => {
     expect(within(rows[1]).getByText('You')).toBeInTheDocument()
   })
 
+  it('explains that soul lottery gold includes consolation prizes', async () => {
+    mockApi(route())
+    renderRoute('/leaderboard', { me })
+
+    expect(await screen.findByText(/soul lottery gold includes consolation prizes/i)).toBeInTheDocument()
+  })
+
   it('says when nobody is on a board yet', async () => {
     mockApi(route())
     renderRoute('/leaderboard', { me })

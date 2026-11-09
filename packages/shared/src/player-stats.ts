@@ -139,7 +139,7 @@ export type HallOfFame = {
   gm: { hideGms: boolean } | null;
 };
 
-export type LeaderboardCategoryId = 'damage' | 'kills' | 'gold';
+export type LeaderboardCategoryId = 'damage' | 'kills' | 'gold' | 'lotteryWon' | 'lotteryLost' | 'lotteryGold';
 
 export type Leaderboard = {
   /** Every ranked character is listed, so `you` is always null. */

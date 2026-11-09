@@ -31,6 +31,7 @@ export type AccountRow = { userId: number; username: string };
 export type SocialRow = { charId: number; friends: number; inGuild: boolean; leadsGuild: boolean; duelWins: number };
 export type CombatRow = { charId: number; kills: number; damageDealt: number };
 export type SpendingRow = { charId: number; copper: number };
+export type SoulLotteryRow = { charId: number; won: number; lost: number; copperWon: number; copperConsolation: number };
 
 export type StatRows = {
   characters: CharacterRow[];
@@ -42,6 +43,7 @@ export type StatRows = {
   social: SocialRow[];
   combat: CombatRow[];
   spending: SpendingRow[];
+  soulLottery: SoulLotteryRow[];
   accounts: AccountRow[];
 };
 
@@ -65,6 +67,10 @@ export type CharacterStatsRow = {
   kills: number;
   damageDealt: number;
   copperSpent: number;
+  lotteriesWon: number;
+  lotteriesLost: number;
+  lotteryCopperWon: number;
+  lotteryCopperConsolation: number;
 };
 
 export type AccountStatsRow = {
@@ -173,6 +179,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
   const social = new Map(rows.social.map((row) => [row.charId, row]));
   const spending = new Map(rows.spending.map((row) => [row.charId, row.copper]));
   const combat = new Map(rows.combat.map((row) => [row.charId, row]));
+  const soulLottery = new Map(rows.soulLottery.map((row) => [row.charId, row]));
 
   const characters = new Map<number, CharacterStatsRow>();
   const accountDays = new Map<number, Map<string, number>>();
@@ -226,6 +233,10 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       kills: combat.get(row.id)?.kills ?? 0,
       damageDealt: combat.get(row.id)?.damageDealt ?? 0,
       copperSpent: spending.get(row.id) ?? 0,
+      lotteriesWon: soulLottery.get(row.id)?.won ?? 0,
+      lotteriesLost: soulLottery.get(row.id)?.lost ?? 0,
+      lotteryCopperWon: soulLottery.get(row.id)?.copperWon ?? 0,
+      lotteryCopperConsolation: soulLottery.get(row.id)?.copperConsolation ?? 0,
     });
   }
 
