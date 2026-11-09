@@ -18,6 +18,7 @@ import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-f
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
+import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
@@ -69,6 +70,11 @@ const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
   path: '/soul-lottery',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedUpgradeSimulatorRoute = AuthedUpgradeSimulatorRouteImport.update({
+  id: '/upgrade-simulator',
+  path: '/upgrade-simulator',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   id: '/characters_/$id',
   path: '/characters/$id',
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
+  '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
+  '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/shop': typeof AuthedShopRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
+  '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/shop'
     | '/soul-lottery'
+    | '/upgrade-simulator'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/shop'
     | '/soul-lottery'
+    | '/upgrade-simulator'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/_authed/leaderboard'
     | '/_authed/shop'
     | '/_authed/soul-lottery'
+    | '/_authed/upgrade-simulator'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
@@ -274,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSoulLotteryRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/upgrade-simulator': {
+      id: '/_authed/upgrade-simulator'
+      path: '/upgrade-simulator'
+      fullPath: '/upgrade-simulator'
+      preLoaderRoute: typeof AuthedUpgradeSimulatorRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -325,6 +344,7 @@ interface AuthedRouteChildren {
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedShopRoute: typeof AuthedShopRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
+  AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
@@ -339,6 +359,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedShopRoute: AuthedShopRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
+  AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
