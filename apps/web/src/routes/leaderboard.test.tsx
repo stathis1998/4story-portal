@@ -14,8 +14,8 @@ const board = (overrides: Partial<Leaderboard> = {}): Leaderboard => ({
       id: 'damage',
       label: 'Damage dealt',
       entries: [
-        { place: 1, name: 'Moosey', className: 'Wizard', level: 90, display: '5,000,000,000', detail: null, mine: false },
-        { place: 2, name: 'Kaelith', className: 'Warrior', level: 50, display: '7,000', detail: null, mine: true },
+        { characterId: 3, place: 1, name: 'Moosey', className: 'Wizard', level: 90, display: '5,000,000,000', detail: null, mine: false },
+        { characterId: 1, place: 2, name: 'Kaelith', className: 'Warrior', level: 50, display: '7,000', detail: null, mine: true },
       ],
       you: null,
     },

@@ -23,6 +23,7 @@ import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
+import { Route as AuthedInspectIdRouteImport } from './routes/_authed/inspect.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -93,6 +94,11 @@ const AuthedGmVendorsRoute = AuthedGmVendorsRouteImport.update({
   path: '/gm/vendors',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedInspectIdRoute = AuthedInspectIdRouteImport.update({
+  id: '/inspect/$id',
+  path: '/inspect/$id',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
+  '/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
+  '/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
   '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
+  '/_authed/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/gm/logins'
     | '/gm/teleport'
     | '/gm/vendors'
+    | '/inspect/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/gm/logins'
     | '/gm/teleport'
     | '/gm/vendors'
+    | '/inspect/$id'
   id:
     | '__root__'
     | '/'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authed/gm/logins'
     | '/_authed/gm/teleport'
     | '/_authed/gm/vendors'
+    | '/_authed/inspect/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -297,6 +309,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmVendorsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/inspect/$id': {
+      id: '/_authed/inspect/$id'
+      path: '/inspect/$id'
+      fullPath: '/inspect/$id'
+      preLoaderRoute: typeof AuthedInspectIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
@@ -311,6 +330,7 @@ interface AuthedRouteChildren {
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
   AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
+  AuthedInspectIdRoute: typeof AuthedInspectIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
@@ -324,6 +344,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
   AuthedGmVendorsRoute: AuthedGmVendorsRoute,
+  AuthedInspectIdRoute: AuthedInspectIdRoute,
 }
 
 const AuthedRouteWithChildren =

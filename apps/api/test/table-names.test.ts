@@ -18,6 +18,7 @@ it('builds bracketed three-part table names from the configured databases', () =
     npcItems: '[TGAME_GSP_TEST].dbo.TNPCITEMCHART',
     items: '[TGAME_GSP_TEST].dbo.TITEMCHART',
     itemAttrs: '[TGAME_GSP_TEST].dbo.TITEMATTRCHART',
+    itemMagics: '[TGAME_GSP_TEST].dbo.TITEMMAGICCHART',
     levels: '[TGAME_GSP_TEST].dbo.TLEVELCHART',
     allCharacters: '[TGLOBAL_GSP_TEST].dbo.TALLCHARTABLE',
     sessionLog: '[TGLOBAL_GSP_TEST].dbo.TLOG',

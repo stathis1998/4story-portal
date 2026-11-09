@@ -9,6 +9,7 @@ import type { ControlEvent } from '../src/control/control-protocol.js';
 import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
 import { PortalStore, StoreUnavailableError } from '../src/store/portal-store.js';
 import { FakeAccountsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
+import { gearDefaults } from './fixtures.js';
 import { createTestApp } from './test-app.js';
 
 const at = (value: string) => new Date(`${value}Z`);
@@ -50,9 +51,9 @@ const baseRows = (): StatRows => ({
   ],
   sessions: [session(1, '2026-10-30'), session(1, '2026-10-31'), session(3, '2026-10-31')],
   gear: [
-    { charId: 1, slot: 0, itemId: 7625, name: 'Sword', upgrade: 24 },
-    { charId: 1, slot: 3, itemId: 2, name: '_', upgrade: 0 },
-    { charId: 1, slot: 5, itemId: 9, name: null, upgrade: 3 },
+    { ...gearDefaults, charId: 1, slot: 0, itemId: 7625, name: 'Sword', upgrade: 24 },
+    { ...gearDefaults, charId: 1, slot: 3, itemId: 2, name: '_', upgrade: 0 },
+    { ...gearDefaults, charId: 1, slot: 5, itemId: 9, name: null, upgrade: 3 },
   ],
   companions: [{ charId: 1, slot: 0, name: 'Rex', level: 20 }],
   titles: [{ charId: 1, titleId: 1, name: 'Warlord' }],
@@ -61,6 +62,7 @@ const baseRows = (): StatRows => ({
   combat: [],
   spending: [],
   soulLottery: [],
+  optionRules: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
     { userId: PLAYER, username: 'friend' },

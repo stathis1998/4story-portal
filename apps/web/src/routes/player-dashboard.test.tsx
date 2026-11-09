@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { character } from '../test/characters'
+import { gearItem } from '../test/gear'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
@@ -248,8 +249,8 @@ describe('character page', () => {
     longestStreak: 7,
     longestSessionMinutes: 150,
     gear: [
-      { slot: 0, slotName: 'Main weapon', itemId: 7625, name: 'Sword', icon: 12, upgrade: 24 },
-      { slot: 3, slotName: 'Head', itemId: 2, name: 'Item #2', icon: null, upgrade: 0 },
+      gearItem({ upgrade: 24 }),
+      gearItem({ slot: 3, slotName: 'Head', itemId: 2, name: 'Item #2', icon: null }),
     ],
     companions: [{ slot: 0, name: 'Rex', level: 20 }],
     titles: ['Warlord'],
@@ -272,18 +273,14 @@ describe('character page', () => {
     expect(screen.getByRole('link', { name: 'Back to your characters' })).toHaveAttribute('href', '/characters')
   })
 
-  it('shows gear with icon and upgrade, leaving +0 off', async () => {
+  it('shows gear in its slots, with its icon', async () => {
     mockApi(route(profile()))
     renderRoute('/characters/1', { me })
 
-    const gear = within(await screen.findByRole('list', { name: 'Equipped gear' }))
-    const [sword, head] = gear.getAllByRole('listitem')
-    expect(within(sword).getByText('Sword')).toBeInTheDocument()
-    expect(within(sword).getByText('+24')).toBeInTheDocument()
-    expect(within(sword).getByText('Main weapon')).toBeInTheDocument()
-    expect(sword.querySelector('img')).toHaveAttribute('src', '/game-icons/12.png')
-    expect(within(head).getByText('Item #2')).toBeInTheDocument()
-    expect(within(head).queryByText('+0')).not.toBeInTheDocument()
+    const gear = within(await screen.findByRole('group', { name: 'Equipped gear' }))
+    expect(gear.getByRole('button', { name: 'Main weapon: Sword' }).querySelector('img')).toHaveAttribute('src', '/game-icons/12.png')
+    expect(gear.getByRole('button', { name: 'Head: Item #2' })).toBeInTheDocument()
+    expect(gear.getByRole('img', { name: 'Back, empty' })).toBeInTheDocument()
   })
 
   it('shows companions, titles out of the total, and rankings', async () => {
@@ -306,7 +303,7 @@ describe('character page', () => {
     )
     renderRoute('/characters/1', { me })
 
-    expect(await screen.findByText('Nothing equipped yet.')).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Main weapon, empty' })).toBeInTheDocument()
     expect(screen.getByText('No companions yet.')).toBeInTheDocument()
     expect(screen.getByText('0 of 110 collected')).toBeInTheDocument()
     expect(screen.getByText('Not ranked in anything yet.')).toBeInTheDocument()
@@ -351,15 +348,15 @@ describe('hall of fame', () => {
         id: 'level',
         label: 'Highest level',
         entries: [
-          { place: 1, name: 'Moosey', className: 'Wizard', level: 93, display: 'Lv. 93', detail: null, mine: false },
-          { place: 2, name: 'Kaelith', className: 'Warrior', level: 50, display: 'Lv. 50', detail: null, mine: true },
+          { characterId: 3, place: 1, name: 'Moosey', className: 'Wizard', level: 93, display: 'Lv. 93', detail: null, mine: false },
+          { characterId: 1, place: 2, name: 'Kaelith', className: 'Warrior', level: 50, display: 'Lv. 50', detail: null, mine: true },
         ],
         you: null,
       },
       {
         id: 'item',
         label: 'Best item',
-        entries: [{ place: 1, name: 'Moosey', className: 'Wizard', level: 93, display: '+24', detail: 'Sword', mine: false }],
+        entries: [{ characterId: 3, place: 1, name: 'Moosey', className: 'Wizard', level: 93, display: '+24', detail: 'Sword', mine: false }],
         you: { place: 4, name: 'Kaelith', display: '+3' },
       },
       { id: 'titles', label: 'Most titles', entries: [], you: null },

@@ -16,12 +16,12 @@ const TCML_TYPE_IMAGELIST = 0x0a;
 
 // Field layouts as byte (b), word (w), dword (d), float (f) and CString (s), from the Extractor's
 // ITEM_FIELDS and ITEM_VISUAL_FIELDS. The index names the field we keep.
-const ITEM_LAYOUT = 'wbbwswddbbbbdbfdbbbbbbbbbbbbwdbbbwbbffdbwwwwwwwwwbdbdbwbbdb';
+export const ITEM_LAYOUT = 'wbbwswddbbbbdbfdbbbbbbbbbbbbwdbbbwbbffdbwwwwwwwwwbdbdbwbbdb';
 const ITEM_VISUAL0_FIELD = 40;
 const ITEM_VISUAL_LAYOUT = 'wddddddddwbbbddfddd';
 const ITEM_VISUAL_ICON_FIELD = 9;
 
-function readLayout(reader: ArchiveReader, layout: string): number[] {
+export function readLayout(reader: ArchiveReader, layout: string): number[] {
   const values: number[] = [];
   for (const kind of layout) {
     switch (kind) {
