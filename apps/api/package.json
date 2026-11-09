@@ -14,7 +14,8 @@
     "test:db": "vitest run --config vitest.db.config.ts",
     "import:places": "nest build && node dist/gm/import-game-places.js && nest build",
     "import:icons": "nest build && node dist/gm/import-game-icons.js && nest build",
-    "import:tooltips": "nest build && node dist/gm/import-game-tooltips.js && nest build"
+    "import:tooltips": "nest build && node dist/gm/import-game-tooltips.js && nest build",
+    "import:models": "nest build && node dist/gm/import-mount-models.js && nest build"
   },
   "dependencies": {
     "@4story-portal/shared": "^0.0.0",
