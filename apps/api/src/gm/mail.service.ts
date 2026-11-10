@@ -71,7 +71,8 @@ export class MailService {
       });
     } catch (error) {
       this.logger.warn(`Mail to ${recipient.name} failed: ${error instanceof Error ? error.message : error}`);
-      return this.failed(recipient, 'Send failed', actor);
+      // The letter may still have committed if the connection dropped after COMMIT.
+      return this.failed(recipient, 'Send failed, check the mailbox before resending', actor);
     }
     if (postId === 0) return this.failed(recipient, 'Character not found', actor);
 

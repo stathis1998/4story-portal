@@ -118,12 +118,12 @@ describe('MailService', () => {
     const res = await service.send(request({ recipients: ['Moose', 'Kael', 'Ria'] }), actor);
     expect(res.results).toEqual([
       { name: 'Moose', postId: null, error: 'Character not found' },
-      { name: 'Kael', postId: null, error: 'Send failed' },
+      { name: 'Kael', postId: null, error: 'Send failed, check the mailbox before resending' },
       { name: 'Ria', postId: 1000 },
     ]);
     const logs = gm.audits.map((a) => a.log);
     expect(logs).toContain('FAILED Moose: Character not found');
-    expect(logs).toContain('FAILED Kael: Send failed');
+    expect(logs).toContain('FAILED Kael: Send failed, check the mailbox before resending');
   });
 
   it('audits each sent letter', async () => {

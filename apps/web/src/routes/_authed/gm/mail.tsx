@@ -7,7 +7,7 @@ import {
   MAIL_MAX_RECIPIENTS,
 } from '@4story-portal/shared'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { type KeyboardEvent, useState } from 'react'
+import { type KeyboardEvent, useRef, useState } from 'react'
 import { Button } from '../../../components/Button'
 import { FormMessage } from '../../../components/FormMessage'
 import { GameIcon } from '../../../components/gm/GameIcon'
@@ -40,6 +40,14 @@ const labelText = 'text-xs font-bold tracking-wider text-muted uppercase'
 const errorMessage = (err: unknown) =>
   err instanceof ApiError && err.status < 500 ? err.message : 'Something went wrong. Please try again.'
 
+const UNKNOWN_PREFIX = 'Unknown characters: '
+
+/** The names in the API's "Unknown characters: A, B" refusal, lowercased. */
+const unknownNames = (err: unknown): Set<string> =>
+  err instanceof ApiError && err.status === 422 && err.message.startsWith(UNKNOWN_PREFIX)
+    ? new Set(err.message.slice(UNKNOWN_PREFIX.length).split(', ').map((name) => name.toLowerCase()))
+    : new Set()
+
 const moneyText = ({ gold, silver, copper }: GmMailRequest['money']) =>
   COINS.map(([key, label]) => [{ gold, silver, copper }[key], label] as const)
     .filter(([amount]) => amount > 0)
@@ -58,7 +66,10 @@ function MailPage() {
   const [problem, setProblem] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<GmMailRequest | null>(null)
   const [results, setResults] = useState<GmMailResult[] | null>(null)
+  const [unknown, setUnknown] = useState<Set<string>>(new Set())
   const send = useSendMail()
+  // isPending only disables Confirm after a re-render, so two clicks in one tick would both send.
+  const sending = useRef(false)
 
   function addRecipients(text: string) {
     const names = text
@@ -123,14 +134,24 @@ function MailPage() {
   }
 
   async function confirm() {
-    if (!confirming) return
+    if (!confirming || sending.current) return
+    sending.current = true
     try {
       const response = await send.mutateAsync(confirming)
       setResults(response.results)
+      setUnknown(new Set())
+      // Delivered recipients leave the list, so a resend only reaches the ones that failed.
+      const delivered = new Set(
+        response.results.filter((r) => r.postId !== null).map((r) => r.name.toLowerCase()),
+      )
+      setRecipients((current) => current.filter((name) => !delivered.has(name.toLowerCase())))
       setConfirming(null)
     } catch (err) {
       setConfirming(null)
+      setUnknown(unknownNames(err))
       setProblem(errorMessage(err))
+    } finally {
+      sending.current = false
     }
   }
 
@@ -154,19 +175,28 @@ function MailPage() {
           </label>
           {recipients.length > 0 && (
             <ul className="flex flex-wrap gap-2">
-              {recipients.map((name) => (
-                <li key={name} className="flex items-center gap-1 rounded-xs border border-line bg-surface-raised px-2 py-1 text-sm">
-                  {name}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${name}`}
-                    className="px-1 text-muted hover:text-danger"
-                    onClick={() => setRecipients((current) => current.filter((n) => n !== name))}
+              {recipients.map((name) => {
+                const missing = unknown.has(name.toLowerCase())
+                return (
+                  <li
+                    key={name}
+                    className={`flex items-center gap-1 rounded-xs border px-2 py-1 text-sm ${
+                      missing ? 'border-danger bg-danger-surface text-danger' : 'border-line bg-surface-raised'
+                    }`}
                   >
-                    ×
-                  </button>
-                </li>
-              ))}
+                    {name}
+                    {missing && <span className="text-xs">(not found)</span>}
+                    <button
+                      type="button"
+                      aria-label={missing ? `Remove ${name} (not found)` : `Remove ${name}`}
+                      className="px-1 text-muted hover:text-danger"
+                      onClick={() => setRecipients((current) => current.filter((n) => n !== name))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
           <input

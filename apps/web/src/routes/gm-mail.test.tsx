@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
@@ -95,6 +95,56 @@ describe('GM mail page', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await user.click(await screen.findByRole('button', { name: 'Confirm' }))
     expect(await screen.findByText('Unknown characters: Ghost')).toBeInTheDocument()
+  })
+
+  it('drops delivered recipients so a resend only reaches the failures', async () => {
+    const fetchMock = mockApi({
+      'POST /gm/mail': () =>
+        json(200, {
+          results: [
+            { name: 'Moose', postId: 1000 },
+            { name: 'Kael', postId: null, error: 'Send failed, check the mailbox before resending' },
+          ],
+        }),
+    })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.type(await screen.findByLabelText('Recipients'), 'Moose,Kael{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
+    await screen.findByText('Moose: sent (post 1000)')
+    expect(screen.queryByRole('button', { name: 'Remove Moose' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Kael' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(sentBodies(fetchMock, 'POST /gm/mail')).toHaveLength(2))
+    expect((sentBodies(fetchMock, 'POST /gm/mail')[1] as { recipients: string[] }).recipients).toEqual(['Kael'])
+  })
+
+  it('sends once when Confirm is double-clicked', async () => {
+    const fetchMock = mockApi({ 'POST /gm/mail': () => json(200, { results: [{ name: 'Moose', postId: 1000 }] }) })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.type(await screen.findByLabelText('Recipients'), 'Moose{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    // Two clicks in the same tick, before React re-renders the disabled state.
+    const confirmButton = await screen.findByRole('button', { name: 'Confirm' })
+    fireEvent.click(confirmButton)
+    fireEvent.click(confirmButton)
+    await screen.findByText('Moose: sent (post 1000)')
+    expect(sentBodies(fetchMock, 'POST /gm/mail')).toHaveLength(1)
+  })
+
+  it('marks the recipients the server did not find', async () => {
+    mockApi({ 'POST /gm/mail': () => json(422, { statusCode: 422, message: 'Unknown characters: Ghost' }) })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.type(await screen.findByLabelText('Recipients'), 'Moose,Ghost{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByRole('button', { name: 'Remove Ghost (not found)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Moose' })).toBeInTheDocument()
   })
 
   it('shows a validation problem instead of confirming', async () => {
