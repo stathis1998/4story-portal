@@ -25,9 +25,12 @@ type Status = 'loading' | 'ready' | 'failed' | 'unsupported'
 type Stage = { load: (src: string) => Promise<void>; setLayer: (layer: GradeLayer | null) => void; dispose: () => void }
 
 const FIELD_OF_VIEW = 35
-const FIT_MARGIN = 1.15
+// The fit uses the bounding sphere, which is loose for a long thin weapon.
+const FIT_MARGIN = 0.8
 const START_ANGLE = -2.3
 const START_HEIGHT = 0.15
+const AMBIENT = 1
+const SUN = 1.2
 
 // The client draws the effect as texture stage 1 over the lit weapon (CTachyonObject::Render), in
 // display colours, so it is mixed in after three.js converts the result to sRGB.
@@ -57,10 +60,12 @@ function createStage(host: HTMLElement): Stage {
   host.appendChild(renderer.domElement)
 
   const scene = new Scene()
-  scene.add(new AmbientLight(0xffffff, 2.6))
+  // Dimmer than the mount viewer: the effect is blended onto the lit colour, so a weapon lit far
+  // brighter than its texture would wash every effect out to white, unlike in game.
+  scene.add(new AmbientLight(0xffffff, AMBIENT))
   const camera = new PerspectiveCamera(FIELD_OF_VIEW, host.clientWidth / host.clientHeight, 0.01, 200)
   // The light moves with the camera, so the side you look at is always lit.
-  const sun = new DirectionalLight(0xffffff, 2.2)
+  const sun = new DirectionalLight(0xffffff, SUN)
   sun.position.set(1, 2, 3)
   camera.add(sun)
   scene.add(camera)
