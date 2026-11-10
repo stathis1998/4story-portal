@@ -2,7 +2,13 @@ import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository, LevelFreezeRow } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
-import type { MailItemRow, MailLetter, MailRecipientRow, MailRepository } from '../src/gm/mail.repository.js';
+import type {
+  MailCharacterRow,
+  MailItemRow,
+  MailLetter,
+  MailRecipientRow,
+  MailRepository,
+} from '../src/gm/mail.repository.js';
 import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
 import type { StatRows } from '../src/stats/stats-rules.js';
 import type { StatsRepository } from '../src/stats/stats.repository.js';
@@ -255,11 +261,19 @@ export class FakeMailRepository implements MailRepository {
   missingOnSend = new Set<number>();
   /** Character ids for which the call throws. */
   failOnSend = new Set<number>();
+  /** Character ids that count as logged in. */
+  online = new Set<number>();
   private nextPostId = 1000;
 
   async findCharacters(names: string[]): Promise<MailRecipientRow[]> {
     const wanted = new Set(names.map((name) => name.toLowerCase()));
     return this.characters.filter((c) => wanted.has(c.name.toLowerCase()));
+  }
+
+  async listCharacters(): Promise<MailCharacterRow[]> {
+    return [...this.characters]
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      .map((c) => ({ ...c, level: 1, classCode: 0, online: this.online.has(c.charId) }));
   }
 
   async findItems(itemIds: number[]): Promise<MailItemRow[]> {
