@@ -58,4 +58,36 @@ describe('/api/gm/mail', () => {
     expect(JSON.stringify(res.body)).toContain('Ghost');
     expect(mail.sent).toEqual([]);
   });
+
+  it('sends to all characters', async () => {
+    mail.characters.push({ charId: 2, name: 'Kael' });
+    const res = await agent.post('/api/gm/mail').send({ audience: 'all', title: 'Hi' });
+    expect(res.status).toBe(200);
+    expect(res.body.results.map((r: { name: string }) => r.name)).toEqual(['Kael', 'Moose']);
+  });
+
+  it('is 422 when sending to online and nobody is online', async () => {
+    const res = await agent.post('/api/gm/mail').send({ audience: 'online', title: 'Hi' });
+    expect(res.status).toBe(422);
+    expect(mail.sent).toEqual([]);
+  });
+
+  describe('GET /api/gm/characters', () => {
+    it('is 401 when logged out', async () => {
+      expect((await request(app.getHttpServer()).get('/api/gm/characters')).status).toBe(401);
+    });
+
+    it('is 403 for a non-GM', async () => {
+      const other = request.agent(app.getHttpServer());
+      await other.post('/api/auth/login').send({ username: 'newuser', password: 'secret1' }).expect(200);
+      expect((await other.get('/api/gm/characters')).status).toBe(403);
+    });
+
+    it('lists live characters with an online flag', async () => {
+      mail.online.add(1);
+      const res = await agent.get('/api/gm/characters');
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([{ charId: 1, name: 'Moose', level: 1, className: expect.any(String), online: true }]);
+    });
+  });
 });
