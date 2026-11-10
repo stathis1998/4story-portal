@@ -22,6 +22,13 @@ export const CHAKRAS: readonly Chakra[] = [
   { name: 'Violet Chakra', icon: 5896, effect: 'violet', tint: null },
 ]
 
+// The same item kind as the chakras (bType 17 bKind 250). The client plays a fixed effect for each item id.
+export const AURAS: readonly Chakra[] = [
+  { name: 'Blue Aura', icon: 7689, effect: 'blueAura', tint: null },
+  { name: 'Dark Aura', icon: 5805, effect: 'darkAura', tint: null },
+  { name: 'Sacred Aura', icon: 5892, effect: 'sacredAura', tint: null },
+]
+
 export const MOUNTS: readonly Mount[] = [
   { name: 'Albino Tarantula', icon: 10496, model: 21, durations: ['Permanent', '30 days'] },
   { name: 'Behemoth', icon: 9888, model: 16, durations: ['Permanent', '7 days'] },
