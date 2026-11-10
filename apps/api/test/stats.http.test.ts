@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import type { BadgeView, HallEntry, HallOfFame, Leaderboard } from '@4story-portal/shared';
+import type { BadgeView, HallEntry, HallOfFame, Leaderboard, UpgradeStats } from '@4story-portal/shared';
 import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha1Hex } from '../src/auth/sha1.js';
@@ -61,7 +61,7 @@ const baseRows = (): StatRows => ({
   social: [],
   combat: [],
   spending: [],
-  soulLottery: [],
+  soulLottery: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
   optionRules: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
@@ -531,6 +531,121 @@ describe('player stats routes', () => {
       const body = await load(moose);
       expect(body.ranked).toBe(false);
       expect(body.categories.every((c) => c.entries.every((entry) => !entry.mine))).toBe(true);
+    });
+  });
+
+  describe('GET /upgrade-stats', () => {
+    const load = async (agent: ReturnType<typeof request.agent>) => (await agent.get('/api/upgrade-stats')).body as UpgradeStats;
+    const attempt = (charId: number, level: number, result: number, attempts: number, chanceTotal: number, kind = 1, day = '2026-11-01') => ({
+      charId,
+      kind,
+      level,
+      result,
+      day,
+      attempts,
+      chanceTotal,
+    });
+
+    beforeEach(() => {
+      repo.rows.upgradeAttempts = [
+        attempt(1, 11, 1, 1, 35),
+        attempt(4, 11, 2, 3, 105, 1, '2026-10-30'),
+        attempt(3, 0, 1, 2, 200),
+        attempt(6, 20, 2, 50, 500),
+        attempt(1, 2, 4, 1, 40, 2),
+      ];
+      repo.rows.upgradeLosses = [
+        { charId: 4, itemId: 7625, name: 'Sword', level: 11, at: at('2026-10-30T10:00:00') },
+        { charId: 1, itemId: 9, name: null, level: 15, at: at('2026-10-31T09:00:00') },
+        { charId: 6, itemId: 7625, name: 'Sword', level: 20, at: at('2026-10-31T09:00:00') },
+        { charId: 3, itemId: 7625, name: 'Sword', level: 3, at: at('2026-11-01T08:00:00') },
+      ];
+    });
+
+    it('is 401 when logged out', async () => {
+      expect((await request(app.getHttpServer()).get('/api/upgrade-stats')).status).toBe(401);
+    });
+
+    it('adds up successes and failures server-wide, leaving out banned characters', async () => {
+      const body = await load(player);
+      expect(body).toMatchObject({ today: '2026-11-01', since: '2026-10-30', ranked: true });
+      expect(body.scroll.totals).toEqual({ success: 3, saved: 0, lostLevels: 0, destroyed: 3 });
+      expect(body.scroll.levels.map(({ level, success, destroyed }) => [level, success, destroyed])).toEqual([
+        [0, 2, 0],
+        [11, 1, 3],
+      ]);
+      expect(body.scroll.levels[1].expectedRate).toBeCloseTo(0.35);
+      expect(body.gem.totals).toEqual({ success: 0, saved: 1, lostLevels: 0, destroyed: 0 });
+    });
+
+    it("shows the viewer's own record", async () => {
+      const { scroll, gem } = await load(player);
+      expect(scroll.you).toEqual({ success: 1, saved: 0, lostLevels: 0, destroyed: 0, expectedSuccesses: 0.35 });
+      expect(gem.you.saved).toBe(1);
+      expect((await load(empty)).scroll.you).toEqual({ success: 0, saved: 0, lostLevels: 0, destroyed: 0, expectedSuccesses: 0 });
+    });
+
+    it('lists the highest-level items destroyed, naming the item and marking yours', async () => {
+      const { losses } = await load(player);
+      expect(losses.map(({ name, item, upgrade, date, mine }) => [name, item, upgrade, date, mine])).toEqual([
+        ['Kaelith', 'Item #9', 15, '2026-10-31', true],
+        ['Rival', 'Sword', 11, '2026-10-30', false],
+        ['Moosey', 'Sword', 3, '2026-11-01', false],
+      ]);
+      expect(losses[0]).toMatchObject({ characterId: 1, className: expect.any(String), level: 50 });
+    });
+
+    it('never shows account names or gold balances', async () => {
+      const text = JSON.stringify(await load(player));
+      expect(text).not.toContain('rivalaccount');
+      expect(text).not.toContain('12345');
+    });
+
+    it('is the whole server unless a character is picked', async () => {
+      expect((await load(player)).character).toBeNull();
+    });
+
+    it("narrows every number to one character, another player's too, keeping your own record", async () => {
+      const body = (await player.get('/api/upgrade-stats?character=4')).body as UpgradeStats;
+      expect(body.character).toEqual({ id: 4, name: 'Rival', className: expect.any(String), level: 60, mine: false });
+      expect(body.since).toBe('2026-10-30');
+      expect(body.scroll.totals).toEqual({ success: 0, saved: 0, lostLevels: 0, destroyed: 3 });
+      expect(body.gem.totals.saved).toBe(0);
+      expect(body.losses.map((loss) => loss.name)).toEqual(['Rival']);
+      expect(body.scroll.you.success).toBe(1);
+    });
+
+    it('narrows to one of your own characters and marks it yours', async () => {
+      const body = (await player.get('/api/upgrade-stats?character=1')).body as UpgradeStats;
+      expect(body.character).toMatchObject({ name: 'Kaelith', mine: true });
+      expect(body.scroll.totals.success).toBe(1);
+      expect(body.gem.totals.saved).toBe(1);
+    });
+
+    it('gives the same 404 for a banned, a hidden GM and a missing character', async () => {
+      expect((await player.get('/api/upgrade-stats?character=6')).status).toBe(404);
+      expect((await player.get('/api/upgrade-stats?character=999')).status).toBe(404);
+      await moose.put('/api/gm/hall-of-fame/settings').send({ hideGms: true }).expect(200);
+      expect((await player.get('/api/upgrade-stats?character=3')).status).toBe(404);
+      // A hidden GM can still look at their own.
+      expect((await moose.get('/api/upgrade-stats?character=3')).status).toBe(200);
+    });
+
+    it('is 400 for a character that is not an ID', async () => {
+      expect((await player.get('/api/upgrade-stats?character=abc')).status).toBe(400);
+      expect((await player.get('/api/upgrade-stats?character=0')).status).toBe(400);
+    });
+
+    it('drops hidden GMs from the server-wide numbers but still shows them their own', async () => {
+      await moose.put('/api/gm/hall-of-fame/settings').send({ hideGms: true }).expect(200);
+
+      const seen = await load(player);
+      expect(seen.scroll.totals.success).toBe(1);
+      expect(seen.losses.map((loss) => loss.name)).not.toContain('Moosey');
+
+      const own = await load(moose);
+      expect(own.ranked).toBe(false);
+      expect(own.scroll.you.success).toBe(2);
     });
   });
 

@@ -35,6 +35,7 @@ export function tableNames(config: AppConfig) {
     levelFreezes: `${game}.TCHARLEVELFREEZETABLE`,
     characterStats: `${game}.TCHARSTATTABLE`,
     characterCounters: `${game}.TCHARCOUNTERTABLE`,
+    upgradeLog: `${game}.TITEMUPGRADELOGTABLE`,
   };
 }
 

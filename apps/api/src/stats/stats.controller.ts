@@ -13,6 +13,7 @@ import {
   type Leaderboard,
   type PlayerOverview,
   type SessionUser,
+  type UpgradeStats,
 } from '@4story-portal/shared';
 import { GmGuard } from '../auth/gm-access.js';
 import { CurrentUser, SessionGuard } from '../auth/session.guard.js';
@@ -64,6 +65,14 @@ export class StatsController {
   @Get('leaderboard')
   leaderboard(@CurrentUser() user: SessionUser): Promise<Leaderboard> {
     return this.stats.leaderboard(user);
+  }
+
+  @Get('upgrade-stats')
+  upgradeStats(
+    @Query('character', new ZodValidationPipe(characterIdSchema.optional())) characterId: number | undefined,
+    @CurrentUser() user: SessionUser,
+  ): Promise<UpgradeStats> {
+    return this.stats.upgradeStats(user, characterId);
   }
 
   @Get('events/active')

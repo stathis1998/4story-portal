@@ -34,6 +34,29 @@ export type SocialRow = { charId: number; friends: number; inGuild: boolean; lea
 export type CombatRow = { charId: number; kills: number; damageDealt: number };
 export type SpendingRow = { charId: number; copper: number };
 export type SoulLotteryRow = { charId: number; won: number; lost: number; copperWon: number; copperConsolation: number };
+/** Upgrade log rows grouped by character, kind, level, result and day. Codes are the UPGRADELOG_* enums in TMapType.h. */
+export type UpgradeAttemptRow = {
+  charId: number;
+  kind: number;
+  level: number;
+  result: number;
+  /** `YYYY-MM-DD`, the server's clock. */
+  day: string;
+  attempts: number;
+  /** The attempts' success chances added up, in percent. */
+  chanceTotal: number;
+};
+/** An item a failed upgrade scroll destroyed. */
+export type UpgradeLossRow = { charId: number; itemId: number; name: string | null; level: number; at: Date };
+/** The failed upgrade counter, which started a day before the upgrade log. */
+export type UpgradeFailureRow = { charId: number; failed: number };
+
+export const UPGRADE_KIND_SCROLL = 1;
+export const UPGRADE_KIND_GEM = 2;
+export const UPGRADE_SUCCESS = 1;
+export const UPGRADE_DESTROYED = 2;
+export const UPGRADE_LOST_LEVELS = 3;
+export const UPGRADE_SAVED = 4;
 
 export type StatRows = {
   characters: CharacterRow[];
@@ -46,6 +69,9 @@ export type StatRows = {
   combat: CombatRow[];
   spending: SpendingRow[];
   soulLottery: SoulLotteryRow[];
+  upgradeAttempts: UpgradeAttemptRow[];
+  upgradeLosses: UpgradeLossRow[];
+  upgradeFailures: UpgradeFailureRow[];
   optionRules: OptionRuleRow[];
   accounts: AccountRow[];
 };
@@ -74,6 +100,10 @@ export type CharacterStatsRow = {
   lotteriesLost: number;
   lotteryCopperWon: number;
   lotteryCopperConsolation: number;
+  /** Failed upgrade scrolls, from the counter. */
+  upgradesFailed: number;
+  /** Items lost to failed upgrade scrolls, from the upgrade log. */
+  itemsDestroyed: number;
 };
 
 export type AccountStatsRow = {
@@ -183,6 +213,13 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
   const spending = new Map(rows.spending.map((row) => [row.charId, row.copper]));
   const combat = new Map(rows.combat.map((row) => [row.charId, row]));
   const soulLottery = new Map(rows.soulLottery.map((row) => [row.charId, row]));
+  const upgradeFailures = new Map(rows.upgradeFailures.map((row) => [row.charId, row.failed]));
+  const itemsDestroyed = new Map<number, number>();
+  for (const row of rows.upgradeAttempts) {
+    if (row.kind === UPGRADE_KIND_SCROLL && row.result === UPGRADE_DESTROYED) {
+      itemsDestroyed.set(row.charId, (itemsDestroyed.get(row.charId) ?? 0) + row.attempts);
+    }
+  }
 
   const characters = new Map<number, CharacterStatsRow>();
   const accountDays = new Map<number, Map<string, number>>();
@@ -240,6 +277,8 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       lotteriesLost: soulLottery.get(row.id)?.lost ?? 0,
       lotteryCopperWon: soulLottery.get(row.id)?.copperWon ?? 0,
       lotteryCopperConsolation: soulLottery.get(row.id)?.copperConsolation ?? 0,
+      upgradesFailed: upgradeFailures.get(row.id) ?? 0,
+      itemsDestroyed: itemsDestroyed.get(row.id) ?? 0,
     });
   }
 
@@ -348,6 +387,42 @@ const wealthBadge = (id: string, name: string, gold: number): BadgeDefinition =>
   description: `Hold ${gold.toLocaleString('en-US')} gold on one character`,
   category: 'collection',
   earned: anyCharacter(({ row }) => row.gold >= gold),
+});
+
+/** Adds a number up across the account's characters. */
+const accountTotal = (account: AccountStatsRow, value: (character: CharacterStatsRow) => number) =>
+  account.characters.reduce((sum, character) => sum + value(character), 0);
+
+const killsBadge = (kills: number, name: string): BadgeDefinition => ({
+  id: `kills-${kills}`,
+  name,
+  description: `Defeat ${kills.toLocaleString('en-US')} monsters across your characters`,
+  category: 'combat',
+  earned: (account) => accountTotal(account, (character) => character.kills) >= kills,
+});
+
+const damageBadge = (id: string, name: string, damage: number, amount: string): BadgeDefinition => ({
+  id,
+  name,
+  description: `Deal ${amount} damage to monsters across your characters`,
+  category: 'combat',
+  earned: (account) => accountTotal(account, (character) => character.damageDealt) >= damage,
+});
+
+const failedUpgradesBadge = (count: number, name: string): BadgeDefinition => ({
+  id: `failed-upgrades-${count}`,
+  name,
+  description: count === 1 ? 'Fail an upgrade' : `Fail ${count} upgrades across your characters`,
+  category: 'misfortune',
+  earned: (account) => accountTotal(account, (character) => character.upgradesFailed) >= count,
+});
+
+const destroyedBadge = (count: number, name: string): BadgeDefinition => ({
+  id: `destroyed-${count}`,
+  name,
+  description: count === 1 ? 'Lose an item to a failed upgrade' : `Lose ${count} items to failed upgrades`,
+  category: 'misfortune',
+  earned: (account) => accountTotal(account, (character) => character.itemsDestroyed) >= count,
 });
 
 const duelsBadge = (wins: number, name: string): BadgeDefinition => ({
@@ -496,29 +571,37 @@ export const BADGES: readonly BadgeDefinition[] = [
   duelsBadge(1, 'First Blood'),
   duelsBadge(10, 'Duellist'),
   duelsBadge(50, 'Champion'),
+
+  // Kills and damage are counted since 6 November 2026, failed upgrades since 9 November and
+  // destroyed items since 10 November.
+  killsBadge(100, 'Hunter'),
+  killsBadge(1000, 'Slayer'),
+  killsBadge(10000, 'Exterminator'),
+  killsBadge(100000, 'Extinction Event'),
+  damageBadge('damage-1m', 'Heavy Hitter', 1_000_000, '1 million'),
+  damageBadge('damage-10m', 'Wrecking Ball', 10_000_000, '10 million'),
+  damageBadge('damage-100m', 'Force of Nature', 100_000_000, '100 million'),
+
+  failedUpgradesBadge(1, 'Bad Luck'),
+  failedUpgradesBadge(10, 'Cursed Anvil'),
+  failedUpgradesBadge(100, 'Why Do I Keep Trying'),
+  destroyedBadge(1, 'Gone'),
+  destroyedBadge(10, 'Heartbreak'),
 ];
 
-// Shown but not earnable: the game doesn't record these. Most of TMapSvr's log calls are commented
-// out, including LogUserDie and LogItemUpgrade.
+// Shown but not earnable: the game doesn't record these. TMapSvr's LogUserDie is commented out, and
+// no field in the monster chart is known to mark a boss.
 export const COMING_SOON_BADGES: readonly ComingSoonBadge[] = [
   { id: 'quests-10', name: 'Helping Hand', description: 'Finish 10 quests', category: 'progress' },
   { id: 'quests-100', name: 'Adventurer', description: 'Finish 100 quests', category: 'progress' },
   { id: 'quests-500', name: 'Living Legend', description: 'Finish 500 quests', category: 'progress' },
 
-  { id: 'kills-100', name: 'Hunter', description: 'Defeat 100 monsters', category: 'combat' },
-  { id: 'kills-1000', name: 'Slayer', description: 'Defeat 1,000 monsters', category: 'combat' },
-  { id: 'kills-10000', name: 'Exterminator', description: 'Defeat 10,000 monsters', category: 'combat' },
   { id: 'bosses-1', name: 'Giant Killer', description: 'Defeat a boss', category: 'combat' },
   { id: 'bosses-10', name: 'Boss Slayer', description: 'Defeat 10 bosses', category: 'combat' },
 
   { id: 'deaths-1', name: 'Ouch', description: 'Die for the first time', category: 'misfortune' },
   { id: 'deaths-100', name: 'Back Again', description: 'Die 100 times', category: 'misfortune' },
   { id: 'deaths-1000', name: 'Death Is a Habit', description: 'Die 1,000 times', category: 'misfortune' },
-  { id: 'failed-upgrades-1', name: 'Bad Luck', description: 'Fail an upgrade', category: 'misfortune' },
-  { id: 'failed-upgrades-10', name: 'Cursed Anvil', description: 'Fail 10 upgrades', category: 'misfortune' },
-  { id: 'failed-upgrades-100', name: 'Why Do I Keep Trying', description: 'Fail 100 upgrades', category: 'misfortune' },
-  { id: 'destroyed-1', name: 'Gone', description: 'Lose an item to a failed upgrade', category: 'misfortune' },
-  { id: 'destroyed-10', name: 'Heartbreak', description: 'Lose 10 items to failed upgrades', category: 'misfortune' },
 ];
 
 export const earnedBadges = (account: AccountStatsRow): string[] =>

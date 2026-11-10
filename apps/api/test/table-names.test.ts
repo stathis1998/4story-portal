@@ -33,4 +33,5 @@ it('builds bracketed three-part table names from the configured databases', () =
     levelFreezes: '[TGAME_GSP_TEST].dbo.TCHARLEVELFREEZETABLE',
     characterStats: '[TGAME_GSP_TEST].dbo.TCHARSTATTABLE',
     characterCounters: '[TGAME_GSP_TEST].dbo.TCHARCOUNTERTABLE',
+    upgradeLog: '[TGAME_GSP_TEST].dbo.TITEMUPGRADELOGTABLE',
   }));

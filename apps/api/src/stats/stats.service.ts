@@ -15,6 +15,8 @@ import type {
   LeaderboardCategoryId,
   PlayerOverview,
   SessionUser,
+  UpgradeLoss,
+  UpgradeStats,
 } from '@4story-portal/shared';
 import { GmAccess } from '../auth/gm-access.js';
 import { className, countryName, raceName } from '../characters/character-codes.js';
@@ -32,14 +34,20 @@ import {
   earnedBadges,
   type Ranked,
   rankCategory,
+  UPGRADE_KIND_GEM,
+  UPGRADE_KIND_SCROLL,
+  type UpgradeAttemptRow,
+  type UpgradeLossRow,
 } from './stats-rules.js';
 import { STATS_REPOSITORY, type StatsRepository } from './stats.repository.js';
+import { firstUpgradeDay, upgradeKindStats } from './upgrade-stats.js';
 
 const CACHE_MS = 60_000;
 const NEW_FOR_DAYS = 7;
 const TOP_PLACES = 3;
 const MAX_ROWS = 5;
 const MAX_SEARCH_RESULTS = 20;
+const MAX_LOSSES = 5;
 
 // ES_* in NetCode.h.
 const SLOT_NAMES = [
@@ -70,6 +78,8 @@ type Snapshot = {
   earned: Map<number, Set<string>>;
   unlocks: BadgeUnlock[];
   optionRules: Map<number, OptionRule>;
+  upgradeAttempts: UpgradeAttemptRow[];
+  upgradeLosses: UpgradeLossRow[];
 };
 
 type Category<Id extends string = HallCategoryId> = {
@@ -249,6 +259,62 @@ export class StatsService {
     };
   }
 
+  /**
+   * Server-wide numbers count ranked characters only, or just `characterId` when given. That can be
+   * any character Inspect would show, or one of the viewer's own. `you` is always the viewer's own.
+   */
+  async upgradeStats(user: SessionUser, characterId?: number): Promise<UpgradeStats> {
+    const snapshot = await this.snapshot();
+    const ranked = this.isRanked(user);
+    const { characters, today } = snapshot.stats;
+    const contenders = this.contenders(snapshot);
+
+    let counted: Set<number>;
+    let character: UpgradeStats['character'] = null;
+    if (characterId === undefined) {
+      counted = new Set(contenders.map(({ row }) => row.id));
+    } else {
+      const chosen = characters.get(characterId);
+      // One answer for banned, hidden and missing, so IDs can't be probed.
+      if (!chosen || !(chosen.row.userId === user.userId || contenders.includes(chosen))) {
+        throw new NotFoundException('Character not found');
+      }
+      counted = new Set([characterId]);
+      const { row } = chosen;
+      character = { id: row.id, name: row.name, className: className(row.classCode), level: row.level, mine: row.userId === user.userId };
+    }
+    const counts = (charId: number) => counted.has(charId);
+    const mine = (charId: number) => characters.get(charId)?.row.userId === user.userId;
+
+    const losses: UpgradeLoss[] = snapshot.upgradeLosses
+      .filter((loss) => counts(loss.charId))
+      .sort((a, b) => b.level - a.level || b.at.getTime() - a.at.getTime())
+      .slice(0, MAX_LOSSES)
+      .map((loss) => {
+        const { row } = characters.get(loss.charId)!;
+        return {
+          characterId: row.id,
+          name: row.name,
+          className: className(row.classCode),
+          level: row.level,
+          item: itemName(loss.itemId, loss.name),
+          upgrade: loss.level,
+          date: loss.at.toISOString().slice(0, 10),
+          mine: ranked && row.userId === user.userId,
+        };
+      });
+
+    return {
+      today,
+      character,
+      since: firstUpgradeDay(snapshot.upgradeAttempts, counts),
+      scroll: upgradeKindStats(snapshot.upgradeAttempts, UPGRADE_KIND_SCROLL, counts, mine, today),
+      gem: upgradeKindStats(snapshot.upgradeAttempts, UPGRADE_KIND_GEM, counts, mine, today),
+      losses,
+      ranked,
+    };
+  }
+
   setHideGms(hideGms: boolean, changedBy: string): HallOfFameSettings {
     try {
       this.store.setHideGms(hideGms, changedBy);
@@ -398,7 +464,14 @@ export class StatsService {
       BADGES.map((badge) => badge.id),
     );
     const optionRules = new Map(rows.optionRules.map(({ magic, ...rule }) => [magic, rule]));
-    return { stats, earned, unlocks: this.store.badgeUnlocks(), optionRules };
+    return {
+      stats,
+      earned,
+      unlocks: this.store.badgeUnlocks(),
+      optionRules,
+      upgradeAttempts: rows.upgradeAttempts,
+      upgradeLosses: rows.upgradeLosses,
+    };
   }
 }
 

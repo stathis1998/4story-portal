@@ -180,6 +180,62 @@ export type Leaderboard = {
   ranked: boolean;
 };
 
+/** What became of a set of upgrade attempts. A failure is saved, lost levels or destroyed. */
+export type UpgradeOutcomes = { success: number; saved: number; lostLevels: number; destroyed: number };
+
+export type UpgradeLevelStats = UpgradeOutcomes & {
+  /** Before the attempt: the `+` level for scrolls, the gem level for gemstones. */
+  level: number;
+  /** The odds the server rolled against, averaged over these attempts, 0 to 1. */
+  expectedRate: number;
+};
+
+export type UpgradeDay = { date: string; success: number; failed: number };
+
+export type UpgradeKindStats = {
+  totals: UpgradeOutcomes;
+  /** How many successes the odds predicted for these attempts. */
+  expectedSuccesses: number;
+  /** Only levels that had attempts, lowest first. */
+  levels: UpgradeLevelStats[];
+  /** The last 30 days, oldest first, including days without attempts. */
+  days: UpgradeDay[];
+  /** The viewer's own characters. */
+  you: UpgradeOutcomes & { expectedSuccesses: number };
+};
+
+/** An item destroyed by a failed upgrade scroll. */
+export type UpgradeLoss = {
+  characterId: number;
+  name: string;
+  className: string;
+  level: number;
+  item: string;
+  /** The `+` level it was at. */
+  upgrade: number;
+  /** `YYYY-MM-DD`, the server's clock. */
+  date: string;
+  mine: boolean;
+};
+
+/** The character the numbers are narrowed to. */
+export type UpgradeStatsCharacter = { id: number; name: string; className: string; level: number; mine: boolean };
+
+export type UpgradeStats = {
+  /** The server's date, `YYYY-MM-DD`. */
+  today: string;
+  /** Null for the whole server; otherwise every number except `you` is this character's alone. */
+  character: UpgradeStatsCharacter | null;
+  /** The first recorded attempt, `YYYY-MM-DD`. Null until someone tries. */
+  since: string | null;
+  scroll: UpgradeKindStats;
+  gem: UpgradeKindStats;
+  /** The highest-level items destroyed, at most five. */
+  losses: UpgradeLoss[];
+  /** False for a GM while GM accounts are hidden. */
+  ranked: boolean;
+};
+
 export type ActiveEvent = {
   type: number;
   typeName: string;

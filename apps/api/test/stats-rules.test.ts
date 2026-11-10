@@ -48,7 +48,7 @@ const rows = (overrides: Partial<StatRows> = {}): StatRows => ({
   social: [],
   combat: [],
   spending: [],
-  soulLottery: [],
+  soulLottery: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
   accounts: [{ userId: 10, username: 'friend' }],
   ...overrides,
 });
@@ -305,8 +305,8 @@ describe('achievement categories', () => {
 
   it('files every achievement under a category', () => {
     const count = (category: string) => BADGES.filter((badge) => badge.category === category).length;
-    expect(BADGES).toHaveLength(46);
-    expect(['progress', 'playtime', 'gear', 'collection', 'social'].map(count)).toEqual([6, 15, 6, 12, 7]);
+    expect(BADGES).toHaveLength(58);
+    expect(['progress', 'playtime', 'gear', 'collection', 'social', 'combat', 'misfortune'].map(count)).toEqual([6, 15, 6, 12, 7, 7, 5]);
   });
 
   it('gives each one its own ID, including the coming soon ones', () => {
@@ -327,9 +327,66 @@ describe('achievement categories', () => {
     );
   });
 
-  it('has coming soon ones for deaths, failed upgrades, destroyed items, kills and quests', () => {
+  it('keeps coming soon only what the game still does not record: deaths, bosses and quests', () => {
     const count = (prefix: string) => COMING_SOON_BADGES.filter((badge) => badge.id.startsWith(prefix)).length;
-    expect(['deaths-', 'failed-upgrades-', 'destroyed-', 'kills-', 'bosses-', 'quests-'].map(count)).toEqual([3, 3, 2, 3, 2, 3]);
+    expect(['deaths-', 'bosses-', 'quests-'].map(count)).toEqual([3, 2, 3]);
+    expect(COMING_SOON_BADGES).toHaveLength(8);
+  });
+
+  it('keeps the IDs the coming soon kill and upgrade badges had, now that they can be earned', () => {
+    const ids = BADGES.map((badge) => badge.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'kills-100', 'kills-1000', 'kills-10000',
+        'failed-upgrades-1', 'failed-upgrades-10', 'failed-upgrades-100',
+        'destroyed-1', 'destroyed-10',
+      ]),
+    );
+  });
+
+  it('gives kill badges for monsters defeated across the account', () => {
+    const combat = (kills: [number, number]) => ({
+      characters: [character({ id: 1 }), character({ id: 2, name: 'Second' })],
+      combat: [
+        { charId: 1, kills: kills[0], damageDealt: 0 },
+        { charId: 2, kills: kills[1], damageDealt: 0 },
+      ],
+    });
+    expect(earned(combat([60, 39]))).not.toContain('kills-100');
+    expect(earned(combat([60, 40]))).toContain('kills-100');
+    expect(earned(combat([9_999, 1]))).toEqual(expect.arrayContaining(['kills-1000', 'kills-10000']));
+    expect(earned(combat([9_999, 1]))).not.toContain('kills-100000');
+  });
+
+  it('gives damage badges at 1, 10 and 100 million across the account', () => {
+    const damage = (damageDealt: number) => earned({ combat: [{ charId: 1, kills: 0, damageDealt }] });
+    expect(damage(999_999)).not.toContain('damage-1m');
+    expect(damage(1_000_000)).toContain('damage-1m');
+    expect(damage(10_000_000)).toContain('damage-10m');
+    expect(damage(99_999_999)).not.toContain('damage-100m');
+    expect(damage(5_000_000_000)).toContain('damage-100m');
+  });
+
+  it('gives failed upgrade badges from the counter, across the account', () => {
+    const failed = (counts: number[]) =>
+      earned({
+        characters: counts.map((_, i) => character({ id: i + 1, name: `Char${i}` })),
+        upgradeFailures: counts.map((failed, i) => ({ charId: i + 1, failed })),
+      });
+    expect(earned({})).not.toContain('failed-upgrades-1');
+    expect(failed([1])).toContain('failed-upgrades-1');
+    expect(failed([5, 4])).not.toContain('failed-upgrades-10');
+    expect(failed([5, 5])).toContain('failed-upgrades-10');
+    expect(failed([100])).toContain('failed-upgrades-100');
+  });
+
+  it('gives destroyed item badges from the upgrade log, counting only scrolls that destroyed the item', () => {
+    const attempt = (result: number, attempts: number, kind = 1) => ({ charId: 1, kind, level: 12, result, day: TODAY, attempts, chanceTotal: 0 });
+    const destroyed = (...upgradeAttempts: ReturnType<typeof attempt>[]) => earned({ upgradeAttempts });
+    expect(destroyed(attempt(3, 50), attempt(4, 50), attempt(1, 50))).not.toContain('destroyed-1');
+    expect(destroyed(attempt(2, 9, 2))).not.toContain('destroyed-1');
+    expect(destroyed(attempt(2, 1))).toContain('destroyed-1');
+    expect(destroyed(attempt(2, 4), attempt(2, 6))).toContain('destroyed-10');
   });
 
   it('stops at level 90, the level cap', () => {
