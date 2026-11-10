@@ -2,6 +2,7 @@ import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository, LevelFreezeRow } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
+import type { MailItemRow, MailLetter, MailRecipientRow, MailRepository } from '../src/gm/mail.repository.js';
 import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } from '../src/gm/vendors.repository.js';
 import type { StatRows } from '../src/stats/stats-rules.js';
 import type { StatsRepository } from '../src/stats/stats.repository.js';
@@ -242,5 +243,33 @@ export class FakeVendorsRepository implements VendorsRepository {
 
   async setPrice(itemId: number, column: PriceColumn, multiplier: number): Promise<void> {
     this.prices.push([itemId, column, multiplier]);
+  }
+}
+
+// In-memory stand-in for the mail procedure. Post ids count up from 1000 for letters that are written.
+export class FakeMailRepository implements MailRepository {
+  characters: MailRecipientRow[] = [];
+  items: MailItemRow[] = [];
+  readonly sent: MailLetter[] = [];
+  /** Character ids for which the procedure returns 0, as if the character was deleted after the check. */
+  missingOnSend = new Set<number>();
+  /** Character ids for which the call throws. */
+  failOnSend = new Set<number>();
+  private nextPostId = 1000;
+
+  async findCharacters(names: string[]): Promise<MailRecipientRow[]> {
+    const wanted = new Set(names.map((name) => name.toLowerCase()));
+    return this.characters.filter((c) => wanted.has(c.name.toLowerCase()));
+  }
+
+  async findItems(itemIds: number[]): Promise<MailItemRow[]> {
+    return this.items.filter((item) => itemIds.includes(item.itemId));
+  }
+
+  async sendLetter(letter: MailLetter): Promise<number> {
+    if (this.failOnSend.has(letter.charId)) throw new Error('db down');
+    if (this.missingOnSend.has(letter.charId)) return 0;
+    this.sent.push(letter);
+    return this.nextPostId++;
   }
 }

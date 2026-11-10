@@ -9,6 +9,8 @@ import type {
   GmLocationInput,
   GmLogin,
   GmLoginClearResult,
+  GmMailRequest,
+  GmMailResponse,
   GmMap,
   GmPlaces,
   GmStatus,
@@ -146,6 +148,14 @@ export function useTeleport() {
     mutationKey: ['gm', 'teleport'],
     mutationFn: (input: TeleportRequest) =>
       apiFetch<TeleportResult>('/gm/teleport', { method: 'POST', body: JSON.stringify(input) }),
+  })
+}
+
+export function useSendMail() {
+  return useMutation({
+    mutationKey: ['gm', 'mail'],
+    mutationFn: (input: GmMailRequest) =>
+      apiFetch<GmMailResponse>('/gm/mail', { method: 'POST', body: JSON.stringify(input) }),
   })
 }
 

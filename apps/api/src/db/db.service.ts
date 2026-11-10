@@ -36,6 +36,7 @@ export function tableNames(config: AppConfig) {
     characterStats: `${game}.TCHARSTATTABLE`,
     characterCounters: `${game}.TCHARCOUNTERTABLE`,
     upgradeLog: `${game}.TITEMUPGRADELOGTABLE`,
+    mailProcedure: `${game}.TPortalGmPost`,
   };
 }
 
