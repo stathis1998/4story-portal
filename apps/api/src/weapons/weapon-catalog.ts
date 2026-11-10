@@ -113,6 +113,12 @@ export class WeaponCatalog {
       .map(({ itemId, name, kind: weaponKind, level }) => ({ itemId, name, kind: weaponKind, level, icon: itemIcons[itemId] ?? null }));
   }
 
+  /** One weapon with a model, or null. */
+  describe(itemId: number): WeaponSearchResult | null {
+    const weapon = this.weapon(itemId);
+    return weapon && { itemId: weapon.itemId, name: weapon.name, kind: weapon.kind, level: weapon.level, icon: itemIcons[weapon.itemId] ?? null };
+  }
+
   texture(id: number): Buffer | null {
     return this.files().pngs.get(id) ?? null;
   }

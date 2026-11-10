@@ -1,10 +1,12 @@
 import { Controller, Get, Header, NotFoundException, Param, Query, ServiceUnavailableException, StreamableFile, UseGuards } from '@nestjs/common';
 import { type WeaponEffectsData, type WeaponSearch, type WeaponSearchResult, weaponSearchSchema } from '@4story-portal/shared';
+import { z } from 'zod';
 import { SessionGuard } from '../auth/session.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { WeaponCatalog, WeaponsUnavailableError } from './weapon-catalog.js';
 
 const CACHE_FOR_A_DAY = 'private, max-age=86400';
+const itemIdSchema = z.coerce.number().int().min(1).max(65535);
 
 /** The number in "123.png" or "123.glb", or null. */
 const fileId = (file: string, extension: string) => {
@@ -34,6 +36,13 @@ export class WeaponsController {
   @Get('weapon-effects/weapons')
   search(@Query(new ZodValidationPipe(weaponSearchSchema)) query: WeaponSearch): WeaponSearchResult[] {
     return available(() => this.catalog.search(query.q, query.kind));
+  }
+
+  @Get('weapon-effects/weapons/:itemId')
+  weapon(@Param('itemId', new ZodValidationPipe(itemIdSchema)) itemId: number): WeaponSearchResult {
+    const weapon = available(() => this.catalog.describe(itemId));
+    if (!weapon) throw new NotFoundException('Weapon not found');
+    return weapon;
   }
 
   @Get('weapon-effects/textures/:file')

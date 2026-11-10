@@ -86,6 +86,18 @@ describe('weapon effect routes', () => {
     expect((await player.get('/api/weapon-effects/weapons').expect(200)).body).toEqual([]);
   });
 
+  it('describes one weapon by id, for a page opened from a link', async () => {
+    expect((await player.get('/api/weapon-effects/weapons/7625').expect(200)).body).toEqual({
+      itemId: 7625,
+      name: 'Sword of Dawn',
+      kind: 1,
+      level: 85,
+      icon: expect.anything(),
+    });
+    expect((await player.get('/api/weapon-effects/weapons/1201')).status).toBe(404);
+    expect((await player.get('/api/weapon-effects/weapons/abc')).status).toBe(400);
+  });
+
   it('is 400 for a bad kind', async () => {
     expect((await player.get('/api/weapon-effects/weapons?kind=13')).status).toBe(400);
   });

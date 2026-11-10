@@ -21,6 +21,7 @@ import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
+import { Route as AuthedWeaponEffectsRouteImport } from './routes/_authed/weapon-effects'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
@@ -87,6 +88,11 @@ const AuthedUpgradeStatsRoute = AuthedUpgradeStatsRouteImport.update({
   path: '/upgrade-stats',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWeaponEffectsRoute = AuthedWeaponEffectsRouteImport.update({
+  id: '/weapon-effects',
+  path: '/weapon-effects',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   id: '/characters_/$id',
   path: '/characters/$id',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/_authed/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
+    | '/weapon-effects'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
+    | '/weapon-effects'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
+    | '/_authed/weapon-effects'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
@@ -331,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUpgradeStatsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/weapon-effects': {
+      id: '/_authed/weapon-effects'
+      path: '/weapon-effects'
+      fullPath: '/weapon-effects'
+      preLoaderRoute: typeof AuthedWeaponEffectsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -385,6 +404,7 @@ interface AuthedRouteChildren {
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
+  AuthedWeaponEffectsRoute: typeof AuthedWeaponEffectsRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
@@ -402,6 +422,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
+  AuthedWeaponEffectsRoute: AuthedWeaponEffectsRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
