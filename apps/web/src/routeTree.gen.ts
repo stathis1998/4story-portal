@@ -25,6 +25,7 @@ import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
+import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
 import { Route as AuthedInspectIdRouteImport } from './routes/_authed/inspect.$id'
@@ -108,6 +109,11 @@ const AuthedGmLoginsRoute = AuthedGmLoginsRouteImport.update({
   path: '/gm/logins',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmMailRoute = AuthedGmMailRouteImport.update({
+  id: '/gm/mail',
+  path: '/gm/mail',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmTeleportRoute = AuthedGmTeleportRouteImport.update({
   id: '/gm/teleport',
   path: '/gm/teleport',
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
+  '/gm/mail': typeof AuthedGmMailRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/inspect/$id': typeof AuthedInspectIdRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
+  '/gm/mail': typeof AuthedGmMailRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/inspect/$id': typeof AuthedInspectIdRoute
@@ -182,6 +190,7 @@ export interface FileRoutesById {
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
+  '/_authed/gm/mail': typeof AuthedGmMailRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
   '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
   '/_authed/inspect/$id': typeof AuthedInspectIdRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
+    | '/gm/mail'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/inspect/$id'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
+    | '/gm/mail'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/inspect/$id'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
+    | '/_authed/gm/mail'
     | '/_authed/gm/teleport'
     | '/_authed/gm/vendors'
     | '/_authed/inspect/$id'
@@ -371,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmLoginsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/mail': {
+      id: '/_authed/gm/mail'
+      path: '/gm/mail'
+      fullPath: '/gm/mail'
+      preLoaderRoute: typeof AuthedGmMailRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/teleport': {
       id: '/_authed/gm/teleport'
       path: '/gm/teleport'
@@ -408,6 +427,7 @@ interface AuthedRouteChildren {
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
+  AuthedGmMailRoute: typeof AuthedGmMailRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
   AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
   AuthedInspectIdRoute: typeof AuthedInspectIdRoute
@@ -426,6 +446,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
+  AuthedGmMailRoute: AuthedGmMailRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
   AuthedGmVendorsRoute: AuthedGmVendorsRoute,
   AuthedInspectIdRoute: AuthedInspectIdRoute,
