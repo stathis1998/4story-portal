@@ -32,28 +32,45 @@ const mailItemSchema = z.object({
   count: z.number().int().min(1).max(255),
 });
 
-export const gmMailRequestSchema = z.object({
-  recipients: z
-    .array(characterNameSchema)
-    .min(1)
-    .max(MAIL_MAX_RECIPIENTS)
-    .transform((names) => {
-      const seen = new Set<string>();
-      return names.filter((name) => {
-        const key = name.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    }),
-  sender: mailText(1, 20).default('[GM]'),
-  title: mailText(1, 200),
-  message: mailText(0, 2000).default(''),
-  money: moneySchema.default({ gold: 0, silver: 0, copper: 0 }),
-  items: z.array(mailItemSchema).max(MAIL_MAX_ITEMS).default([]),
-});
+/** names: the listed recipients. online / all: the server picks every logged-in / live character at send time. */
+export const gmMailAudienceSchema = z.enum(['names', 'online', 'all']);
+export type GmMailAudience = z.infer<typeof gmMailAudienceSchema>;
+
+export const gmMailRequestSchema = z
+  .object({
+    audience: gmMailAudienceSchema.default('names'),
+    recipients: z
+      .array(characterNameSchema)
+      .max(MAIL_MAX_RECIPIENTS)
+      .default([])
+      .transform((names) => {
+        const seen = new Set<string>();
+        return names.filter((name) => {
+          const key = name.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }),
+    sender: mailText(1, 20).default('[GM]'),
+    title: mailText(1, 200),
+    message: mailText(0, 2000).default(''),
+    money: moneySchema.default({ gold: 0, silver: 0, copper: 0 }),
+    items: z.array(mailItemSchema).max(MAIL_MAX_ITEMS).default([]),
+  })
+  .superRefine((req, ctx) => {
+    if (req.audience === 'names' && req.recipients.length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['recipients'], message: 'Add at least one recipient' });
+    }
+    if (req.audience !== 'names' && req.recipients.length > 0) {
+      ctx.addIssue({ code: 'custom', path: ['recipients'], message: `Leave recipients empty when sending to ${req.audience}` });
+    }
+  });
 export type GmMailRequest = z.output<typeof gmMailRequestSchema>;
 export type GmMailRequestInput = z.input<typeof gmMailRequestSchema>;
+
+/** A live character for the mail page's picker. */
+export type GmMailCharacter = { charId: number; name: string; level: number; className: string; online: boolean };
 
 export type GmMailResult = { name: string; postId: number | null; error?: string };
 export type GmMailResponse = { results: GmMailResult[] };
