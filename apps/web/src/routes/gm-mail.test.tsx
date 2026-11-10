@@ -77,6 +77,7 @@ describe('GM mail page', () => {
     expect(await screen.findByText('Moose: sent (post 1000)')).toBeInTheDocument()
     expect(sentBodies(fetchMock, 'POST /gm/mail')).toEqual([
       {
+        audience: 'names',
         recipients: ['Moose'],
         sender: '[GM]',
         title: 'Hi',
@@ -153,6 +154,100 @@ describe('GM mail page', () => {
     await user.type(await screen.findByLabelText('Title'), 'Hi')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Add at least one recipient')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('GM mail page: picking recipients', () => {
+  const chars = [
+    { charId: 2, name: 'Kael', level: 40, className: 'Warrior', online: true },
+    { charId: 1, name: 'Moose', level: 50, className: 'Mage', online: false },
+  ]
+  const characters = { 'GET /gm/characters': () => json(200, chars) }
+
+  it('filters characters by search and adds one by clicking', async () => {
+    mockApi(characters)
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.type(await screen.findByLabelText('Recipients'), 'mo')
+    const list = await screen.findByRole('list', { name: 'Matching characters' })
+    expect(within(list).queryByRole('button', { name: /Kael/ })).not.toBeInTheDocument()
+    await user.click(within(list).getByRole('button', { name: /Moose/ }))
+    expect(screen.getByRole('button', { name: 'Remove Moose' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Recipients')).toHaveValue('')
+  })
+
+  it('adds the top match on Enter', async () => {
+    mockApi(characters)
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await screen.findByRole('tab', { name: 'All characters (2)' })
+    await user.type(screen.getByLabelText('Recipients'), 'ka{Enter}')
+    expect(screen.getByRole('button', { name: 'Remove Kael' })).toBeInTheDocument()
+  })
+
+  it('shows the online and all counts on the tabs', async () => {
+    mockApi(characters)
+    renderRoute('/gm/mail', { me: gm })
+    expect(await screen.findByRole('tab', { name: 'Everyone online (1)' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'All characters (2)' })).toBeInTheDocument()
+  })
+
+  it('sends to all characters after confirming the count', async () => {
+    const fetchMock = mockApi({
+      ...characters,
+      'POST /gm/mail': () => json(200, { results: [{ name: 'Kael', postId: 1000 }, { name: 'Moose', postId: 1001 }] }),
+    })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.click(await screen.findByRole('tab', { name: 'All characters (2)' }))
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send this mail?' })
+    expect(dialog).toHaveTextContent('This sends 2 letters')
+    expect(dialog).toHaveTextContent('Kael, Moose')
+    await user.click(within(dialog).getByRole('button', { name: 'Send 2 letters' }))
+    expect(await screen.findByText('Kael: sent (post 1000)')).toBeInTheDocument()
+    expect(sentBodies(fetchMock, 'POST /gm/mail')).toEqual([
+      {
+        audience: 'all',
+        recipients: [],
+        sender: '[GM]',
+        title: 'Hi',
+        message: '',
+        money: { gold: 0, silver: 0, copper: 0 },
+        items: [],
+      },
+    ])
+  })
+
+  it('goes back to names with only the failures after a bulk send', async () => {
+    mockApi({
+      ...characters,
+      'POST /gm/mail': () =>
+        json(200, {
+          results: [
+            { name: 'Kael', postId: null, error: 'Send failed, check the mailbox before resending' },
+            { name: 'Moose', postId: 1001 },
+          ],
+        }),
+    })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.click(await screen.findByRole('tab', { name: 'All characters (2)' }))
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(await screen.findByRole('button', { name: 'Send 2 letters' }))
+    await screen.findByText('Moose: sent (post 1001)')
+    expect(screen.getByRole('tab', { name: 'Choose names' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Remove Kael' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove Moose' })).not.toBeInTheDocument()
+  })
+
+  it('refuses to send to online when nobody is online', async () => {
+    mockApi({ 'GET /gm/characters': () => json(200, chars.map((c) => ({ ...c, online: false }))) })
+    const { user } = renderRoute('/gm/mail', { me: gm })
+    await user.click(await screen.findByRole('tab', { name: 'Everyone online (0)' }))
+    expect(screen.getByText('No one is online right now.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Title'), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('No one is online right now.')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
