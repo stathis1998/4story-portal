@@ -24,8 +24,8 @@ const SLOT_NAMES = [
   'Costume race',
 ]
 
-const LEFT = [3, 9, 5, 8, 6, 7]
-const RIGHT = [4, 12, 13, 10, 11, 14]
+const LEFT = [3, 4, 5, 8, 6, 7]
+const RIGHT = [9, 12, 13, 10, 11, 14]
 const WEAPONS = [0, 1, 2]
 const COSTUME = [15, 16, 17, 18]
 
