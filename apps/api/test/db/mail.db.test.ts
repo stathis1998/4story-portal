@@ -7,7 +7,10 @@ import type { DbService } from '../../src/db/db.service.js';
 import { type MailLetter, SqlMailRepository } from '../../src/gm/mail.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
-const procedureSql = readFileSync(path.resolve(process.cwd(), 'sql/TPortalGmPost.sql'), 'utf8');
+// Run in this order inside each test's transaction: the table, then the procedures that use it.
+const setupSql = ['TPORTALPOSTNOTIFY.sql', 'TPortalGmPost.sql', 'TGetReservedPost.sql'].map((file) =>
+  readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'),
+);
 
 type PostRow = {
   bType: number;
@@ -82,14 +85,45 @@ describe('SqlMailRepository against the _TEST copy', () => {
     ...overrides,
   });
 
-  /** Creates the procedure inside tx, so the rollback removes it again. */
+  /** Creates the table and procedures inside tx, so the rollback removes them again. */
   async function withRepo(fn: (repo: SqlMailRepository, tx: sql.Transaction) => Promise<void>) {
     await inRolledBackTransaction(db, async (tx) => {
-      await new sql.Request(tx)
-        .input('sql', sql.NVarChar(sql.MAX), procedureSql)
-        .query(`EXEC [${gameName}].sys.sp_executesql @sql`);
+      for (const batch of setupSql) {
+        await new sql.Request(tx)
+          .input('sql', sql.NVarChar(sql.MAX), batch)
+          .query(`EXEC [${gameName}].sys.sp_executesql @sql`);
+      }
       await fn(new SqlMailRepository(db).withTransaction(tx), tx);
     });
+  }
+
+  type ReservedCall = { ret: number; postId: number | null; sender: string | null; recver: string | null; title: string | null };
+
+  /** Calls TGetReservedPost the way the world server does, with every parameter as an output. */
+  async function getReservedPost(tx: sql.Transaction): Promise<ReservedCall> {
+    const params = await new sql.Request(tx).query<{ name: string; type: string; len: number }>(
+      `SELECT name, TYPE_NAME(user_type_id) AS type, max_length AS len FROM [${gameName}].sys.parameters
+       WHERE object_id = OBJECT_ID('[${gameName}].dbo.TGetReservedPost') ORDER BY parameter_id`,
+    );
+    const local = (name: string) => `@v_${name.slice(1)}`;
+    const declare = params.recordset
+      .map((p) => `DECLARE ${local(p.name)} ${p.type}${p.type === 'varchar' ? `(${p.len})` : ''};`)
+      .join('\n');
+    const args = params.recordset.map((p) => `${p.name} = ${local(p.name)} OUTPUT`).join(', ');
+    const result = await new sql.Request(tx).query<ReservedCall>(
+      `DECLARE @r INT;
+       ${declare}
+       EXEC @r = [${gameName}].dbo.TGetReservedPost ${args};
+       SELECT @r AS ret, @v_dwPostID AS postId, @v_szSender AS sender, @v_szRecver AS recver, @v_szTitle AS title;`,
+    );
+    return result.recordset[0];
+  }
+
+  async function notifyRows(tx: sql.Transaction): Promise<{ dwPostID: number; dwCharID: number }[]> {
+    const result = await new sql.Request(tx).query<{ dwPostID: number; dwCharID: number }>(
+      `SELECT dwPostID, dwCharID FROM [${gameName}].dbo.TPORTALPOSTNOTIFY ORDER BY dwPostID`,
+    );
+    return result.recordset;
   }
 
   async function post(tx: sql.Transaction, postId: number): Promise<PostRow> {
@@ -215,4 +249,82 @@ describe('SqlMailRepository against the _TEST copy', () => {
       const rows = await repo.findItems([stackable.itemId, 32767]);
       expect(rows).toEqual([{ itemId: stackable.itemId, name: expect.any(String), stack: stackable.stack }]);
     }));
+
+  describe('new-mail notification for online recipients', () => {
+    it('queues a notification with each letter', () =>
+      withRepo(async (repo, tx) => {
+        const postId = await repo.sendLetter(letter());
+        expect(await notifyRows(tx)).toEqual([{ dwPostID: postId, dwCharID: character.charId }]);
+      }));
+
+    it('queues nothing when the character is missing', () =>
+      withRepo(async (repo, tx) => {
+        await repo.sendLetter(letter({ charId: deleted.charId }));
+        expect(await notifyRows(tx)).toEqual([]);
+      }));
+
+    it('hands each notification to the world server once, without writing a letter', () =>
+      withRepo(async (repo, tx) => {
+        const postId = await repo.sendLetter(letter({ title: 'Hello' }));
+        const before = await postCount(tx);
+        expect(await getReservedPost(tx)).toEqual({
+          ret: 0,
+          postId,
+          sender: '[GM]',
+          recver: character.name,
+          title: '00000005Hello',
+        });
+        expect(await notifyRows(tx)).toEqual([]);
+        expect(await postCount(tx)).toBe(before);
+        expect((await getReservedPost(tx)).ret).toBe(1);
+      }));
+
+    it('hands out notifications oldest letter first', () =>
+      withRepo(async (repo, tx) => {
+        const first = await repo.sendLetter(letter());
+        const second = await repo.sendLetter(letter());
+        expect((await getReservedPost(tx)).postId).toBe(first);
+        expect((await getReservedPost(tx)).postId).toBe(second);
+      }));
+
+    it('drops a notification older than 10 minutes', () =>
+      withRepo(async (repo, tx) => {
+        await repo.sendLetter(letter());
+        await new sql.Request(tx).query(
+          `UPDATE [${gameName}].dbo.TPORTALPOSTNOTIFY SET dCreated = DATEADD(MINUTE, -11, GETDATE())`,
+        );
+        expect((await getReservedPost(tx)).ret).toBe(1);
+        expect(await notifyRows(tx)).toEqual([]);
+      }));
+
+    it('drops a notification whose letter is gone and moves on to the next', () =>
+      withRepo(async (repo, tx) => {
+        const gone = await repo.sendLetter(letter());
+        const kept = await repo.sendLetter(letter());
+        await new sql.Request(tx)
+          .input('id', sql.Int, gone)
+          .query(`DELETE FROM [${gameName}].dbo.TPOSTTABLE WHERE dwPostID = @id`);
+        expect((await getReservedPost(tx)).postId).toBe(kept);
+      }));
+
+    it('still delivers a reserved post as the game did before', () =>
+      withRepo(async (_repo, tx) => {
+        await new sql.Request(tx)
+          .input('id', sql.Int, character.charId)
+          .input('item', sql.SmallInt, single)
+          .query(
+            `INSERT INTO [${gameName}].dbo.TRESERVEDPOST
+               (dwRecverID, szSender, szTitle, szMessage, bSend, wItemID, bLevel, bCount, bGLevel, dwDuraMax, dwDuraCur,
+                bRefineCur, dEndTime, bGradeEffect, bMagic1, bMagic2, bMagic3, bMagic4, bMagic5, bMagic6,
+                wValue1, wValue2, wValue3, wValue4, wValue5, wValue6, dwTime1, dwTime2, dwTime3, dwTime4, dwTime5, dwTime6,
+                bGem, wMoggItemID)
+             VALUES (@id, 'Team', '00000002Hi', '00000000', 0, @item, 0, 1, 0, 0, 0,
+                0, '1900-01-01', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)`,
+          );
+        const call = await getReservedPost(tx);
+        expect(call).toMatchObject({ ret: 0, sender: 'Team', recver: character.name, title: '00000002Hi' });
+        expect(await post(tx, call.postId!)).toMatchObject({ bType: 1, szRecvName: character.name });
+        expect(await attached(tx, call.postId!)).toHaveLength(1);
+      }));
+  });
 });

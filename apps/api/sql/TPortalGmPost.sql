@@ -1,6 +1,8 @@
 -- GM mail from the portal: one Operator letter (bType 6) with optional money and up to 3 items.
 -- Mirrors OPTool_GamePost / TEventItemGiveByPost. Validation happens in the portal API; this procedure
--- writes no audit row (the API does, through OPTool_ManagerLog).
+-- writes no audit row (the API does, with the manager log table named in its config).
+-- It also queues a row in TPORTALPOSTNOTIFY, which TGetReservedPost hands to the world server so an
+-- online recipient gets the game's "new mail" alert within a minute.
 -- Returns the new dwPostID, or 0 when the character does not exist or is deleted.
 CREATE OR ALTER PROCEDURE dbo.TPortalGmPost
 	@pCharID	INT,
@@ -41,6 +43,8 @@ BEGIN
 		(@pCharID, @pSender, 0, @szRecv, @szTitle, @szMessage, 6, 0, @dwGold, @dwSilver, @dwCooper, GETDATE());
 
 	SET @dwPostID = SCOPE_IDENTITY();
+
+	INSERT INTO TPORTALPOSTNOTIFY (dwPostID, dwCharID) VALUES (@dwPostID, @pCharID);
 
 	WHILE @slot <= 3
 	BEGIN
