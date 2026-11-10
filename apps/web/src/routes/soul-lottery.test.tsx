@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mockApi } from '../test/mock-api'
+import { clickNav } from '../test/nav'
 import { renderRoute } from '../test/render-route'
 
 const me = { userId: 1, username: 'friend', isGm: false }
@@ -30,7 +31,7 @@ describe('soul lottery simulator', () => {
     mockApi()
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(await screen.findByRole('link', { name: 'Soul Lottery' }))
+    await clickNav(user, 'Tools', 'Soul Lottery')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/soul-lottery'))
     expect(await screen.findByRole('heading', { name: 'Soul Lottery Simulator', level: 1 })).toBeInTheDocument()

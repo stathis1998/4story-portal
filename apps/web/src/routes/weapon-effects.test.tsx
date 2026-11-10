@@ -2,6 +2,7 @@ import type { GradeLayer, WeaponEffectsData, WeaponSearchResult } from '@4story-
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { json, mockApi } from '../test/mock-api'
+import { clickNav } from '../test/nav'
 import { renderRoute } from '../test/render-route'
 
 vi.mock('../components/weapons/WeaponViewer', () => ({
@@ -39,7 +40,7 @@ describe('weapon effects page', () => {
     mockApi(routes())
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(await screen.findByRole('link', { name: 'Weapon Effects' }))
+    await clickNav(user, 'Tools', 'Weapon Effects')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/weapon-effects'))
     expect(await screen.findByRole('heading', { name: 'Weapon Effects', level: 1 })).toBeInTheDocument()
