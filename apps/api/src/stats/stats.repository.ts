@@ -1,6 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service.js';
-import type { AccountRow, OptionRuleRow, CharacterRow, CombatRow, CompanionRow, GearRow, SessionRow, SocialRow, SoulLotteryRow, SpendingRow, StatRows, TitleRow } from './stats-rules.js';
+import {
+  type AccountRow,
+  type CharacterRow,
+  type CombatRow,
+  type CompanionRow,
+  type GearRow,
+  type OptionRuleRow,
+  type SessionRow,
+  type SocialRow,
+  type SoulLotteryRow,
+  type SpendingRow,
+  type StatRows,
+  type TitleRow,
+  UPGRADE_DESTROYED,
+  UPGRADE_KIND_SCROLL,
+  type UpgradeAttemptRow,
+  type UpgradeFailureRow,
+  type UpgradeLossRow,
+} from './stats-rules.js';
 
 export interface StatsRepository {
   loadRows(): Promise<StatRows>;
@@ -12,6 +30,7 @@ const INVEN_EQUIP = 254; // NetCode.h
 const STORAGE_INVEN = 0;
 const TOWNER_CHAR = 0;
 // enum CHARCOUNTER in TMapType.h
+const COUNTER_UPGRADE_FAIL = 1;
 const COUNTER_MONEY_SPENT = 3;
 const COUNTER_SOULLOT_WON = 4;
 const COUNTER_SOULLOT_LOST = 5;
@@ -90,7 +109,23 @@ export class SqlStatsRepository implements StatsRepository {
   constructor(private readonly db: DbService) {}
 
   async loadRows(): Promise<StatRows> {
-    const [characters, sessions, gear, optionRules, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts] = await Promise.all([
+    const [
+      characters,
+      sessions,
+      gear,
+      optionRules,
+      companions,
+      titles,
+      titlesTotal,
+      social,
+      combat,
+      spending,
+      soulLottery,
+      upgradeAttempts,
+      upgradeLosses,
+      upgradeFailures,
+      accounts,
+    ] = await Promise.all([
       this.characters(),
       this.sessions(),
       this.gear(),
@@ -102,9 +137,66 @@ export class SqlStatsRepository implements StatsRepository {
       this.combat(),
       this.spending(),
       this.soulLottery(),
+      this.upgradeAttempts(),
+      this.upgradeLosses(),
+      this.upgradeFailures(),
       this.accounts(),
     ]);
-    return { characters, sessions, gear, optionRules, companions, titles, titlesTotal, social, combat, spending, soulLottery, accounts };
+    return {
+      characters,
+      sessions,
+      gear,
+      optionRules,
+      companions,
+      titles,
+      titlesTotal,
+      social,
+      combat,
+      spending,
+      soulLottery,
+      upgradeAttempts,
+      upgradeLosses,
+      upgradeFailures,
+      accounts,
+    };
+  }
+
+  // Grouped in SQL, so the snapshot stays small however long the log grows.
+  private async upgradeAttempts(): Promise<UpgradeAttemptRow[]> {
+    const { characters, upgradeLog } = this.db.tables;
+    const day = 'CONVERT(char(10), l.dLogDate, 23)';
+    const result = await this.db.pool.request().query<UpgradeAttemptRow>(
+      `SELECT l.dwCharID AS charId, l.bKind AS kind, l.bLevelBefore AS level, l.bResult AS result, ${day} AS day,
+              COUNT(*) AS attempts, SUM(CAST(l.bChance AS int)) AS chanceTotal
+       FROM ${upgradeLog} l
+       JOIN ${characters} c ON c.dwCharID = l.dwCharID AND c.bDelete = 0
+       GROUP BY l.dwCharID, l.bKind, l.bLevelBefore, l.bResult, ${day}`,
+    );
+    return result.recordset;
+  }
+
+  private async upgradeLosses(): Promise<UpgradeLossRow[]> {
+    const { characters, upgradeLog, items } = this.db.tables;
+    const result = await this.db.pool.request().query<UpgradeLossRow>(
+      `SELECT l.dwCharID AS charId, l.wItemID AS itemId, chart.szNAME AS name, l.bLevelBefore AS level, l.dLogDate AS at
+       FROM ${upgradeLog} l
+       JOIN ${characters} c ON c.dwCharID = l.dwCharID AND c.bDelete = 0
+       LEFT JOIN ${items} chart ON chart.wItemID = l.wItemID
+       WHERE l.bKind = ${UPGRADE_KIND_SCROLL} AND l.bResult = ${UPGRADE_DESTROYED}`,
+    );
+    return result.recordset;
+  }
+
+  private async upgradeFailures(): Promise<UpgradeFailureRow[]> {
+    const { characters, characterCounters } = this.db.tables;
+    const result = await this.db.pool.request().query<{ charId: number; failed: string }>(
+      `SELECT s.dwCharID AS charId, s.nValue AS failed
+       FROM ${characterCounters} s
+       JOIN ${characters} c ON c.dwCharID = s.dwCharID AND c.bDelete = 0
+       WHERE s.wStatID = ${COUNTER_UPGRADE_FAIL}`,
+    );
+    // The driver returns bigint as text.
+    return result.recordset.map((row) => ({ charId: row.charId, failed: Number(row.failed) }));
   }
 
   private async soulLottery(): Promise<SoulLotteryRow[]> {

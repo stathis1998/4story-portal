@@ -36,6 +36,9 @@ function AuthedLayout() {
               <Link to="/upgrade-simulator" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Upgrades
               </Link>
+              <Link to="/upgrade-stats" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
+                Upgrade Stats
+              </Link>
               <Link to="/mounts-chakras" className="hover:underline" activeProps={{ className: 'text-fg' }} inactiveProps={{ className: 'text-muted' }}>
                 Mounts &amp; Chakras
               </Link>

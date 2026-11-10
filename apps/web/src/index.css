@@ -21,6 +21,13 @@
   --secondary: #c8bfb6;
   --danger: #ff9f43;
   --danger-surface: #2b1d0f;
+
+  /* Upgrade outcome charts: a diverging set checked with the dataviz validator on --surface.
+     Success is the cool pole, destroyed the warm pole, saved the neutral middle. */
+  --viz-success: #3399bd;
+  --viz-saved: #776b66;
+  --viz-lost: #f2a3ad;
+  --viz-destroyed: #d8344f;
 }
 
 @theme inline {
