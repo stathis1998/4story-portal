@@ -1,4 +1,6 @@
 import {
+  ARMOR_KINDS,
+  EFFECT_KINDS,
   GRADE_EFFECTS,
   type GradeLayer,
   gradeSkin,
@@ -30,7 +32,7 @@ const wholeNumber = (value: unknown) => {
 }
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export const Route = createFileRoute('/_authed/weapon-effects')({
+export const Route = createFileRoute('/_authed/effects')({
   // Anything odd in the address is pulled back inside what the game allows.
   validateSearch: (search: Record<string, unknown>): Search => {
     const item = wholeNumber(search.item)
@@ -42,21 +44,21 @@ export const Route = createFileRoute('/_authed/weapon-effects')({
       skin: skin !== null && skin > 0 ? skin : undefined,
     }
   },
-  component: WeaponEffectsPage,
+  component: EffectsPage,
 })
 
-const kindName = (kind: number) => WEAPON_KINDS.find((entry) => entry.kind === kind)?.name ?? 'Weapon'
+const kindName = (kind: number) => EFFECT_KINDS.find((entry) => entry.kind === kind)?.name ?? 'Item'
 
 function tierText(level: number): string {
   if (level === 0) return 'No glow at +0.'
   if (level <= 5) return 'No glow from +1 to +5.'
-  if (level <= 10) return 'From +6 to +10 every weapon gets the same first glow.'
-  if (level <= 15) return 'From +11 to +15 every weapon gets the same second glow.'
-  if (level === 16) return 'At +16 every weapon glows gold.'
+  if (level <= 10) return 'From +6 to +10 every item gets the same first glow.'
+  if (level <= 15) return 'From +11 to +15 every item gets the same second glow.'
+  if (level === 16) return 'At +16 every item glows gold.'
   return 'From +17 the look depends only on the effect the item rolled, so a +17 and a +24 with the same effect look the same.'
 }
 
-function WeaponEffectsPage() {
+function EffectsPage() {
   const search = Route.useSearch()
   const level = search.level ?? DEFAULT_LEVEL
   const effect = search.effect ?? 1
@@ -76,10 +78,10 @@ function WeaponEffectsPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="text-4xl">Weapon Effects</h1>
+      <h1 className="text-4xl">Effects</h1>
       <p className="mt-1 mb-6 text-muted">
-        See any weapon the way the game draws it at each upgrade level. The model, the glow, its colours and how it moves come
-        straight from the game client. Drag to turn the weapon.
+        See any weapon or armour piece the way the game draws it at each upgrade level. The model, the glow, its colours and how it
+        moves come straight from the game client. Drag to turn it.
       </p>
 
       <WeaponFinder onPick={(picked) => set({ item: picked.itemId, skin: undefined })} />
@@ -87,12 +89,12 @@ function WeaponEffectsPage() {
       {effects.isError || weapon.isError ? (
         <div className="rounded-xs border border-danger/40 bg-danger-surface p-5">
           <p className="text-danger">
-            {effects.isError ? 'Weapon previews are not available right now.' : 'That weapon has no model in the game.'}
+            {effects.isError ? 'Weapon previews are not available right now.' : 'That item has no model in the game.'}
           </p>
         </div>
       ) : search.item === undefined ? (
         <section className="rounded-xs border border-line bg-surface p-5">
-          <p className="text-muted">Pick a weapon to see it in 3D.</p>
+          <p className="text-muted">Pick a weapon or armour piece to see it in 3D.</p>
         </section>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-[1fr_22rem]">
@@ -130,9 +132,9 @@ function WeaponEffectsPage() {
       <section className="mt-4 rounded-xs border border-line bg-surface p-5 text-sm text-muted">
         <h2 className="mb-2 text-xl text-fg">How effects work</h2>
         <p>
-          When a weapon first reaches +17 the server rolls one of 39 effects, each with the same 1 in 39 chance, and the item keeps it.
-          A Change Effect scroll rolls a new one. The glow is a texture the game blends over the whole weapon and keeps moving; nothing
-          else changes with the level from +17 to +24.
+          When a weapon or armour piece first reaches +17 the server rolls one of 39 effects, each with the same 1 in 39 chance, and the
+          item keeps it. A Change Effect scroll rolls a new one. The glow is a texture the game blends over the whole item and keeps
+          moving; nothing else changes with the level from +17 to +24. Cloaks show their effect differently and aren't covered here.
         </p>
       </section>
     </main>
@@ -153,11 +155,11 @@ function WeaponFinder({ onPick }: { onPick: (weapon: WeaponSearchResult) => void
   const { data, isError } = useQuery({ ...weaponSearchQueryOptions(query.length >= MIN_LETTERS ? query : '', kind), enabled: searching })
 
   return (
-    <section aria-label="Weapon search" className="mb-6 rounded-xs border border-line bg-surface p-5">
+    <section aria-label="Item search" className="mb-6 rounded-xs border border-line bg-surface p-5">
       <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
         <div>
           <label htmlFor="weapon-search" className="text-xs font-bold tracking-wider text-muted uppercase">
-            Find a weapon
+            Find an item
           </label>
           <input
             id="weapon-search"
@@ -181,18 +183,27 @@ function WeaponFinder({ onPick }: { onPick: (weapon: WeaponSearchResult) => void
             className="mt-1.5 w-full rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent"
           >
             <option value="">Any kind</option>
-            {WEAPON_KINDS.filter(({ kind: id }) => id !== 10 && id !== 11).map((entry) => (
-              <option key={entry.kind} value={entry.kind}>
-                {entry.name}
-              </option>
-            ))}
+            <optgroup label="Weapons">
+              {WEAPON_KINDS.filter(({ kind: id }) => id !== 10 && id !== 11).map((entry) => (
+                <option key={entry.kind} value={entry.kind}>
+                  {entry.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Armour">
+              {ARMOR_KINDS.map((entry) => (
+                <option key={entry.kind} value={entry.kind}>
+                  {entry.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       </div>
       {searching && isError && <p className="mt-3 text-sm text-danger">Could not search right now.</p>}
-      {searching && data?.length === 0 && <p className="mt-3 text-sm text-muted">No weapons found.</p>}
+      {searching && data?.length === 0 && <p className="mt-3 text-sm text-muted">Nothing found.</p>}
       {searching && data && data.length > 0 && (
-        <ul aria-label="Weapons found" className="mt-3 flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+        <ul aria-label="Items found" className="mt-3 flex max-h-56 flex-wrap gap-2 overflow-y-auto">
           {data.map((weapon) => (
             <li key={weapon.itemId}>
               <button

@@ -23,6 +23,19 @@ export const WEAPON_KINDS = [
   { kind: 12, name: 'Shield' },
 ] as const;
 
+/** Armour takes the same layers (TItemGradeVisual.tcd has rows for kinds 1 to 18). Cloaks (19) work differently and are left out. */
+export const ARMOR_KINDS = [
+  { kind: 13, name: 'Cloth' },
+  { kind: 14, name: 'Uniform' },
+  { kind: 15, name: 'Light leather' },
+  { kind: 16, name: 'Heavy leather' },
+  { kind: 17, name: 'Light armour' },
+  { kind: 18, name: 'Heavy armour' },
+] as const;
+
+/** Every item kind the effect preview covers. */
+export const EFFECT_KINDS: readonly { kind: number; name: string }[] = [...WEAPON_KINDS, ...ARMOR_KINDS];
+
 const NO_VISUAL = 'No visible effect on weapons in game.';
 
 // Names from CTClientGame::AddEffectString (TClientGame.cpp:28544) and TClientType.h:837.
@@ -125,6 +138,6 @@ export type WeaponSearchResult = { itemId: number; name: string; kind: number; l
 
 export const weaponSearchSchema = z.object({
   q: z.string().trim().max(40).optional(),
-  kind: z.coerce.number().int().min(1).max(12).optional(),
+  kind: z.coerce.number().int().min(1).max(18).optional(),
 });
 export type WeaponSearch = z.infer<typeof weaponSearchSchema>;

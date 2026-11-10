@@ -225,9 +225,9 @@ export default function WeaponViewer({ itemId, skinId, layer, name }: Props) {
     status === 'unsupported'
       ? 'Your browser cannot show 3D models.'
       : status === 'failed'
-        ? 'This weapon could not be loaded.'
+        ? 'This item could not be loaded.'
         : status === 'loading'
-          ? 'Loading weapon...'
+          ? 'Loading model...'
           : null
 
   return (

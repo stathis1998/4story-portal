@@ -94,16 +94,18 @@ describe('buildGradeLayers', () => {
   };
   const read = ({ file }: { file: string }) => files[file];
 
-  it('builds a layer for each weapon kind and skin with a texture, and keeps each texture once', () => {
+  it('builds a layer for each weapon and armour kind and skin with a texture, and keeps each texture once', () => {
     const chart = new Map([
       ['1:1', { texture: 100, op: 19 }],
-      ['13:1', { texture: 100, op: 19 }],
+      ['18:1', { texture: 100, op: 19 }],
+      ['19:1', { texture: 100, op: 19 }],
     ]);
 
     const { layers, pngs } = buildGradeLayers(chart, textures, read);
 
     expect(layers['1:1']).toEqual({ texture: 100, op: 19, keys: [{ tick: 0, u: 0, v: 0, rotation: 0, scaleU: 1, scaleV: 1 }], loopMs: 5000, swatch: '#ff0000' });
-    expect(layers['13:1']).toBeUndefined();
+    expect(layers['18:1']).toMatchObject({ texture: 100 });
+    expect(layers['19:1']).toBeUndefined();
     expect([...pngs.keys()]).toEqual([100]);
   });
 
@@ -120,15 +122,19 @@ describe('buildGradeLayers', () => {
 });
 
 describe('parseWeaponItems', () => {
-  it('keeps only upgradable weapons with a visual, with their names', () => {
+  it('keeps only upgradable weapons and armour with a visual, with their names', () => {
     const items = parseWeaponItems(itemChart([
       { id: 7625, kind: 1, name: 'Sword of Dawn', level: 85, canGrade: 1, visual: 4 },
-      { id: 8000, kind: 13, name: 'Plate', level: 80, canGrade: 1, visual: 5 },
+      { id: 8000, kind: 18, name: 'Plate', level: 80, canGrade: 1, visual: 5 },
+      { id: 8003, kind: 19, name: 'Cape', level: 80, canGrade: 1, visual: 5 },
       { id: 8001, kind: 6, name: 'Plain Bow', level: 10, canGrade: 0, visual: 6 },
       { id: 8002, kind: 6, name: 'No Look', level: 10, canGrade: 1, visual: 0 },
     ]));
 
-    expect(items).toEqual([{ itemId: 7625, name: 'Sword of Dawn', kind: 1, level: 85, visualId: 4 }]);
+    expect(items).toEqual([
+      { itemId: 7625, name: 'Sword of Dawn', kind: 1, level: 85, visualId: 4 },
+      { itemId: 8000, name: 'Plate', kind: 18, level: 80, visualId: 5 },
+    ]);
   });
 });
 

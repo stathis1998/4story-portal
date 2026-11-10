@@ -41,7 +41,7 @@ describe('header menu', () => {
     expect(within(screen.getByRole('list', { name: 'Tools' })).getAllByRole('link').map((link) => link.textContent)).toEqual([
       'Upgrade Simulator',
       'Soul Lottery',
-      'Weapon Effects',
+      'Effects',
       'Mounts & Chakras',
     ])
 

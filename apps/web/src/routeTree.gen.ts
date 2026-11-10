@@ -14,6 +14,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
+import { Route as AuthedEffectsRouteImport } from './routes/_authed/effects'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
@@ -21,7 +22,6 @@ import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
-import { Route as AuthedWeaponEffectsRouteImport } from './routes/_authed/weapon-effects'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
@@ -51,6 +51,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
   id: '/characters',
   path: '/characters',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedEffectsRoute = AuthedEffectsRouteImport.update({
+  id: '/effects',
+  path: '/effects',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedHallOfFameRoute = AuthedHallOfFameRouteImport.update({
@@ -86,11 +91,6 @@ const AuthedUpgradeSimulatorRoute = AuthedUpgradeSimulatorRouteImport.update({
 const AuthedUpgradeStatsRoute = AuthedUpgradeStatsRouteImport.update({
   id: '/upgrade-stats',
   path: '/upgrade-stats',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedWeaponEffectsRoute = AuthedWeaponEffectsRouteImport.update({
-  id: '/weapon-effects',
-  path: '/weapon-effects',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
@@ -129,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -136,7 +137,6 @@ export interface FileRoutesByFullPath {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
-  '/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -149,6 +149,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -156,7 +157,6 @@ export interface FileRoutesByTo {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
-  '/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
@@ -171,6 +171,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
+  '/_authed/effects': typeof AuthedEffectsRoute
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -178,7 +179,6 @@ export interface FileRoutesById {
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
-  '/_authed/weapon-effects': typeof AuthedWeaponEffectsRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
@@ -193,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
@@ -200,7 +201,6 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
-    | '/weapon-effects'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -213,6 +213,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
@@ -220,7 +221,6 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
-    | '/weapon-effects'
     | '/characters/$id'
     | '/gm/events'
     | '/gm/logins'
@@ -234,6 +234,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authed/characters'
+    | '/_authed/effects'
     | '/_authed/hall-of-fame'
     | '/_authed/leaderboard'
     | '/_authed/mounts-chakras'
@@ -241,7 +242,6 @@ export interface FileRouteTypes {
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
-    | '/_authed/weapon-effects'
     | '/_authed/characters_/$id'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
@@ -294,6 +294,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedCharactersRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/effects': {
+      id: '/_authed/effects'
+      path: '/effects'
+      fullPath: '/effects'
+      preLoaderRoute: typeof AuthedEffectsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/hall-of-fame': {
       id: '/_authed/hall-of-fame'
       path: '/hall-of-fame'
@@ -343,13 +350,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUpgradeStatsRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/weapon-effects': {
-      id: '/_authed/weapon-effects'
-      path: '/weapon-effects'
-      fullPath: '/weapon-effects'
-      preLoaderRoute: typeof AuthedWeaponEffectsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -397,6 +397,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
+  AuthedEffectsRoute: typeof AuthedEffectsRoute
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
@@ -404,7 +405,6 @@ interface AuthedRouteChildren {
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
-  AuthedWeaponEffectsRoute: typeof AuthedWeaponEffectsRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
@@ -415,6 +415,7 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
+  AuthedEffectsRoute: AuthedEffectsRoute,
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,
@@ -422,7 +423,6 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
-  AuthedWeaponEffectsRoute: AuthedWeaponEffectsRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,

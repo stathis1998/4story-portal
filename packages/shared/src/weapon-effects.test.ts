@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRADE_EFFECTS, gradeSkin, layerKey, WEAPON_KINDS, weaponSearchSchema } from './weapon-effects.js';
+import { ARMOR_KINDS, EFFECT_KINDS, GRADE_EFFECTS, gradeSkin, layerKey, WEAPON_KINDS, weaponSearchSchema } from './weapon-effects.js';
 
 describe('gradeSkin', () => {
   it('has no layer at +0', () => {
@@ -55,6 +55,12 @@ describe('weapon kinds and search', () => {
     expect(WEAPON_KINDS[5].name).toBe('Bow');
   });
 
+  it('names the 6 armour kinds, which take the same effects', () => {
+    expect(ARMOR_KINDS.map((kind) => kind.kind)).toEqual([13, 14, 15, 16, 17, 18]);
+    expect(ARMOR_KINDS[5].name).toBe('Heavy armour');
+    expect(EFFECT_KINDS).toHaveLength(18);
+  });
+
   it('keys layers by kind and skin', () => {
     expect(layerKey(6, 37)).toBe('6:37');
   });
@@ -62,6 +68,7 @@ describe('weapon kinds and search', () => {
   it('trims the search text and checks the kind', () => {
     expect(weaponSearchSchema.parse({ q: ' bow ' })).toEqual({ q: 'bow' });
     expect(weaponSearchSchema.parse({ kind: '6' })).toEqual({ kind: 6 });
-    expect(weaponSearchSchema.safeParse({ kind: 13 }).success).toBe(false);
+    expect(weaponSearchSchema.parse({ kind: '18' })).toEqual({ kind: 18 });
+    expect(weaponSearchSchema.safeParse({ kind: 19 }).success).toBe(false);
   });
 });

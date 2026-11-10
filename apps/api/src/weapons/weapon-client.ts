@@ -1,4 +1,4 @@
-import { type GradeLayer, type GradeOp, layerKey, WEAPON_KINDS } from '@4story-portal/shared';
+import { EFFECT_KINDS, type GradeLayer, type GradeOp, layerKey } from '@4story-portal/shared';
 import { ITEM_LAYOUT } from '../gm/game-icons-import.js';
 import { ArchiveReader } from '../gm/game-places-import.js';
 import {
@@ -84,10 +84,11 @@ export function parseGradeVisualChart(file: Buffer): Map<string, GradeVisual> {
 }
 
 const GRADE_OPS: readonly number[] = [1, 2, 3, 4, 5, 6, 19];
-const WEAPON_KIND_IDS = new Set<number>(WEAPON_KINDS.map(({ kind }) => kind));
+/** Weapons and armour: the kinds the preview covers. */
+const EFFECT_KIND_IDS = new Set<number>(EFFECT_KINDS.map(({ kind }) => kind));
 
 /**
- * One layer per weapon kind and skin whose texture the client has. A missing or empty texture, or
+ * One layer per weapon or armour kind and skin whose texture the client has. A missing or empty texture, or
  * an op the client never uses, leaves no layer, as the client drops those rows when it loads.
  */
 export function buildGradeLayers(
@@ -99,7 +100,7 @@ export function buildGradeLayers(
   const missing = new Set<number>();
   const layers: Record<string, GradeLayer> = {};
   for (const [key, { texture, op }] of chart) {
-    if (!WEAPON_KIND_IDS.has(Number(key.split(':')[0])) || texture === 0 || !GRADE_OPS.includes(op) || missing.has(texture)) continue;
+    if (!EFFECT_KIND_IDS.has(Number(key.split(':')[0])) || texture === 0 || !GRADE_OPS.includes(op) || missing.has(texture)) continue;
     let png = pngs.get(texture);
     if (!png) {
       png = extractTexture(texture, textures, read) ?? undefined;
@@ -124,7 +125,7 @@ const FIELD_LEVEL = 10;
 const FIELD_CAN_GRADE = 25;
 const FIELD_VISUAL = 40;
 
-/** The upgradable weapons in TItem.tcd that have a look, with the names players see. */
+/** The upgradable weapons and armour in TItem.tcd that have a look, with the names players see. */
 export function parseWeaponItems(file: Buffer): WeaponItem[] {
   const reader = new ArchiveReader(file);
   const items: WeaponItem[] = [];
@@ -141,7 +142,7 @@ export function parseWeaponItems(file: Buffer): WeaponItem[] {
         fields.push(0);
       }
     }
-    if (WEAPON_KIND_IDS.has(fields[FIELD_KIND]) && fields[FIELD_CAN_GRADE] && fields[FIELD_VISUAL]) {
+    if (EFFECT_KIND_IDS.has(fields[FIELD_KIND]) && fields[FIELD_CAN_GRADE] && fields[FIELD_VISUAL]) {
       items.push({ itemId: fields[FIELD_ID], name, kind: fields[FIELD_KIND], level: fields[FIELD_LEVEL], visualId: fields[FIELD_VISUAL] });
     }
   }

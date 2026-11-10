@@ -21,10 +21,12 @@ const effects: WeaponEffectsData = {
     '1:4': layer(1089471, 5),
     '1:5': layer(1089473, 6, '#a65f3a'),
     '1:52': layer(30016, 6),
+    '18:5': layer(1089499, 6),
   },
 }
 
 const sword: WeaponSearchResult = { itemId: 7625, name: 'Sword of Dawn', kind: 1, level: 85, icon: null }
+const plate: WeaponSearchResult = { itemId: 8000, name: 'Dawn Plate', kind: 18, level: 80, icon: null }
 
 const routes = (overrides = {}) => ({
   'GET /weapon-effects': () => json(200, effects),
@@ -35,39 +37,47 @@ const routes = (overrides = {}) => ({
 
 const viewer = () => screen.findByTestId('viewer')
 
-describe('weapon effects page', () => {
+describe('effects page', () => {
   it('is linked from the header', async () => {
     mockApi(routes())
     const { user, router } = renderRoute('/characters', { me })
 
-    await clickNav(user, 'Tools', 'Weapon Effects')
+    await clickNav(user, 'Tools', 'Effects')
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/weapon-effects'))
-    expect(await screen.findByRole('heading', { name: 'Weapon Effects', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('Pick a weapon to see it in 3D.')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.pathname).toBe('/effects'))
+    expect(await screen.findByRole('heading', { name: 'Effects', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('Pick a weapon or armour piece to see it in 3D.')).toBeInTheDocument()
   })
 
   it('sends visitors who are not logged in to the login page', async () => {
     mockApi()
-    const { router } = renderRoute('/weapon-effects', { me: null })
+    const { router } = renderRoute('/effects', { me: null })
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
   })
 
   it('finds a weapon by name and shows it', async () => {
     mockApi(routes())
-    const { user, router } = renderRoute('/weapon-effects', { me })
+    const { user, router } = renderRoute('/effects', { me })
 
-    await user.type(await screen.findByLabelText('Find a weapon'), 'dawn')
+    await user.type(await screen.findByLabelText('Find an item'), 'dawn')
     await user.click(await screen.findByRole('button', { name: /Sword of Dawn/ }))
 
     await waitFor(() => expect(router.state.location.search).toMatchObject({ item: 7625 }))
     expect(await viewer()).toHaveTextContent('Sword of Dawn model 7625 skin none')
   })
 
+  it('shows armour with the layer for its own kind', async () => {
+    mockApi(routes({ 'GET /weapon-effects/weapons/8000': () => json(200, plate) }))
+    renderRoute('/effects?item=8000&level=17&effect=2', { me })
+
+    expect(await viewer()).toHaveTextContent('Dawn Plate model 8000 skin none layer 1089499/6')
+    expect(screen.getByText('Heavy armour, level 80')).toBeInTheDocument()
+  })
+
   it('lists every effect from +17, with game names and the client quirks', async () => {
     mockApi(routes())
-    renderRoute('/weapon-effects?item=7625&level=17&effect=1', { me })
+    renderRoute('/effects?item=7625&level=17&effect=1', { me })
 
     const chips = within(await screen.findByRole('group', { name: 'Effects' })).getAllByRole('button')
     expect(chips).toHaveLength(39)
@@ -79,7 +89,7 @@ describe('weapon effects page', () => {
 
   it('switches the effect, keeping it in the address', async () => {
     mockApi(routes())
-    const { user, router } = renderRoute('/weapon-effects?item=7625&level=23&effect=1', { me })
+    const { user, router } = renderRoute('/effects?item=7625&level=23&effect=1', { me })
 
     await user.click(await screen.findByRole('button', { name: /Fire/ }))
 
@@ -90,7 +100,7 @@ describe('weapon effects page', () => {
 
   it('shows no effect choice below +17, only the tier', async () => {
     mockApi(routes())
-    renderRoute('/weapon-effects?item=7625&level=12', { me })
+    renderRoute('/effects?item=7625&level=12', { me })
 
     expect(await screen.findByText(/\+11 to \+15/)).toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Effects' })).not.toBeInTheDocument()
@@ -99,14 +109,14 @@ describe('weapon effects page', () => {
 
   it('draws no layer for an effect the game shows nothing for', async () => {
     mockApi(routes())
-    renderRoute('/weapon-effects?item=7625&level=20&effect=19', { me })
+    renderRoute('/effects?item=7625&level=20&effect=19', { me })
 
     expect(await viewer()).toHaveTextContent('layer none')
   })
 
   it('keeps odd address values inside the game limits', async () => {
     mockApi(routes())
-    renderRoute('/weapon-effects?item=7625&level=99&effect=0', { me })
+    renderRoute('/effects?item=7625&level=99&effect=0', { me })
 
     expect(await screen.findByText('+24')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sea/ })).toHaveAttribute('aria-pressed', 'true')
@@ -114,14 +124,14 @@ describe('weapon effects page', () => {
 
   it('passes a skin on to the viewer', async () => {
     mockApi(routes())
-    renderRoute('/weapon-effects?item=7625&level=17&effect=2&skin=9001', { me })
+    renderRoute('/effects?item=7625&level=17&effect=2&skin=9001', { me })
 
     expect(await viewer()).toHaveTextContent('skin 9001')
   })
 
   it('says so when previews are not available', async () => {
     mockApi(routes({ 'GET /weapon-effects': () => json(503, { message: 'Weapon previews are not available' }) }))
-    renderRoute('/weapon-effects?item=7625', { me })
+    renderRoute('/effects?item=7625', { me })
 
     expect(await screen.findByText('Weapon previews are not available right now.')).toBeInTheDocument()
   })

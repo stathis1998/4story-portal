@@ -99,7 +99,7 @@ describe('weapon effect routes', () => {
   });
 
   it('is 400 for a bad kind', async () => {
-    expect((await player.get('/api/weapon-effects/weapons?kind=13')).status).toBe(400);
+    expect((await player.get('/api/weapon-effects/weapons?kind=19')).status).toBe(400);
   });
 
   it('sends a texture as PNG, and 404 for one it does not have', async () => {
