@@ -25,6 +25,9 @@ const envSchema = z.object({
   CONTROL_PASSWORD: controlCredential,
   GM_LOCATIONS_FILE: z.string().min(1),
   PORTAL_DB_FILE: z.string().min(1).default('./data/portal.sqlite'),
+  // The game client's Tcd folder, for weapon previews. Without it those routes answer 503.
+  GAME_TCD_DIR: z.string().min(1).optional(),
+  WEAPON_MODEL_CACHE_DIR: z.string().min(1).default('./data/weapon-models'),
 });
 
 export type AppConfig = {
@@ -41,6 +44,7 @@ export type AppConfig = {
   gm: { usernames: string[]; locationsFile: string };
   portalDbFile: string;
   control: { host: string; port: number; user: string; password: string };
+  weapons: { gameTcdDir: string | null; modelCacheDir: string };
 };
 
 export const CONFIG = Symbol('CONFIG');
@@ -77,6 +81,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       user: e.CONTROL_USER,
       password: e.CONTROL_PASSWORD,
     },
+    weapons: { gameTcdDir: e.GAME_TCD_DIR ?? null, modelCacheDir: e.WEAPON_MODEL_CACHE_DIR },
   };
 }
 
