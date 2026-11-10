@@ -1,20 +1,25 @@
 // A copy of the game's item chart (TITEMCHART: mounts are bType 12 bKind 23, chakras bType 17 bKind 250) as of 2026-11-09.
 // Icons are the sprites in game-icons.generated.ts. Mounts that differ only by rental time are one entry here.
 // model is the file in public/mount-models: the item's use value, which the client looks up in TMount.tcd.
-export type Chakra = { name: string; icon: number | null }
-export type Mount = Chakra & { model: number | null; durations: readonly string[] }
+// effect and tint are what the client plays for each chakra item: the item's use value picks the effect, and
+// CTClientObjBase::ApplyCharacterSFX sets the tint by item id.
+import type { ChakraEffect } from '../components/chakras/chakra-effects'
+
+export type Item = { name: string; icon: number | null }
+export type Chakra = Item & { effect: ChakraEffect; tint: string | null }
+export type Mount = Item & { model: number | null; durations: readonly string[] }
 
 export const CHAKRAS: readonly Chakra[] = [
-  { name: 'Blue Chakra', icon: 7689 },
-  { name: 'Enhanced Blue Chakra', icon: 7689 },
-  { name: 'Enhanced Fire Chakra', icon: 7689 },
-  { name: 'Enhanced Pink Chakra', icon: 7689 },
-  { name: 'Fire Chakra', icon: 7689 },
-  { name: 'Green Chakra', icon: 7689 },
-  { name: 'Neon Blue Chakra', icon: 7689 },
-  { name: 'Neon Violet Chakra', icon: 7689 },
-  { name: 'Red Chakra', icon: 7689 },
-  { name: 'Violet Chakra', icon: 5896 },
+  { name: 'Blue Chakra', icon: 7689, effect: 'basic', tint: null },
+  { name: 'Enhanced Blue Chakra', icon: 7689, effect: 'enhanced', tint: null },
+  { name: 'Enhanced Fire Chakra', icon: 7689, effect: 'enhancedFire', tint: null },
+  { name: 'Enhanced Pink Chakra', icon: 7689, effect: 'enhanced', tint: '#6e1e91' },
+  { name: 'Fire Chakra', icon: 7689, effect: 'fire', tint: null },
+  { name: 'Green Chakra', icon: 7689, effect: 'basic', tint: '#1aff1a' },
+  { name: 'Neon Blue Chakra', icon: 7689, effect: 'basic', tint: '#0b2a6b' },
+  { name: 'Neon Violet Chakra', icon: 7689, effect: 'basic', tint: '#ae22ab' },
+  { name: 'Red Chakra', icon: 7689, effect: 'basic', tint: '#ff1a1a' },
+  { name: 'Violet Chakra', icon: 5896, effect: 'violet', tint: null },
 ]
 
 export const MOUNTS: readonly Mount[] = [

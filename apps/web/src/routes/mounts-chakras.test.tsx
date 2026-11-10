@@ -8,6 +8,12 @@ import { renderRoute } from '../test/render-route'
 vi.mock('../components/mounts/MountViewer', () => ({
   default: ({ src, name }: { src: string; name: string }) => <div role="img" aria-label={`3D model of ${name}`} data-src={src} />,
 }))
+// Nor does a 2D canvas.
+vi.mock('../components/chakras/ChakraPreview', () => ({
+  ChakraPreview: ({ effect, tint, name }: { effect: string; tint: string | null; name: string }) => (
+    <div role="img" aria-label={`Preview of ${name}`} data-effect={effect} data-tint={tint ?? ''} />
+  ),
+}))
 
 const me = { userId: 1, username: 'friend', isGm: false }
 
@@ -45,6 +51,19 @@ describe('mounts and chakras page', () => {
     expect(within(list).getAllByRole('listitem')).toHaveLength(CHAKRAS.length)
     expect(CHAKRAS).toHaveLength(10)
     expect(within(list).getByText('Violet Chakra')).toBeInTheDocument()
+  })
+
+  it('previews the chakra you pick, in its colour', async () => {
+    mockApi()
+    const { user } = renderRoute('/mounts-chakras', { me })
+    await screen.findByRole('heading', { name: 'Mounts & Chakras', level: 1 })
+    const preview = screen.getByRole('complementary', { name: 'Chakra preview' })
+    expect(within(preview).getByRole('img', { name: `Preview of ${CHAKRAS[0].name}` })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Red Chakra' }))
+
+    expect(within(preview).getByRole('img', { name: 'Preview of Red Chakra' })).toHaveAttribute('data-tint', '#ff1a1a')
+    expect(screen.getByRole('button', { name: 'Red Chakra', pressed: true })).toBeInTheDocument()
   })
 
   it('lists every mount once, with the durations it comes in', async () => {
