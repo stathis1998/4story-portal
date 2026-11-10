@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { lazy, Suspense, useState } from 'react'
 import { ChakraPreview } from '../../components/chakras/ChakraPreview'
 import { GameIcon } from '../../components/gm/GameIcon'
-import { CHAKRAS, MOUNTS, type Item } from '../../lib/mounts-chakras'
+import { AURAS, CHAKRAS, MOUNTS, type Chakra, type Item } from '../../lib/mounts-chakras'
 
 // three.js is large, so only this page loads it.
 const MountViewer = lazy(() => import('../../components/mounts/MountViewer'))
@@ -17,29 +17,31 @@ function MountsChakrasPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-4xl">Mounts & Chakras</h1>
-      <p className="mt-1 mb-6 text-muted">Every chakra and mount in the game.</p>
+      <p className="mt-1 mb-6 text-muted">Every chakra, aura and mount in the game.</p>
 
-      <Chakras />
+      <Effects title="Chakras" preview="Chakra preview" items={CHAKRAS} />
+      <Effects title="Auras" preview="Aura preview" items={AURAS} />
       <Mounts />
     </main>
   )
 }
 
-function Chakras() {
-  const [selected, setSelected] = useState(CHAKRAS[0])
+/** A list of chakras or auras, with an animated preview of the one picked. */
+function Effects({ title, preview, items }: { title: string; preview: string; items: readonly Chakra[] }) {
+  const [selected, setSelected] = useState(items[0])
 
   return (
     <section className="mt-8">
-      <SectionTitle title="Chakras" count={CHAKRAS.length} />
+      <SectionTitle title={title} count={items.length} />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <aside aria-label="Chakra preview" className="rounded-xs border border-line bg-surface p-3 lg:sticky lg:top-4 lg:order-2 lg:w-96 lg:shrink-0">
+        <aside aria-label={preview} className="rounded-xs border border-line bg-surface p-3 lg:sticky lg:top-4 lg:order-2 lg:w-96 lg:shrink-0">
           <h3 className="mb-2 text-lg font-bold">{selected.name}</h3>
           <ChakraPreview effect={selected.effect} tint={selected.tint} name={selected.name} />
           <p className="mt-2 text-sm text-muted">A rough preview made from the game's own sprites and colours. In game it moves differently.</p>
         </aside>
 
-        <ul aria-label="Chakras" className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:order-1">
-          {CHAKRAS.map((chakra) => (
+        <ul aria-label={title} className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:order-1">
+          {items.map((chakra) => (
             <li key={chakra.name}>
               <button
                 type="button"

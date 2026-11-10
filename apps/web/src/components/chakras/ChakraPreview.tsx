@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { addSigned, EFFECTS, fadeAt, PARTICLE_LIFE, spawn, type ChakraEffect, type Particle } from './chakra-effects'
+import { addSigned, EFFECTS, fadeAt, multiply, PARTICLE_LIFE, spawn, toShadow, type ChakraEffect, type Particle, type SpriteLook } from './chakra-effects'
 
 const WIDTH = 320
 const HEIGHT = 320
@@ -7,8 +7,11 @@ const SCALE = HEIGHT / 4.2 // pixels per game unit: the figure is about two unit
 const MIDDLE = HEIGHT / 2 + 0.25 * SCALE // the figure's middle sits low, since particles rise
 const RISE = 0.35 // game units per second; the game's own motion paths aren't copied
 const TURN = 0.4 // radians per second the view swings round the figure
+const VIEW_HEIGHT = 0.35 // radians the view looks down, which decides how flat a level ring looks
 
-type Images = Map<number, CanvasImageSource>
+type Images = Map<string, CanvasImageSource>
+
+const lookKey = (look: SpriteLook) => `${look.sprite}|${look.color ?? ''}|${look.darken ? 'dark' : ''}`
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -19,14 +22,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/** The sprites this effect uses, recoloured the way the game does when the chakra has a tint. */
+/** The sprites this effect uses, coloured by their colour key, and by the chakra's tint the way the game does it. */
 async function loadSprites(effect: ChakraEffect, tint: string | null): Promise<Images> {
-  const ids = [...new Set(EFFECTS[effect].flatMap((e) => ('sprite' in e.look ? [e.look.sprite] : [])))]
   const images: Images = new Map()
-  for (const id of ids) {
-    const image = await loadImage(`/chakra-sprites/${id}.png`)
-    if (!tint) {
-      images.set(id, image)
+  for (const { look } of EFFECTS[effect]) {
+    if (!('sprite' in look) || images.has(lookKey(look))) continue
+    const image = await loadImage(`/chakra-sprites/${look.sprite}.png`)
+    if (!tint && !look.color && !look.darken) {
+      images.set(lookKey(look), image)
       continue
     }
     const canvas = document.createElement('canvas')
@@ -35,17 +38,29 @@ async function loadSprites(effect: ChakraEffect, tint: string | null): Promise<I
     const context = canvas.getContext('2d')!
     context.drawImage(image, 0, 0)
     const pixels = context.getImageData(0, 0, image.width, image.height)
-    addSigned(pixels.data, tint)
+    if (look.color) multiply(pixels.data, look.color)
+    if (look.darken) toShadow(pixels.data)
+    else if (tint) addSigned(pixels.data, tint)
     context.putImageData(pixels, 0, 0)
-    images.set(id, canvas)
+    images.set(lookKey(look), canvas)
   }
   return images
 }
 
 function drawFigure(context: CanvasRenderingContext2D) {
-  context.globalCompositeOperation = 'source-over'
-  context.fillStyle = 'rgba(150, 155, 170, 0.28)'
   const at = (y: number) => MIDDLE - y * SCALE
+  context.globalCompositeOperation = 'source-over'
+  // A faintly lit floor, so effects that darken have something to darken.
+  context.save()
+  context.translate(WIDTH / 2, at(-1))
+  context.scale(1, Math.sin(VIEW_HEIGHT))
+  const floor = context.createRadialGradient(0, 0, 0, 0, 0, 1.6 * SCALE)
+  floor.addColorStop(0, 'rgba(140, 145, 160, 0.6)')
+  floor.addColorStop(1, 'transparent')
+  context.fillStyle = floor
+  context.fillRect(-1.6 * SCALE, -1.6 * SCALE, 3.2 * SCALE, 3.2 * SCALE)
+  context.restore()
+  context.fillStyle = 'rgba(150, 155, 170, 0.28)'
   context.beginPath()
   context.arc(WIDTH / 2, at(0.78), 0.14 * SCALE, 0, Math.PI * 2)
   context.fill()
@@ -73,11 +88,13 @@ function drawParticle(context: CanvasRenderingContext2D, particle: Particle, now
   context.globalAlpha = alpha
 
   if ('sprite' in emitter.look) {
-    const image = images.get(emitter.look.sprite)
+    const image = images.get(lookKey(emitter.look))
     if (!image) return
     context.save()
+    context.globalCompositeOperation = emitter.look.darken ? 'source-over' : 'lighter'
     context.translate(px, py)
-    context.rotate(particle.spin + seconds)
+    if (emitter.look.flat) context.scale(1, Math.max(0.15, Math.abs(Math.sin(VIEW_HEIGHT + particle.tilt))))
+    context.rotate(particle.spin + seconds * (emitter.look.flat ? 3 : 1))
     context.drawImage(image, -size / 2, -size / 2, size, size)
     context.restore()
     return

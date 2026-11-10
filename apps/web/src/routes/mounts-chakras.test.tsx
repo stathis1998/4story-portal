@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { CHAKRAS, MOUNTS } from '../lib/mounts-chakras'
+import { AURAS, CHAKRAS, MOUNTS } from '../lib/mounts-chakras'
 import { mockApi } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
@@ -64,6 +64,19 @@ describe('mounts and chakras page', () => {
 
     expect(within(preview).getByRole('img', { name: 'Preview of Red Chakra' })).toHaveAttribute('data-tint', '#ff1a1a')
     expect(screen.getByRole('button', { name: 'Red Chakra', pressed: true })).toBeInTheDocument()
+  })
+
+  it('lists the auras beside the chakras and previews the one you pick', async () => {
+    mockApi()
+    const { user } = renderRoute('/mounts-chakras', { me })
+    await screen.findByRole('heading', { name: 'Mounts & Chakras', level: 1 })
+    expect(within(screen.getByRole('list', { name: 'Auras' })).getAllByRole('listitem')).toHaveLength(AURAS.length)
+
+    await user.click(screen.getByRole('button', { name: 'Dark Aura' }))
+
+    const preview = screen.getByRole('complementary', { name: 'Aura preview' })
+    expect(within(preview).getByRole('img', { name: 'Preview of Dark Aura' })).toHaveAttribute('data-effect', 'darkAura')
+    expect(within(screen.getByRole('complementary', { name: 'Chakra preview' })).getByRole('img', { name: `Preview of ${CHAKRAS[0].name}` })).toBeInTheDocument()
   })
 
   it('lists every mount once, with the durations it comes in', async () => {
