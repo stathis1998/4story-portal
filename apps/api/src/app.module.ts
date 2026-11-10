@@ -6,6 +6,7 @@ import { ConfigModule } from './config/config.js';
 import { ControlModule } from './control/control.module.js';
 import { DbModule } from './db/db.module.js';
 import { GmModule } from './gm/gm.module.js';
+import { OnlineModule } from './online/online.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { StoreModule } from './store/store.module.js';
 import { WeaponsModule } from './weapons/weapons.module.js';
@@ -23,6 +24,7 @@ import { WeaponsModule } from './weapons/weapons.module.js';
     AuthModule,
     CharactersModule,
     GmModule,
+    OnlineModule,
     StatsModule,
     WeaponsModule,
     StoreModule,
