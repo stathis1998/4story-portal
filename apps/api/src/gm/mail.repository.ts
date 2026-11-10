@@ -4,6 +4,7 @@ import { DbService } from '../db/db.service.js';
 
 export type MailRecipientRow = { charId: number; name: string };
 export type MailItemRow = { itemId: number; name: string; stack: number };
+export type MailCharacterRow = MailRecipientRow & { level: number; classCode: number; online: boolean };
 
 export type MailLetter = {
   charId: number;
@@ -18,6 +19,7 @@ export type MailLetter = {
 
 export interface MailRepository {
   findCharacters(names: string[]): Promise<MailRecipientRow[]>; // live characters only, stored spelling
+  listCharacters(): Promise<MailCharacterRow[]>; // every live character, by name; online = in TCURRENTUSER
   findItems(itemIds: number[]): Promise<MailItemRow[]>;
   sendLetter(letter: MailLetter): Promise<number>; // the post id, 0 when the character is missing or deleted
 }
@@ -53,6 +55,18 @@ export class SqlMailRepository implements MailRepository {
        WHERE szName IN (${list}) AND bDelete = 0`,
     );
     return result.recordset;
+  }
+
+  async listCharacters(): Promise<MailCharacterRow[]> {
+    const { characters, currentUsers } = this.db.tables;
+    const result = await this.request().query<Omit<MailCharacterRow, 'online'> & { online: number }>(
+      `SELECT c.dwCharID AS charId, c.szName AS name, c.bLevel AS level, c.bClass AS classCode,
+              CASE WHEN EXISTS (SELECT 1 FROM ${currentUsers} u WHERE u.dwCharID = c.dwCharID) THEN 1 ELSE 0 END AS online
+       FROM ${characters} c
+       WHERE c.bDelete = 0
+       ORDER BY c.szName`,
+    );
+    return result.recordset.map((row) => ({ ...row, online: row.online === 1 }));
   }
 
   async findItems(itemIds: number[]): Promise<MailItemRow[]> {

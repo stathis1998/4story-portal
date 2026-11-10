@@ -10,6 +10,7 @@ const money = (m: Partial<{ gold: number; silver: number; copper: number }>) => 
 describe('gmMailRequestSchema', () => {
   it('defaults sender, money and items', () =>
     expect(gmMailRequestSchema.parse(base)).toEqual({
+      audience: 'names',
       recipients: ['Moose'],
       sender: '[GM]',
       title: 'Hi',
@@ -28,6 +29,17 @@ describe('gmMailRequestSchema', () => {
     expect(parse({ recipients }).success).toBe(false));
 
   it('rejects a name with a space', () => expect(parse({ recipients: ['Kae lith'] }).success).toBe(false));
+
+  it.each(['online', 'all'] as const)('accepts audience %s with no recipients', (audience) =>
+    expect(gmMailRequestSchema.parse({ audience, title: 'Hi' })).toMatchObject({ audience, recipients: [] }));
+
+  it.each(['online', 'all'] as const)('rejects audience %s with named recipients', (audience) =>
+    expect(parse({ audience }).success).toBe(false));
+
+  it('rejects audience names with no recipients', () =>
+    expect(gmMailRequestSchema.safeParse({ audience: 'names', title: 'Hi' }).success).toBe(false));
+
+  it('rejects an unknown audience', () => expect(parse({ audience: 'everyone' }).success).toBe(false));
 
   it('accepts gold 10000 and rejects 10001', () => {
     expect(parse(money({ gold: 10_000 })).success).toBe(true);

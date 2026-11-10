@@ -144,3 +144,50 @@ describe('MailService', () => {
     expect(res.results).toEqual([{ name: 'Moose', postId: 1000 }]);
   });
 });
+
+describe('MailService audiences', () => {
+  it('sends to every online character, by name', async () => {
+    mail.online = new Set([3, 1]);
+    const res = await service.send(gmMailRequestSchema.parse({ audience: 'online', title: 'Hi' }), actor);
+    expect(mail.sent.map((l) => l.charId)).toEqual([1, 3]);
+    expect(res.results.map((r) => r.name)).toEqual(['Moose', 'Ria']);
+  });
+
+  it('sends to every live character, by name', async () => {
+    const res = await service.send(gmMailRequestSchema.parse({ audience: 'all', title: 'Hi' }), actor);
+    expect(mail.sent.map((l) => l.charId)).toEqual([2, 1, 3]);
+    expect(res.results.map((r) => r.name)).toEqual(['Kael', 'Moose', 'Ria']);
+  });
+
+  it('refuses online when nobody is online', async () => {
+    expect(await rejection(gmMailRequestSchema.parse({ audience: 'online', title: 'Hi' }))).toBe('No one is online');
+    expect(mail.sent).toEqual([]);
+    expect(gm.audits[0].log).toMatch(/^REJECTED nobody-online:/);
+  });
+
+  it('checks items before a bulk send', async () => {
+    const req = gmMailRequestSchema.parse({ audience: 'all', title: 'Hi', items: [{ itemId: 31000, count: 1 }] });
+    expect(await rejection(req)).toBe('Unknown items: 31000');
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('audits a summary line after a bulk send', async () => {
+    mail.missingOnSend.add(2);
+    await service.send(gmMailRequestSchema.parse({ audience: 'all', title: 'Hi' }), actor);
+    expect(gm.audits.at(-1)?.log).toBe('AUDIENCE all "Hi": 2 sent, 1 failed');
+  });
+
+  it('writes no summary line for a named send', async () => {
+    await service.send(request(), actor);
+    expect(gm.audits.map((a) => a.log).some((log) => log.startsWith('AUDIENCE'))).toBe(false);
+  });
+
+  it('lists characters with class names', async () => {
+    mail.online = new Set([2]);
+    expect(await service.listCharacters()).toEqual([
+      { charId: 2, name: 'Kael', level: 1, className: expect.any(String), online: true },
+      { charId: 1, name: 'Moose', level: 1, className: expect.any(String), online: false },
+      { charId: 3, name: 'Ria', level: 1, className: expect.any(String), online: false },
+    ]);
+  });
+});

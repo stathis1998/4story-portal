@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
-import type { GmMailRequest, GmMailResponse, GmMailResult } from '@4story-portal/shared';
+import type { GmMailCharacter, GmMailRequest, GmMailResponse, GmMailResult } from '@4story-portal/shared';
+import { className } from '../characters/character-codes.js';
 import { itemIcons } from './game-icons.generated.js';
 import { GM_REPOSITORY, type GmRepository } from './gm.repository.js';
 import { MAIL_REPOSITORY, type MailRecipientRow, type MailRepository } from './mail.repository.js';
@@ -17,6 +18,11 @@ export class MailService {
     @Inject(GM_REPOSITORY) private readonly gm: GmRepository,
   ) {}
 
+  async listCharacters(): Promise<GmMailCharacter[]> {
+    const rows = await this.repo.listCharacters();
+    return rows.map(({ classCode, ...row }) => ({ ...row, className: className(classCode) }));
+  }
+
   async send(req: GmMailRequest, actor: Actor): Promise<GmMailResponse> {
     const recipients = await this.resolveRecipients(req, actor);
     await this.checkItems(req, actor);
@@ -25,11 +31,24 @@ export class MailService {
     for (const recipient of recipients) {
       results.push(await this.sendOne(recipient, req, actor));
     }
+    if (req.audience !== 'names') {
+      const sent = results.filter((r) => r.postId !== null).length;
+      await this.audit(`AUDIENCE ${req.audience} "${req.title}": ${sent} sent, ${results.length - sent} failed`, actor);
+    }
     return { results };
   }
 
-  /** The recipients in request order, with their stored spelling. Refuses the whole send on any unknown name. */
   private async resolveRecipients(req: GmMailRequest, actor: Actor): Promise<MailRecipientRow[]> {
+    if (req.audience === 'names') return this.resolveNames(req, actor);
+    // Resolved now, at send time, so the list is current. listCharacters is already sorted by name.
+    const all = await this.repo.listCharacters();
+    const chosen = req.audience === 'online' ? all.filter((c) => c.online) : all;
+    if (chosen.length === 0) await this.reject('nobody-online', 'No one is online', req, actor);
+    return chosen.map(({ charId, name }) => ({ charId, name }));
+  }
+
+  /** The recipients in request order, with their stored spelling. Refuses the whole send on any unknown name. */
+  private async resolveNames(req: GmMailRequest, actor: Actor): Promise<MailRecipientRow[]> {
     const rows = await this.repo.findCharacters(req.recipients);
     const byName = new Map(rows.map((row) => [row.name.toLowerCase(), row]));
     const unknown = req.recipients.filter((name) => !byName.has(name.toLowerCase()));
@@ -86,7 +105,7 @@ export class MailService {
   }
 
   private async reject(reason: string, message: string, req: GmMailRequest, actor: Actor): Promise<never> {
-    await this.audit(`REJECTED ${reason}: ${message} | to ${req.recipients.join(',')} "${req.title}" ${contents(req)}`, actor);
+    await this.audit(`REJECTED ${reason}: ${message} | to ${req.audience === 'names' ? req.recipients.join(',') : req.audience} "${req.title}" ${contents(req)}`, actor);
     throw new UnprocessableEntityException(message);
   }
 

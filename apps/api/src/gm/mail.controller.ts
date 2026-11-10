@@ -1,6 +1,12 @@
-import { Body, Controller, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { type GmMailRequest, type GmMailResponse, gmMailRequestSchema, type SessionUser } from '@4story-portal/shared';
+import {
+  type GmMailCharacter,
+  type GmMailRequest,
+  type GmMailResponse,
+  gmMailRequestSchema,
+  type SessionUser,
+} from '@4story-portal/shared';
 import type { Request } from 'express';
 import { GmGuard } from '../auth/gm-access.js';
 import { CurrentUser, SessionGuard } from '../auth/session.guard.js';
@@ -11,6 +17,11 @@ import { MailService } from './mail.service.js';
 @UseGuards(SessionGuard, GmGuard)
 export class MailController {
   constructor(private readonly mail: MailService) {}
+
+  @Get('characters')
+  characters(): Promise<GmMailCharacter[]> {
+    return this.mail.listCharacters();
+  }
 
   @Post('mail')
   @HttpCode(200)

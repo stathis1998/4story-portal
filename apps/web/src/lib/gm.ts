@@ -9,6 +9,7 @@ import type {
   GmLocationInput,
   GmLogin,
   GmLoginClearResult,
+  GmMailCharacter,
   GmMailRequest,
   GmMailResponse,
   GmMap,
@@ -150,6 +151,13 @@ export function useTeleport() {
       apiFetch<TeleportResult>('/gm/teleport', { method: 'POST', body: JSON.stringify(input) }),
   })
 }
+
+/** Every live character with an online flag, for the mail page. Refetched on each visit so "online" is current. */
+export const gmCharactersQueryOptions = queryOptions({
+  queryKey: ['gm', 'characters'],
+  queryFn: () => apiFetch<GmMailCharacter[]>('/gm/characters'),
+  staleTime: 0,
+})
 
 export function useSendMail() {
   return useMutation({

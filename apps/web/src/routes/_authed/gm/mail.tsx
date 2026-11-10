@@ -1,20 +1,23 @@
 import {
   type GmItemSearchResult,
+  type GmMailAudience,
   type GmMailRequest,
   type GmMailResult,
   gmMailRequestSchema,
   MAIL_MAX_ITEMS,
-  MAIL_MAX_RECIPIENTS,
 } from '@4story-portal/shared'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { type KeyboardEvent, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '../../../components/Button'
 import { FormMessage } from '../../../components/FormMessage'
 import { GameIcon } from '../../../components/gm/GameIcon'
 import { GmNav } from '../../../components/gm/GmNav'
 import { MailItemPicker } from '../../../components/gm/MailItemPicker'
+import { MailRecipients } from '../../../components/gm/MailRecipients'
 import { ApiError } from '../../../lib/api'
-import { itemDisplayName, useSendMail } from '../../../lib/gm'
+import { gmCharactersQueryOptions, itemDisplayName, useSendMail } from '../../../lib/gm'
+import { audienceNames, withNames } from '../../../lib/mail-recipients'
 import { meQueryOptions } from '../../../lib/session'
 
 export const Route = createFileRoute('/_authed/gm/mail')({
@@ -55,6 +58,8 @@ const moneyText = ({ gold, silver, copper }: GmMailRequest['money']) =>
     .join(' ') || 'none'
 
 function MailPage() {
+  const [audience, setAudience] = useState<GmMailAudience>('names')
+  const characters = useQuery(gmCharactersQueryOptions)
   const [recipients, setRecipients] = useState<string[]>([])
   const [pending, setPending] = useState('')
   const [sender, setSender] = useState('[GM]')
@@ -64,62 +69,40 @@ function MailPage() {
   const [picking, setPicking] = useState(false)
   const [money, setMoney] = useState({ gold: 0, silver: 0, copper: 0 })
   const [problem, setProblem] = useState<string | null>(null)
-  const [confirming, setConfirming] = useState<GmMailRequest | null>(null)
+  const [confirming, setConfirming] = useState<{ request: GmMailRequest; names: string[] } | null>(null)
   const [results, setResults] = useState<GmMailResult[] | null>(null)
   const [unknown, setUnknown] = useState<Set<string>>(new Set())
   const send = useSendMail()
   // isPending only disables Confirm after a re-render, so two clicks in one tick would both send.
   const sending = useRef(false)
 
-  function addRecipients(text: string) {
-    const names = text
-      .split(',')
-      .map((name) => name.trim())
-      .filter(Boolean)
-    setRecipients((current) => {
-      const next = [...current]
-      for (const name of names) {
-        if (next.length < MAIL_MAX_RECIPIENTS && !next.some((n) => n.toLowerCase() === name.toLowerCase())) next.push(name)
-      }
-      return next
-    })
-  }
-
-  function onRecipientKey(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      addRecipients(pending)
-      setPending('')
-    }
-  }
-
-  function onRecipientChange(value: string) {
-    if (value.includes(',')) {
-      const last = value.lastIndexOf(',')
-      addRecipients(value.slice(0, last))
-      setPending(value.slice(last + 1))
-    } else {
-      setPending(value)
-    }
-  }
-
   function review() {
     setProblem(null)
     setResults(null)
-    // A name still being typed counts.
-    const names = [...recipients]
-    for (const name of pending.split(',').map((n) => n.trim()).filter(Boolean)) {
-      if (!names.some((n) => n.toLowerCase() === name.toLowerCase())) names.push(name)
+    let names: string[]
+    if (audience === 'names') {
+      // A name still being typed counts.
+      const typed = pending
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean)
+      names = withNames(recipients, typed, characters.data)
+      if (pending.trim()) {
+        setRecipients(names)
+        setPending('')
+      }
+      if (names.length === 0) return setProblem('Add at least one recipient.')
+    } else {
+      names = audienceNames(audience, characters.data)
+      if (names.length === 0) {
+        return setProblem(audience === 'online' ? 'No one is online right now.' : 'No characters found.')
+      }
     }
-    if (pending.trim()) {
-      setRecipients(names)
-      setPending('')
-    }
-    if (names.length === 0) return setProblem('Add at least one recipient.')
     if (!title.trim()) return setProblem('Add a title.')
 
     const parsed = gmMailRequestSchema.safeParse({
-      recipients: names,
+      audience,
+      recipients: audience === 'names' ? names : [],
       sender,
       title,
       message,
@@ -130,22 +113,29 @@ function MailPage() {
       const issue = parsed.error.issues[0]
       return setProblem(`${issue.path.join(' ') || 'Mail'}: ${issue.message}`)
     }
-    setConfirming(parsed.data)
+    setConfirming({ request: parsed.data, names })
   }
 
   async function confirm() {
     if (!confirming || sending.current) return
     sending.current = true
     try {
-      const response = await send.mutateAsync(confirming)
+      const response = await send.mutateAsync(confirming.request)
       setResults(response.results)
       setUnknown(new Set())
-      // Delivered recipients leave the list, so a resend only reaches the ones that failed.
-      const delivered = new Set(
-        response.results.filter((r) => r.postId !== null).map((r) => r.name.toLowerCase()),
-      )
-      setRecipients((current) => current.filter((name) => !delivered.has(name.toLowerCase())))
+      if (confirming.request.audience === 'names') {
+        // Delivered recipients leave the list, so a resend only reaches the ones that failed.
+        const delivered = new Set(
+          response.results.filter((r) => r.postId !== null).map((r) => r.name.toLowerCase()),
+        )
+        setRecipients((current) => current.filter((name) => !delivered.has(name.toLowerCase())))
+      } else {
+        // Never leave a bulk send selected: going back to names with only the failures makes a repeat harmless.
+        setAudience('names')
+        setRecipients(response.results.filter((r) => r.postId === null).map((r) => r.name))
+      }
       setConfirming(null)
+      void characters.refetch()
     } catch (err) {
       setConfirming(null)
       setUnknown(unknownNames(err))
@@ -154,6 +144,9 @@ function MailPage() {
       sending.current = false
     }
   }
+
+  const bulk = confirming !== null && confirming.request.audience !== 'names'
+  const letters = confirming ? `${confirming.names.length} ${confirming.names.length === 1 ? 'letter' : 'letters'}` : ''
 
   const itemName = (id: number) => {
     const row = items.find(({ item }) => item.itemId === id)
@@ -169,47 +162,22 @@ function MailPage() {
       </p>
 
       <div className="mt-6 flex flex-col gap-5">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mail-recipients" className={labelText}>
-            Recipients
-          </label>
-          {recipients.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
-              {recipients.map((name) => {
-                const missing = unknown.has(name.toLowerCase())
-                return (
-                  <li
-                    key={name}
-                    className={`flex items-center gap-1 rounded-xs border px-2 py-1 text-sm ${
-                      missing ? 'border-danger bg-danger-surface text-danger' : 'border-line bg-surface-raised'
-                    }`}
-                  >
-                    {name}
-                    {missing && <span className="text-xs">(not found)</span>}
-                    <button
-                      type="button"
-                      aria-label={missing ? `Remove ${name} (not found)` : `Remove ${name}`}
-                      className="px-1 text-muted hover:text-danger"
-                      onClick={() => setRecipients((current) => current.filter((n) => n !== name))}
-                    >
-                      ×
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          <input
-            id="mail-recipients"
-            value={pending}
-            onChange={(event) => onRecipientChange(event.target.value)}
-            onKeyDown={onRecipientKey}
-            placeholder="Character name, then Enter or comma"
-            autoComplete="off"
-            disabled={recipients.length >= MAIL_MAX_RECIPIENTS}
-            className={field}
-          />
-        </div>
+        <MailRecipients
+          audience={audience}
+          onAudienceChange={(next) => {
+            setAudience(next)
+            setProblem(null)
+          }}
+          characters={characters.data}
+          recipients={recipients}
+          onRecipientsChange={setRecipients}
+          pending={pending}
+          onPendingChange={setPending}
+          unknown={unknown}
+        />
+        {characters.isError && (
+          <p className="text-sm text-muted">Could not load the character list. You can still type names.</p>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
           <div className="flex flex-col gap-1.5">
@@ -325,23 +293,29 @@ function MailPage() {
             <h2 id="mail-confirm-title" className="text-xl">
               Send this mail?
             </h2>
+            {bulk && (
+              <p className="text-sm font-bold text-accent-text">
+                This sends {letters} {confirming.request.audience === 'online' ? 'letters to everyone online' : 'letters to every character'}
+                . Who is online is checked again at send time.
+              </p>
+            )}
             <dl className="grid grid-cols-[6rem_1fr] gap-1 text-sm">
               <dt className="text-muted">To</dt>
-              <dd>{confirming.recipients.join(', ')}</dd>
+              <dd>{confirming.names.join(', ')}</dd>
               <dt className="text-muted">Title</dt>
-              <dd>{confirming.title}</dd>
+              <dd>{confirming.request.title}</dd>
               <dt className="text-muted">Items</dt>
               <dd>
-                {confirming.items.length
-                  ? confirming.items.map((item) => `${itemName(item.itemId)} x${item.count}`).join(', ')
+                {confirming.request.items.length
+                  ? confirming.request.items.map((item) => `${itemName(item.itemId)} x${item.count}`).join(', ')
                   : 'none'}
               </dd>
               <dt className="text-muted">Money</dt>
-              <dd>{moneyText(confirming.money)}</dd>
+              <dd>{moneyText(confirming.request.money)}</dd>
             </dl>
             <div className="flex gap-2">
               <Button onClick={() => void confirm()} disabled={send.isPending}>
-                Confirm
+                {bulk ? `Send ${letters}` : 'Confirm'}
               </Button>
               <Button variant="secondary" onClick={() => setConfirming(null)} disabled={send.isPending}>
                 Cancel

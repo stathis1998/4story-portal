@@ -182,6 +182,34 @@ describe('SqlMailRepository against the _TEST copy', () => {
       expect(await repo.findCharacters([])).toEqual([]);
     }));
 
+  it('listCharacters returns every live character, sorted, with an online flag', () =>
+    withRepo(async (repo, tx) => {
+      const live = await new sql.Request(tx).query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM ${db.tables.characters} WHERE bDelete = 0`,
+      );
+      const before = await repo.listCharacters();
+      expect(before).toHaveLength(live.recordset[0].n);
+      expect(before.some((r) => r.charId === deleted.charId)).toBe(false);
+      expect(before.find((r) => r.charId === character.charId)).toEqual({
+        charId: character.charId,
+        name: character.name,
+        level: expect.any(Number),
+        classCode: expect.any(Number),
+        online: false,
+      });
+      const names = before.map((r) => r.name.toLowerCase());
+      expect(names).toEqual([...names].sort());
+
+      // A TCURRENTUSER row for the character marks it online.
+      await new sql.Request(tx)
+        .input('id', sql.Int, character.charId)
+        .query(
+          `INSERT INTO ${db.tables.currentUsers} (dwUserID, dwCharID, bGroupID, bChannel, wPort, bLocked, szLoginIP)
+           VALUES (999999, @id, 1, 1, 0, 0, '127.0.0.1')`,
+        );
+      expect((await repo.listCharacters()).find((r) => r.charId === character.charId)?.online).toBe(true);
+    }));
+
   it('findItems returns stack and name', () =>
     withRepo(async (repo) => {
       const rows = await repo.findItems([stackable.itemId, 32767]);
