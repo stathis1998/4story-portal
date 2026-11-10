@@ -15,6 +15,8 @@ export const gearItem = (overrides: Partial<GearItem> = {}): GearItem => ({
   name: 'Sword',
   icon: 12,
   upgrade: 0,
+  gradeEffect: 0,
+  moggItemId: 0,
   tooltip: tooltip(),
   ...overrides,
 })

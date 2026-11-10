@@ -488,6 +488,8 @@ function gearViews(character: CharacterStatsRow, optionRules: ReadonlyMap<number
         name,
         icon: itemIcons[item.itemId] ?? null,
         upgrade: item.upgrade,
+        gradeEffect: item.gradeEffect,
+        moggItemId: item.moggItemId,
         tooltip: buildItemTooltip(item, name, tooltipCharts, optionRules, now),
       };
     });

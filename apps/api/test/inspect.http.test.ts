@@ -104,6 +104,13 @@ describe('inspecting characters', () => {
       expect(gear[1].tooltip.lines.map(({ text }) => text)).toContain('Type : Cloak');
     });
 
+    it("sends each item's effect and skin, for the 3D view", async () => {
+      repo.rows.gear[1] = { ...repo.rows.gear[1], gradeEffect: 7, moggItemId: 9001 };
+      const { gear } = (await player.get('/api/characters/2/inspect')).body as CharacterInspect;
+      expect(gear[0]).toMatchObject({ slot: 0, itemId: 1, gradeEffect: 7, moggItemId: 9001 });
+      expect(gear[1]).toMatchObject({ slot: 4, gradeEffect: 0, moggItemId: 0 });
+    });
+
     it('needs a login', async () => {
       await request(app.getHttpServer()).get('/api/characters/2/inspect').expect(401);
     });

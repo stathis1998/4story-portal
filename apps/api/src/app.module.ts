@@ -8,6 +8,7 @@ import { DbModule } from './db/db.module.js';
 import { GmModule } from './gm/gm.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { StoreModule } from './store/store.module.js';
+import { WeaponsModule } from './weapons/weapons.module.js';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { StoreModule } from './store/store.module.js';
     CharactersModule,
     GmModule,
     StatsModule,
+    WeaponsModule,
     StoreModule,
   ],
 })

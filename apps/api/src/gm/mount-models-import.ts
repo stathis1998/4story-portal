@@ -1,4 +1,5 @@
 import { inflateSync } from 'node:zlib';
+import type { UvKey } from '@4story-portal/shared';
 import { PNG } from 'pngjs';
 import { ArchiveReader } from './game-places-import.js';
 import { ITEM_VISUAL_LAYOUT, readLayout } from './game-icons-import.js';
@@ -11,7 +12,8 @@ import { decodeDds } from './game-sprites.js';
 export type MountPet = { petId: number; monsterId: number };
 export type Monster = { objectId: number; items: number[] };
 export type ResourceEntry = { file: string; pos: number };
-export type VisualMesh = { clothKind: number; cloth: number; mesh: number };
+/** `objectId` is the item's own object; 0 means a mesh of the character's object. */
+export type VisualMesh = { objectId: number; clothKind: number; cloth: number; mesh: number };
 export type ObjectTexture = { texture: number; minAlpha: number };
 export type ObjectMesh = { id: number; resource: number; textures: ObjectTexture[] };
 export type ObjectCloth = { id: number; meshes: ObjectMesh[] };
@@ -82,7 +84,8 @@ export function parseVisualMeshes(file: Buffer): Map<number, VisualMesh> {
   const visuals = new Map<number, VisualMesh>();
   for (let count = reader.u16(); count > 0; count--) {
     const fields = readLayout(reader, ITEM_VISUAL_LAYOUT);
-    visuals.set(fields[0], { clothKind: fields[3], cloth: fields[4], mesh: fields[5] });
+    // Bows and crossbows have no normal mesh: the client only draws them in battle stance.
+    visuals.set(fields[0], { objectId: fields[2], clothKind: fields[3], cloth: fields[4], mesh: fields[5] || fields[6] });
   }
   reader.assertFinished();
   return visuals;
@@ -201,7 +204,7 @@ export function parseMesh(file: Buffer, pos: number): GameMesh {
   return { positions, normals, uvs, slots };
 }
 
-type TextureRecord = { frames: number[]; pixels: Buffer };
+type TextureRecord = { frames: number[]; keys: UvKey[]; totalTick: number; pixels: Buffer };
 
 function parseTextureRecord(file: Buffer, pos: number): TextureRecord {
   const compressedSize = file.readUInt32LE(pos + 4);
@@ -212,15 +215,44 @@ function parseTextureRecord(file: Buffer, pos: number): TextureRecord {
     offset += 4;
     return value;
   };
+  const readFloat = () => {
+    const value = block.readFloatLE(offset);
+    offset += 4;
+    return value;
+  };
   const frames: number[] = [];
   for (let n = readCount(); n > 0; n--) {
     frames.push(block.readUInt32LE(offset));
     offset += 4;
   }
-  const uvKeys = readCount();
-  offset += uvKeys * 24 + 12 + 1 + 1 + 4; // UV keys, total tick, mip filter, mip bias, option, format, original size
+  // UVKEY in T3D.h: tick, then U, V, rotation in radians, scale U and scale V.
+  const keys: UvKey[] = [];
+  for (let n = readCount(); n > 0; n--) {
+    const tick = block.readUInt32LE(offset);
+    offset += 4;
+    keys.push({ tick, u: readFloat(), v: readFloat(), rotation: readFloat(), scaleU: readFloat(), scaleV: readFloat() });
+  }
+  const totalTick = block.readUInt32LE(offset);
+  offset += 4 + 4 + 4 + 1 + 1 + 4; // total tick, mip filter, mip bias, option, format, original size
   const size = readCount();
-  return { frames, pixels: block.subarray(offset, offset + size) };
+  return { frames, keys, totalTick, pixels: block.subarray(offset, offset + size) };
+}
+
+/** A texture's UV animation, as CTachyonObject::ApplyTexture plays it. Null for an unknown texture. */
+export function readTextureAnimation(id: number, index: Map<number, ResourceEntry>, read: ReadResource): { keys: UvKey[]; loopMs: number } | null {
+  const entry = index.get(id);
+  if (!entry) return null;
+  const { keys, totalTick } = parseTextureRecord(read(entry), entry.pos);
+  return { keys, loopMs: totalTick };
+}
+
+/** The average colour of a PNG, `#rrggbb`. */
+export function textureSwatch(png: Buffer): string {
+  const { data } = PNG.sync.read(png);
+  const sums = [0, 0, 0];
+  const pixels = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) for (let c = 0; c < 3; c++) sums[c] += data[i + c];
+  return `#${sums.map((sum) => Math.round(sum / Math.max(1, pixels)).toString(16).padStart(2, '0')).join('')}`;
 }
 
 export type ReadResource = (entry: ResourceEntry) => Buffer;
@@ -395,19 +427,28 @@ export function buildMountModel(monsterId: number, sources: ModelSources): Buffe
   const parts: GlbPart[] = [];
   for (const item of monster.items) {
     const visual = visuals.get(itemVisuals.get(item) ?? -1);
-    if (!visual) continue;
-    const objectMesh = clothing
-      .find((kind) => kind.id === visual.clothKind)
-      ?.cloths.find((cloth) => cloth.id === visual.cloth)
-      ?.meshes.find((mesh) => mesh.id === visual.mesh);
-    if (!objectMesh) continue;
-    const meshEntry = meshes.get(objectMesh.resource);
-    if (!meshEntry) throw new Error(`mesh ${objectMesh.resource} is not in the client`);
-    parts.push({
-      mesh: parseMesh(read(meshEntry), meshEntry.pos),
-      materials: objectMesh.textures.map(({ texture, minAlpha }) => ({ png: extractTexture(texture, textures, read), minAlpha })),
-    });
+    const part = visual && visualPart(clothing, visual, { meshes, textures, read });
+    if (part) parts.push(part);
   }
   if (parts.length === 0) throw new Error(`monster ${monsterId} wears nothing that selects a mesh`);
   return buildGlb(parts);
+}
+
+/** The mesh a visual selects in an object's clothing, with its textures; null when the object lacks it. */
+export function visualPart(
+  clothing: ObjectClothKind[],
+  visual: Pick<VisualMesh, 'clothKind' | 'cloth' | 'mesh'>,
+  { meshes, textures, read }: Pick<ModelSources, 'meshes' | 'textures' | 'read'>,
+): GlbPart | null {
+  const objectMesh = clothing
+    .find((kind) => kind.id === visual.clothKind)
+    ?.cloths.find((cloth) => cloth.id === visual.cloth)
+    ?.meshes.find((mesh) => mesh.id === visual.mesh);
+  if (!objectMesh) return null;
+  const meshEntry = meshes.get(objectMesh.resource);
+  if (!meshEntry) throw new Error(`mesh ${objectMesh.resource} is not in the client`);
+  return {
+    mesh: parseMesh(read(meshEntry), meshEntry.pos),
+    materials: objectMesh.textures.map(({ texture, minAlpha }) => ({ png: extractTexture(texture, textures, read), minAlpha })),
+  };
 }

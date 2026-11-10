@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AURAS, CHAKRAS, MOUNTS } from '../lib/mounts-chakras'
 import { mockApi } from '../test/mock-api'
+import { clickNav } from '../test/nav'
 import { renderRoute } from '../test/render-route'
 
 // WebGL doesn't exist in the test environment.
@@ -31,7 +32,7 @@ describe('mounts and chakras page', () => {
     mockApi()
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(await screen.findByRole('link', { name: 'Mounts & Chakras' }))
+    await clickNav(user, 'Tools', 'Mounts & Chakras')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/mounts-chakras'))
     expect(await screen.findByRole('heading', { name: 'Mounts & Chakras', level: 1 })).toBeInTheDocument()

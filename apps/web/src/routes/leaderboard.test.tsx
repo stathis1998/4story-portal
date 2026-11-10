@@ -2,6 +2,7 @@ import type { HallOfFame, Leaderboard } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { json, mockApi } from '../test/mock-api'
+import { clickNav } from '../test/nav'
 import { renderRoute } from '../test/render-route'
 
 const me = { userId: 1, username: 'friend', isGm: false }
@@ -31,7 +32,7 @@ describe('leaderboard page', () => {
     mockApi(route())
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(await screen.findByRole('link', { name: 'Leaderboard' }))
+    await clickNav(user, 'Rankings', 'Leaderboard')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/leaderboard'))
     expect(await screen.findByRole('heading', { name: 'Leaderboard', level: 1 })).toBeInTheDocument()

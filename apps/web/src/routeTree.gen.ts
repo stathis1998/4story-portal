@@ -14,6 +14,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
+import { Route as AuthedEffectsRouteImport } from './routes/_authed/effects'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
@@ -50,6 +51,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
   id: '/characters',
   path: '/characters',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedEffectsRoute = AuthedEffectsRouteImport.update({
+  id: '/effects',
+  path: '/effects',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedHallOfFameRoute = AuthedHallOfFameRouteImport.update({
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/characters': typeof AuthedCharactersRoute
+  '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authed/characters': typeof AuthedCharactersRoute
+  '/_authed/effects': typeof AuthedEffectsRoute
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/characters'
+    | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
@@ -223,6 +234,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authed/characters'
+    | '/_authed/effects'
     | '/_authed/hall-of-fame'
     | '/_authed/leaderboard'
     | '/_authed/mounts-chakras'
@@ -280,6 +292,13 @@ declare module '@tanstack/react-router' {
       path: '/characters'
       fullPath: '/characters'
       preLoaderRoute: typeof AuthedCharactersRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/effects': {
+      id: '/_authed/effects'
+      path: '/effects'
+      fullPath: '/effects'
+      preLoaderRoute: typeof AuthedEffectsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/hall-of-fame': {
@@ -378,6 +397,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedCharactersRoute: typeof AuthedCharactersRoute
+  AuthedEffectsRoute: typeof AuthedEffectsRoute
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
@@ -395,6 +415,7 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedCharactersRoute: AuthedCharactersRoute,
+  AuthedEffectsRoute: AuthedEffectsRoute,
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,

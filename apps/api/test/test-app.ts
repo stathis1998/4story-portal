@@ -13,6 +13,7 @@ import { VENDORS_REPOSITORY } from '../src/gm/vendors.repository.js';
 import { DbService } from '../src/db/db.service.js';
 import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
 import { PortalStore } from '../src/store/portal-store.js';
+import { MemoryModelCache, type ModelCache, WEAPON_CLIENT_SOURCE, WEAPON_MODEL_CACHE, type WeaponClientSource, WeaponsUnavailableError } from '../src/weapons/weapon-catalog.js';
 import {
   FakeAccountsRepository,
   FakeCharactersRepository,
@@ -32,6 +33,12 @@ export type TestAppOverrides = {
   vendors?: FakeVendorsRepository;
   stats?: FakeStatsRepository;
   store?: PortalStore;
+  weapons?: { source: WeaponClientSource; cache?: ModelCache };
+};
+
+// Tests never read a real game client unless they hand one in.
+const noClient: WeaponClientSource = () => {
+  throw new WeaponsUnavailableError('no game client in tests');
 };
 
 // The real AppModule with the database and control server swapped out, configured exactly like main.ts.
@@ -59,6 +66,10 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.stats ?? new FakeStatsRepository())
     .overrideProvider(PortalStore)
     .useValue(overrides.store ?? new PortalStore(':memory:'))
+    .overrideProvider(WEAPON_CLIENT_SOURCE)
+    .useValue(overrides.weapons?.source ?? noClient)
+    .overrideProvider(WEAPON_MODEL_CACHE)
+    .useValue(overrides.weapons?.cache ?? new MemoryModelCache())
     .compile();
 
   const app = moduleRef.createNestApplication({ logger: false });

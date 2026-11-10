@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { character } from '../test/characters'
 import { gearItem } from '../test/gear'
 import { json, mockApi, sentBodies } from '../test/mock-api'
+import { clickNav } from '../test/nav'
 import { renderRoute } from '../test/render-route'
 
 const me = { userId: 1, username: 'friend', isGm: false }
@@ -370,7 +371,7 @@ describe('hall of fame', () => {
     mockApi(base(route()))
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(await screen.findByRole('link', { name: 'Hall of Fame' }))
+    await clickNav(user, 'Rankings', 'Hall of Fame')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/hall-of-fame'))
     expect(await screen.findByRole('heading', { name: 'Hall of Fame', level: 1 })).toBeInTheDocument()
@@ -378,9 +379,12 @@ describe('hall of fame', () => {
 
   it('marks the current page in the header', async () => {
     mockApi(route())
-    renderRoute('/hall-of-fame', { me })
+    const { user } = renderRoute('/hall-of-fame', { me })
 
-    const current = await screen.findByRole('link', { name: 'Hall of Fame' })
+    const group = await screen.findByRole('button', { name: 'Rankings' })
+    expect(group).toHaveClass('text-fg')
+    await user.click(group)
+    const current = screen.getByRole('link', { name: 'Hall of Fame' })
     expect(current).not.toHaveClass('text-muted')
     expect(current).toHaveClass('text-fg')
     expect(screen.getByRole('link', { name: 'Characters' })).toHaveClass('text-muted')
