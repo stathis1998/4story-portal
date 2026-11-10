@@ -18,6 +18,7 @@ import { Route as AuthedEffectsRouteImport } from './routes/_authed/effects'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
+import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
 import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
@@ -71,6 +72,11 @@ const AuthedLeaderboardRoute = AuthedLeaderboardRouteImport.update({
 const AuthedMountsChakrasRoute = AuthedMountsChakrasRouteImport.update({
   id: '/mounts-chakras',
   path: '/mounts-chakras',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedOnlineRoute = AuthedOnlineRouteImport.update({
+  id: '/online',
+  path: '/online',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedShopRoute = AuthedShopRouteImport.update({
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/online': typeof AuthedOnlineRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/online': typeof AuthedOnlineRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/_authed/online': typeof AuthedOnlineRoute
   '/_authed/shop': typeof AuthedShopRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
+    | '/online'
     | '/shop'
     | '/soul-lottery'
     | '/upgrade-simulator'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
+    | '/online'
     | '/shop'
     | '/soul-lottery'
     | '/upgrade-simulator'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/_authed/hall-of-fame'
     | '/_authed/leaderboard'
     | '/_authed/mounts-chakras'
+    | '/_authed/online'
     | '/_authed/shop'
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
@@ -322,6 +334,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedMountsChakrasRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/online': {
+      id: '/_authed/online'
+      path: '/online'
+      fullPath: '/online'
+      preLoaderRoute: typeof AuthedOnlineRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/shop': {
       id: '/_authed/shop'
       path: '/shop'
@@ -401,6 +420,7 @@ interface AuthedRouteChildren {
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
+  AuthedOnlineRoute: typeof AuthedOnlineRoute
   AuthedShopRoute: typeof AuthedShopRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
@@ -419,6 +439,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,
+  AuthedOnlineRoute: AuthedOnlineRoute,
   AuthedShopRoute: AuthedShopRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,

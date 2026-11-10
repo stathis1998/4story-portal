@@ -29,5 +29,7 @@ import { VendorsService } from './vendors.service.js';
       inject: [CONFIG],
     },
   ],
+  // The public online list reads the same TCURRENTUSER query as the teleport tool.
+  exports: [GM_REPOSITORY],
 })
 export class GmModule {}

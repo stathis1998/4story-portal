@@ -45,6 +45,15 @@ export type OnlinePlayer = {
   mapId: number;
 };
 
+/** A character on the public online list: no map or world, so it can't be used to find someone in PvP. */
+export type OnlineCharacter = {
+  id: number;
+  name: string;
+  level: number;
+  className: string;
+  channel: number;
+};
+
 export type GmLocation = GmLocationInput & { id: string };
 
 export type TeleportResult = { sent: true; names: string[] };
