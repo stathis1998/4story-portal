@@ -31,6 +31,30 @@ const COSTUME = [15, 16, 17, 18]
 
 type Props = { gear: GearItem[]; caption: string }
 
+/** The Weapon Effects page for an equipped weapon, at its own level, effect and skin. */
+function weaponViewHref(item: GearItem): string {
+  const params = new URLSearchParams({ item: String(item.itemId), level: String(item.upgrade), effect: String(item.gradeEffect || 1) })
+  if (item.moggItemId) params.set('skin', String(item.moggItemId))
+  return `/weapon-effects?${params}`
+}
+
+// A plain link, so the gear also renders outside the router.
+function WeaponLinks({ gear }: { gear: GearItem[] }) {
+  const weapons = gear.filter((item) => WEAPONS.includes(item.slot)).sort((a, b) => a.slot - b.slot)
+  if (weapons.length === 0) return null
+  return (
+    <ul className="mt-2 flex flex-col items-center gap-0.5 text-xs">
+      {weapons.map((item) => (
+        <li key={item.slot}>
+          <a href={weaponViewHref(item)} aria-label={`View ${item.name} in 3D`} className="font-bold text-accent-text hover:underline">
+            View {item.name} in 3D
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function CharacterGear({ gear, caption }: Props) {
   const slot = (id: number) => {
     const item = gear.find(({ slot: itemSlot }) => itemSlot === id)
@@ -59,6 +83,7 @@ export function CharacterGear({ gear, caption }: Props) {
       </div>
       <p className="mt-3 text-center text-xs text-muted">Weapons</p>
       <div className="mt-1 flex justify-center gap-1.5">{WEAPONS.map(slot)}</div>
+      <WeaponLinks gear={gear} />
       <p className="mt-3 text-center text-xs text-muted">Costume</p>
       <div className="mt-1 flex justify-center gap-1.5">{COSTUME.map(slot)}</div>
     </div>

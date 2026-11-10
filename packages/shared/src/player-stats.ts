@@ -98,6 +98,10 @@ export type GearItem = {
   /** Sprite ID for `/game-icons`, null when the client has no icon. */
   icon: number | null;
   upgrade: number;
+  /** The rolled grade effect, 0 for none; see GRADE_EFFECTS. */
+  gradeEffect: number;
+  /** The item whose look this one wears, 0 for its own. */
+  moggItemId: number;
   tooltip: ItemTooltip;
 };
 
