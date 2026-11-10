@@ -10,86 +10,42 @@ import {
   parseMountChart,
   parseObjectClothing,
   parseResourceIndex,
+  parseVisualMeshes,
   type GameMesh,
   type ModelSources,
 } from '../src/gm/mount-models-import.js';
+import { ITEM_VISUAL_LAYOUT } from '../src/gm/game-icons-import.js';
 import { ArchiveWriter } from './archive-writer.js';
+import { ddsFile, meshFile, objectFile, pngOf, readGlb, textureBlock, zeros } from './client-fixtures.js';
 
-const zeros = (w: ArchiveWriter, bytes: number) => {
-  for (let i = 0; i < bytes; i++) w.u8(0);
-  return w;
-};
+describe('parseVisualMeshes', () => {
+  const visualChart = (rows: number[][]) => {
+    const w = new ArchiveWriter().u16(rows.length);
+    for (const values of rows) {
+      [...ITEM_VISUAL_LAYOUT].forEach((kind, i) => {
+        const value = values[i] ?? 0;
+        if (kind === 'b') w.u8(value);
+        else if (kind === 'w') w.u16(value);
+        else if (kind === 'f') w.f32(value);
+        else w.u32(value);
+      });
+    }
+    return w.toBuffer();
+  };
 
-const meshFile = ({ bones, levels = 1 }: { bones: number; levels?: number }) => {
-  const w = new ArchiveWriter().u32(1).u32(bones).u8(1).u32(levels);
-  zeros(w, 16 + bones * 64).u32(3);
-  for (let v = 0; v < 3; v++) {
-    w.f32(v + 1).f32(v + 2).f32(v + 3);
-    if (bones) zeros(w, 16);
-    w.f32(0).f32(0).f32(1).f32(0.5).f32(0.25);
-    if (!bones) zeros(w, 8);
-  }
-  for (let level = 0; level < levels; level++) {
-    w.u32(1).u32(3).u16(0);
-    w.u16(level).u16(level + 1).u16(level + 2);
-  }
-  return w.toBuffer();
-};
+  it('reads the object, clothing kind, cloth and normal mesh', () => {
+    expect(parseVisualMeshes(visualChart([[6000, 0, 0, 21888, 21922, 23264, 22083]])).get(6000)).toEqual({
+      objectId: 0,
+      clothKind: 21888,
+      cloth: 21922,
+      mesh: 23264,
+    });
+  });
 
-const objectFile = () => {
-  const w = new ArchiveWriter().u8(1).u32(1).u32(5).u32(6); // pivot count, one pivot
-  w.u32(1); // one effect
-  zeros(w, 49);
-  w.u32(0).u32(1); // no sounds, one attribute
-  zeros(w, 5).u32(2).u8(9).u8(9);
-  w.u32(1).u32(77).u32(0).u32(0).u32(1); // one action with one animation
-  zeros(w, 8).u32(0).u32(0);
-  w.u32(1).u32(10).u32(1).u32(20).u32(1).u32(30).u32(40).u32(1); // kind, cloth, mesh, one texture
-  w.u32(50).u32(0).u8(0).u8(0);
-  zeros(w, 4 * 7 + 4);
-  w.u8(150);
-  zeros(w, 3 + 4 + 4 + 1);
-  return w.toBuffer();
-};
-
-const pngOf = (alpha: number) => {
-  const png = new PNG({ width: 1, height: 1 });
-  png.data.set([10, 20, 30, alpha]);
-  return PNG.sync.write(png);
-};
-
-/** A 4x4 DXT-free DDS with one opaque red pixel block, the format decodeDds reads as 32-bit colour. */
-const ddsFile = () => {
-  const file = Buffer.alloc(128 + 4);
-  file.write('DDS ', 0, 'latin1');
-  file.writeUInt32LE(1, 12);
-  file.writeUInt32LE(1, 16);
-  file.writeUInt32LE(32, 88);
-  file.writeUInt32LE(0x00ff0000, 92);
-  file.writeUInt32LE(0x0000ff00, 96);
-  file.writeUInt32LE(0x000000ff, 100);
-  file.writeUInt32LE(0xff000000, 104);
-  file.writeUInt32LE(0xffff0000, 128);
-  return file;
-};
-
-const textureBlock = (frames: number[], pixels: Buffer) => {
-  const w = new ArchiveWriter().u32(frames.length);
-  frames.forEach((frame) => w.u32(frame));
-  w.u32(0);
-  zeros(w, 12 + 1 + 1 + 4).u32(pixels.length);
-  const block = deflateSync(Buffer.concat([w.toBuffer(), pixels]));
-  const head = Buffer.alloc(8);
-  head.writeUInt32LE(block.length, 4);
-  return Buffer.concat([head, block]);
-};
-
-const readGlb = (glb: Buffer) => {
-  const jsonLength = glb.readUInt32LE(12);
-  const json = JSON.parse(glb.toString('utf8', 20, 20 + jsonLength));
-  const bin = glb.subarray(20 + jsonLength + 8);
-  return { json, bin };
-};
+  it('uses the battle mesh when there is no normal one, as for bows drawn only in battle', () => {
+    expect(parseVisualMeshes(visualChart([[8000, 0, 0, 21890, 21924, 0, 22425]])).get(8000)?.mesh).toBe(22425);
+  });
+});
 
 const triangle = (): GameMesh => ({
   positions: Float32Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9),
@@ -224,7 +180,7 @@ describe('buildMountModel', () => {
     return {
       monsters: new Map([[1, { objectId: 2, items }]]),
       itemVisuals: new Map([[3, 4]]),
-      visuals: new Map([[4, { clothKind: 10, cloth: 20, mesh: 30 }]]),
+      visuals: new Map([[4, { objectId: 0, clothKind: 10, cloth: 20, mesh: 30 }]]),
       objects: new Map([[2, { file: 'obj', pos: 0 }]]),
       meshes: new Map([[40, { file: 'mesh', pos: 0 }]]),
       textures: new Map([[50, { file: 'tex', pos: 0 }]]),
