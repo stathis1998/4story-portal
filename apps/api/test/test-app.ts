@@ -9,6 +9,7 @@ import { ControlClient } from '../src/control/control-client.js';
 import { GM_LOCATIONS_STORE, GmLocationsStore } from '../src/gm/gm-locations.store.js';
 import { GM_REPOSITORY } from '../src/gm/gm.repository.js';
 import { LOGIN_CLEAR_TIMING } from '../src/gm/logins.service.js';
+import { MAIL_REPOSITORY } from '../src/gm/mail.repository.js';
 import { VENDORS_REPOSITORY } from '../src/gm/vendors.repository.js';
 import { DbService } from '../src/db/db.service.js';
 import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
@@ -19,6 +20,7 @@ import {
   FakeCharactersRepository,
   FakeControlClient,
   FakeGmRepository,
+  FakeMailRepository,
   FakeStatsRepository,
   FakeVendorsRepository,
 } from './fakes.js';
@@ -31,6 +33,7 @@ export type TestAppOverrides = {
   gm?: FakeGmRepository;
   locations?: GmLocationsStore;
   vendors?: FakeVendorsRepository;
+  mail?: FakeMailRepository;
   stats?: FakeStatsRepository;
   store?: PortalStore;
   weapons?: { source: WeaponClientSource; cache?: ModelCache };
@@ -58,6 +61,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.gm ?? new FakeGmRepository())
     .overrideProvider(VENDORS_REPOSITORY)
     .useValue(overrides.vendors ?? new FakeVendorsRepository())
+    .overrideProvider(MAIL_REPOSITORY)
+    .useValue(overrides.mail ?? new FakeMailRepository())
     .overrideProvider(GM_LOCATIONS_STORE)
     .useValue(overrides.locations ?? new GmLocationsStore('./data/unused-test-presets.json'))
     .overrideProvider(LOGIN_CLEAR_TIMING)
