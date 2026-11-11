@@ -128,9 +128,17 @@ const LEADERBOARD_CATEGORIES: Category<LeaderboardCategoryId>[] = [
     label: 'Soul lottery',
     value: (c) => c.lotteryCopperWon + c.lotteryCopperConsolation,
     display: gold,
-    detail: (c) => `${total(c.lotteriesWon)} won, ${total(c.lotteriesLost)} lost`,
+    detail: (c) => `${total(c.lotteriesWon)} won, ${total(c.lotteriesLost)} lost${winRate(c.lotteriesWon, c.lotteriesLost)}`,
   },
 ];
+
+// Whole percent, with `<1%` for a rare win so it never reads as 0%. Empty when nothing was played.
+function winRate(won: number, lost: number): string {
+  const played = won + lost;
+  if (played === 0) return '';
+  const rate = (won / played) * 100;
+  return `, ${won > 0 && rate < 1 ? '<1' : Math.round(rate)}% win rate`;
+}
 
 // Reads through the 60-second cache and shapes the responses. The hide switch is applied per request,
 // so it works at once.
