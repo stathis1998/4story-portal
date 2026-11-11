@@ -5,7 +5,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import type { Character, LevelFreeze } from '@4story-portal/shared';
+import type { Character, GearEffect, LevelFreeze } from '@4story-portal/shared';
 import { toCharacter } from './characters.mapper.js';
 import { CHARACTERS_REPOSITORY, type CharactersRepository, type LevelFreezeRow } from './characters.repository.js';
 
@@ -32,6 +32,32 @@ export class CharactersService {
 
     await this.characters.saveLevelFreeze(id, level);
     return { ...current, freezeLevel: level };
+  }
+
+  gearEffect(userId: number, id: number): Promise<GearEffect> {
+    return this.ownedGearEffect(userId, id);
+  }
+
+  async setGearEffect(userId: number, id: number, effect: number): Promise<GearEffect> {
+    const current = await this.ownedGearEffect(userId, id);
+    // The game holds a loaded character's items in memory and saves them over the database, so a
+    // change now would be lost at the next save.
+    if (current.online) throw new ConflictException('Log out of the game with this character first');
+    if (current.items.length === 0) {
+      throw new UnprocessableEntityException('No worn weapon or armour is +17 or higher');
+    }
+
+    await this.characters.saveGearEffect(id, effect);
+    // Read back rather than assume: the update skips everything if the character logged in meanwhile.
+    const updated = await this.ownedGearEffect(userId, id);
+    if (updated.online) throw new ConflictException('Log out of the game with this character first');
+    return updated;
+  }
+
+  private async ownedGearEffect(userId: number, id: number): Promise<GearEffect> {
+    const row = await this.characters.findGearEffect(userId, id);
+    if (!row) throw new NotFoundException('Character not found');
+    return row;
   }
 
   // The same answer whether it's someone else's or doesn't exist, so IDs can't be probed.

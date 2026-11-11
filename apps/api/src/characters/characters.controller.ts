@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
 import {
   characterIdSchema,
+  gearEffectRequestSchema,
   levelFreezeRequestSchema,
   type Character,
+  type GearEffect,
+  type GearEffectRequest,
   type LevelFreeze,
   type LevelFreezeRequest,
   type SessionUser,
@@ -36,5 +39,22 @@ export class CharactersController {
     @CurrentUser() user: SessionUser,
   ): Promise<LevelFreeze> {
     return this.characters.setLevelFreeze(user.userId, id, body.level);
+  }
+
+  @Get(':id/gear-effect')
+  gearEffect(
+    @Param('id', new ZodValidationPipe(characterIdSchema)) id: number,
+    @CurrentUser() user: SessionUser,
+  ): Promise<GearEffect> {
+    return this.characters.gearEffect(user.userId, id);
+  }
+
+  @Put(':id/gear-effect')
+  setGearEffect(
+    @Param('id', new ZodValidationPipe(characterIdSchema)) id: number,
+    @Body(new ZodValidationPipe(gearEffectRequestSchema)) body: GearEffectRequest,
+    @CurrentUser() user: SessionUser,
+  ): Promise<GearEffect> {
+    return this.characters.setGearEffect(user.userId, id, body.effect);
   }
 }

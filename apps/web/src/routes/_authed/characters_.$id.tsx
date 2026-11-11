@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { Button } from '../../components/Button'
 import { CharacterGear } from '../../components/items/CharacterGear'
+import { GearEffectSection } from '../../components/stats/GearEffectSection'
 import { LevelFreezeSection } from '../../components/stats/LevelFreezeSection'
 import { LevelProgress } from '../../components/stats/LevelProgress'
 import { formatMinutes, isNotFound, ordinal, plural, profileQueryOptions } from '../../lib/stats'
@@ -85,6 +86,10 @@ function Profile({ profile }: { profile: CharacterProfile }) {
 
       <Section title="Gear">
         <CharacterGear gear={profile.gear} caption={`Lv. ${profile.level} ${profile.className}`} />
+      </Section>
+
+      <Section title="Gear effect">
+        <GearEffectSection characterId={String(profile.id)} />
       </Section>
 
       <Section title="Level freeze">
