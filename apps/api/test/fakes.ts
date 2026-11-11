@@ -1,6 +1,6 @@
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
-import type { CharacterRow, CharactersRepository, LevelFreezeRow } from '../src/characters/characters.repository.js';
+import type { CharacterRow, CharactersRepository, GearEffectRow, LevelFreezeRow } from '../src/characters/characters.repository.js';
 import type { AuditEntry, GmRepository, LoginRow, OnlinePlayerRow } from '../src/gm/gm.repository.js';
 import type {
   MailCharacterRow,
@@ -54,6 +54,22 @@ export class FakeCharactersRepository implements CharactersRepository {
 
   async saveLevelFreeze(charId: number, level: number | null): Promise<void> {
     this.freezes.get(charId)!.freezeLevel = level;
+  }
+
+  /** Only the items that can carry an effect, as the SQL filters them. */
+  readonly gearEffects = new Map<number, GearEffectRow & { userId: number }>();
+
+  async findGearEffect(userId: number, charId: number): Promise<GearEffectRow | null> {
+    const row = this.gearEffects.get(charId);
+    if (!row || row.userId !== userId) return null;
+    return { online: row.online, items: row.items.map((item) => ({ ...item })) };
+  }
+
+  async saveGearEffect(charId: number, effect: number): Promise<number> {
+    const row = this.gearEffects.get(charId)!;
+    if (row.online) return 0;
+    for (const item of row.items) item.effect = effect;
+    return row.items.length;
   }
 }
 

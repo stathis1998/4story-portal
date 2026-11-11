@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GRADE_EFFECTS } from './weapon-effects.js';
 
 /** Route param for a character; the game stores it as a signed 32-bit value. */
 export const characterIdSchema = z.coerce.number().int().min(1).max(2147483647);
@@ -20,6 +21,21 @@ export type LevelFreeze = {
   freezeLevel: number | null;
   /** A character that's online can't be changed: the game only reads the freeze when it loads one. */
   online: boolean;
+};
+
+/** Sets one effect on every worn item that can carry one. Free for now. */
+export const gearEffectRequestSchema = z.object({
+  effect: z.number().int().min(1).max(GRADE_EFFECTS.length),
+});
+export type GearEffectRequest = z.infer<typeof gearEffectRequestSchema>;
+
+/** A worn item the game lets carry an effect: +17 or higher, and not a cloak. */
+export type GearEffectItem = { slot: number; itemId: number; name: string; upgrade: number; effect: number };
+
+export type GearEffect = {
+  /** A character that's online can't be changed: the game only reads its items when it loads one. */
+  online: boolean;
+  items: GearEffectItem[];
 };
 
 export const hallOfFameSettingsSchema = z.object({ hideGms: z.boolean() });
