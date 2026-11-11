@@ -63,7 +63,9 @@ function EffectsPage() {
   const level = search.level ?? DEFAULT_LEVEL
   const effect = search.effect ?? 1
   const navigate = Route.useNavigate()
-  const set = (changes: Partial<Search>) => navigate({ search: (previous) => ({ ...previous, ...changes }), replace: true })
+  // The picks live in the address, and the router scrolls to the top on every navigation unless told not to.
+  const set = (changes: Partial<Search>) =>
+    navigate({ search: (previous) => ({ ...previous, ...changes }), replace: true, resetScroll: false })
 
   const effects = useQuery(weaponEffectsQueryOptions)
   const weapon = useQuery({
