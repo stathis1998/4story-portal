@@ -453,7 +453,7 @@ describe('player stats routes', () => {
 
     it('shows soul lotteries won and lost under each gold total', async () => {
       const details = board(await load(player), 'lottery').entries.map((entry) => entry.detail);
-      expect(details).toEqual(['7 won, 0 lost', '3 won, 40 lost', '0 won, 5 lost']);
+      expect(details).toEqual(['7 won, 0 lost, 100% win rate', '3 won, 40 lost, 7% win rate', '0 won, 5 lost, 0% win rate']);
     });
 
     it('ranks gold spent on its own, converting from copper', async () => {
