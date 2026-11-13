@@ -3,14 +3,13 @@ import { achievementLevelName } from '@4story-portal/shared';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
 import type { AccountStatsRow } from '../stats/stats-rules.js';
-import { PortalStore } from '../store/portal-store.js';
 import { ACHIEVEMENTS, type AchievementFamily, levelReached } from './achievement-rules.js';
 import {
   ACHIEVEMENTS_REPOSITORY,
   type AchievementsRepository,
-  ANNOUNCE_SENT,
   ANNOUNCE_SKIPPED,
   ANNOUNCE_WAITING,
+  AWARD_SWITCHED_OFF,
 } from './achievements.repository.js';
 
 export type AwarderTiming = {
@@ -28,8 +27,9 @@ export const DEFAULT_AWARDER_TIMING: AwarderTiming = { intervalMs: 60_000, maxPe
 // The game saves a player's stats every 5 minutes, so nothing changes long after the last logout.
 const ACTIVE_MINUTES = 10;
 // Old news isn't worth interrupting chat for.
-const ANNOUNCE_WITHIN_MS = 10 * 60 * 1000;
+const ANNOUNCE_WITHIN_SECONDS = 10 * 60;
 const SENDER = 'Achievements';
+const REWARD_NOTE = ' Your reward is attached.';
 
 export type TickResult = { awarded: number; announced: number };
 const NOTHING: TickResult = { awarded: 0, announced: 0 };
@@ -53,7 +53,6 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(ACHIEVEMENTS_REPOSITORY) private readonly repo: AchievementsRepository,
     private readonly stats: StatsService,
-    private readonly store: PortalStore,
     private readonly control: ControlClient,
     @Inject(AWARDER_TIMING) private readonly timing: AwarderTiming,
   ) {}
@@ -81,9 +80,10 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
   }
 
   async tick(): Promise<TickResult> {
-    if (this.running || !this.store.achievementsLive()) return NOTHING;
+    if (this.running) return NOTHING;
     this.running = true;
     try {
+      if (!(await this.repo.live())) return NOTHING;
       if (!this.force && !(await this.repo.recentlyActive(ACTIVE_MINUTES))) return NOTHING;
       const { awarded, left } = await this.awardDue();
       const { announced, waiting } = await this.announceWaiting();
@@ -92,7 +92,7 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
       return { awarded, announced };
     } catch (error) {
       // The next tick tries again: an award is only ever recorded together with its letter.
-      this.logger.warn(`Achievement check failed: ${error instanceof Error ? error.message : error}`);
+      this.logger.warn(`Achievement check failed: ${describe(error)}`);
       return NOTHING;
     } finally {
       this.running = false;
@@ -104,11 +104,11 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
     const [awards, recipients] = await Promise.all([this.repo.awards(), this.repo.recipients()]);
     const given = new Set(awards.map((award) => awardKey(award.userId, award.achievementId, award.level)));
     const recipientOf = new Map(recipients.map((recipient) => [recipient.userId, recipient]));
-    const rewards = new Map(this.store.achievementRewards().map((reward) => [rewardKey(reward.achievementId, reward.level), reward]));
 
     const due: Due[] = [];
     for (const account of stats.accounts.values()) {
-      if (account.characters.every(({ row }) => row.banned) || !recipientOf.has(account.userId)) continue;
+      // No recipient means no character left that isn't banned or deleted.
+      if (!recipientOf.has(account.userId)) continue;
       for (const family of ACHIEVEMENTS) {
         const reached = levelReached(family, family.value(account));
         for (let level = 1; level <= reached; level++) {
@@ -125,21 +125,26 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
       const recipient = recipientOf.get(account.userId)!;
       const name = achievementLevelName(family.name, level, family.levels.length);
       const goal = family.goal(family.levels[level - 1]);
-      const reward = rewards.get(rewardKey(family.id, level));
-      const id = await this.repo.award({
-        userId: account.userId,
-        achievementId: family.id,
-        level,
-        charId: recipient.charId,
-        sender: SENDER,
-        title: `Achievement: ${name}`,
-        message: `You completed ${name}: ${goal}.${reward ? ' Your reward is attached.' : ''}`,
-        gold: reward?.gold ?? 0,
-        silver: reward?.silver ?? 0,
-        copper: reward?.copper ?? 0,
-        items: reward?.items ?? [],
-        text: `${recipient.name} completed ${name}: ${goal}`,
-      });
+      let id: number;
+      try {
+        // The database attaches the level's saved reward, and refuses once the switch is off.
+        id = await this.repo.award({
+          userId: account.userId,
+          achievementId: family.id,
+          level,
+          charId: recipient.charId,
+          sender: SENDER,
+          title: `Achievement: ${name}`,
+          message: `You completed ${name}: ${goal}.`,
+          rewardNote: REWARD_NOTE,
+          text: `${recipient.name} completed ${name}: ${goal}`,
+        });
+      } catch (error) {
+        // One award that can't be given must not hold up the rest. Nothing was written for it.
+        this.logger.warn(`Could not award ${family.id} ${level} to account ${account.userId}: ${describe(error)}`);
+        continue;
+      }
+      if (id === AWARD_SWITCHED_OFF) return { awarded, left: 0 };
       if (id > 0) awarded++;
     }
     return { awarded, left: due.length - batch.length };
@@ -147,26 +152,31 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
 
   private async announceWaiting(): Promise<{ announced: number; waiting: number }> {
     const waiting = (await this.repo.awards()).filter((award) => award.announced === ANNOUNCE_WAITING);
-    const now = serverNow().getTime();
     let announced = 0;
     for (const [index, award] of waiting.entries()) {
-      if (now - award.earnedAt.getTime() > ANNOUNCE_WITHIN_MS) {
+      // Switched off since the tick began: leave the rest unsaid.
+      if (!(await this.repo.live())) return { announced, waiting: 0 };
+      if (award.ageSeconds > ANNOUNCE_WITHIN_SECONDS) {
         await this.repo.markAnnounced(award.id, ANNOUNCE_SKIPPED);
         continue;
       }
+      // Taken before it is sent, so two ticks or two portal processes never both say it.
+      if (!(await this.repo.claimAnnouncement(award.id))) continue;
       try {
         this.control.announce(award.text);
       } catch (error) {
+        await this.repo.markAnnounced(award.id, ANNOUNCE_WAITING);
         if (error instanceof ControlUnavailableError || error instanceof ControlRefusedError) {
           // Left waiting: the next tick sends them, or skips them once they are old.
           return { announced, waiting: waiting.length - index };
         }
         throw error;
       }
-      await this.repo.markAnnounced(award.id, ANNOUNCE_SENT);
       announced++;
       if (this.timing.announceGapMs > 0) await new Promise((resolve) => setTimeout(resolve, this.timing.announceGapMs));
     }
     return { announced, waiting: 0 };
   }
 }
+
+const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));

@@ -8,7 +8,6 @@ import { sha1Hex } from '../src/auth/sha1.js';
 import { itemIcons } from '../src/gm/game-icons.generated.js';
 import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
 import { serverNow } from '../src/stats/stats.service.js';
-import { PortalStore } from '../src/store/portal-store.js';
 import { FakeAccountsRepository, FakeAchievementsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
 import { createTestApp } from './test-app.js';
 
@@ -63,7 +62,6 @@ describe('achievement routes', () => {
   let app: INestApplication;
   let stats: FakeStatsRepository;
   let repo: FakeAchievementsRepository;
-  let store: PortalStore;
   let control: FakeControlClient;
   let awarder: AchievementAwarder;
   let moose: ReturnType<typeof request.agent>;
@@ -85,9 +83,8 @@ describe('achievement routes', () => {
       { userId: MOOSE, charId: 3, name: 'Moosey' },
     ];
     repo.items = [{ itemId, name: 'Potion', stack: 20 }];
-    store = new PortalStore(':memory:');
     control = new FakeControlClient();
-    app = await createTestApp({ accounts, control, stats, store, achievements: repo });
+    app = await createTestApp({ accounts, control, stats, achievements: repo });
     awarder = app.get(AchievementAwarder);
     const login = async (username: string) => {
       const agent = request.agent(app.getHttpServer());
@@ -100,7 +97,6 @@ describe('achievement routes', () => {
 
   afterEach(async () => {
     await app.close();
-    store.close();
     vi.useRealTimers();
   });
 
@@ -142,7 +138,18 @@ describe('achievement routes', () => {
         [4, 80, false],
         [5, 90, false],
       ]);
-      expect(level.levels[3]).toMatchObject({ goal: 'Reach level 80', reward: null, earnedAt: null });
+      expect(level.levels[3]).toMatchObject({ goal: 'Reach level 80', thresholdText: '80', reward: null, earnedAt: null });
+    });
+
+    it('writes thresholds the way it writes the value', async () => {
+      expect((await achievement('damage')).levels.map((entry) => entry.thresholdText)).toEqual(['1M', '10M', '100M', '1B', '5B']);
+      expect((await achievement('upgrade')).levels[0].thresholdText).toBe('+18');
+      expect((await achievement('kills')).levels[1].thresholdText).toBe('10,000');
+    });
+
+    it('says rewards are off, and still shows levels, when the switch cannot be read', async () => {
+      repo.failWith = new Error('Invalid object name');
+      expect(await overview()).toMatchObject({ live: false, levelsDone: 4 });
     });
 
     it('counts the levels done and how many players have each', async () => {
@@ -187,11 +194,15 @@ describe('achievement routes', () => {
         sender: 'Achievements',
         title: 'Achievement: Adventurer III',
         message: 'You completed Adventurer III: Reach level 60.',
-        gold: 0,
-        silver: 0,
-        copper: 0,
-        items: [],
+        rewardNote: ' Your reward is attached.',
         text: 'Kaelith completed Adventurer III: Reach level 60',
+      });
+      // No reward is set, so the letter says nothing about one.
+      expect(repo.letters.find((letter) => letter.title === 'Achievement: Adventurer III')).toEqual({
+        charId: 1,
+        title: 'Achievement: Adventurer III',
+        message: 'You completed Adventurer III: Reach level 60.',
+        reward: null,
       });
       expect(control.announcements).toContain('Kaelith completed Adventurer III: Reach level 60');
       expect(repo.rows.every((row) => row.announced === ANNOUNCE_SENT)).toBe(true);
@@ -212,8 +223,45 @@ describe('achievement routes', () => {
       await moose.put('/api/gm/achievements/rewards').send({ achievementId: 'level', level: 2, reward }).expect(200);
       await goLive();
       await awarder.tick();
-      const second = repo.sent.find((sent) => sent.achievementId === 'level' && sent.level === 2 && sent.userId === PLAYER)!;
-      expect(second).toMatchObject({ ...reward, message: 'You completed Adventurer II: Reach level 40. Your reward is attached.' });
+      expect(repo.letters.find((letter) => letter.charId === 1 && letter.title === 'Achievement: Adventurer II')).toMatchObject({
+        message: 'You completed Adventurer II: Reach level 40. Your reward is attached.',
+        reward: { achievementId: 'level', level: 2, ...reward },
+      });
+    });
+
+    it('stops in the middle of a batch when rewards are switched off', async () => {
+      await goLive();
+      repo.onAward = () => {
+        if (repo.rows.length === 2) repo.liveFlag = false;
+      };
+      expect(await awarder.tick()).toEqual({ awarded: 2, announced: 0 });
+      expect(repo.sent).toHaveLength(3);
+      expect(control.announcements).toEqual([]);
+    });
+
+    it('carries on past an award that fails, and gives it on a later tick', async () => {
+      await goLive();
+      repo.failAward = (input) => input.achievementId === 'roster';
+      expect(await awarder.tick()).toEqual({ awarded: 4, announced: 4 });
+      expect(awardsOf(PLAYER)).toEqual(['level:1', 'level:2', 'level:3']);
+
+      repo.failAward = undefined;
+      expect(await awarder.tick()).toEqual({ awarded: 1, announced: 1 });
+      expect(awardsOf(PLAYER)).toContain('roster:1');
+    });
+
+    it('does not announce what another portal process has already taken', async () => {
+      await goLive();
+      repo.claimedElsewhere = true;
+      expect(await awarder.tick()).toEqual({ awarded: 5, announced: 0 });
+      expect(control.announcements).toEqual([]);
+    });
+
+    it('runs one tick at a time', async () => {
+      await goLive();
+      const [first, second] = await Promise.all([awarder.tick(), awarder.tick()]);
+      expect([first.awarded, second.awarded]).toEqual([5, 0]);
+      expect(repo.sent).toHaveLength(5);
     });
 
     it('names a single-level achievement without a numeral', async () => {
@@ -241,12 +289,14 @@ describe('achievement routes', () => {
       expect(repo.rows.map((row) => row.level)).toEqual(repo.rows.map((row) => row.level).sort((a, b) => a - b));
     });
 
-    it('skips an account whose characters are all banned or gone', async () => {
-      stats.rows = { ...baseRows(), characters: [character({ id: 1, level: 60, banned: true }), character({ id: 3, userId: MOOSE, level: 20 })] };
-      repo.recipientRows = [{ userId: PLAYER, charId: 1, name: 'Kaelith' }];
+    it('skips an account with no character to write to: all banned, or gone', async () => {
+      // The database only offers characters that are neither banned nor deleted.
+      repo.recipientRows = [];
       await goLive();
       await awarder.tick();
-      expect(repo.rows).toEqual([]);
+      expect(repo.sent).toEqual([]);
+      // The tick ran to its end: it did not just fail on the account with nobody to write to.
+      expect(awarder.lastCheck()).not.toBeNull();
     });
 
     it('does not look while nobody has played, and looks again when someone has', async () => {
@@ -303,7 +353,7 @@ describe('achievement routes', () => {
 
   describe('after an award', () => {
     beforeEach(async () => {
-      store.setAchievementReward({ achievementId: 'gold-held', level: 1, gold: 5, silver: 0, copper: 0, items: [] }, 'moose');
+      repo.rewardRows = [{ achievementId: 'gold-held', level: 1, gold: 5, silver: 0, copper: 0, items: [] }];
       stats.rows = { ...baseRows(), characters: [character({ id: 1, level: 60, gold: 150 })] };
       await goLive();
       await awarder.tick();
@@ -368,11 +418,11 @@ describe('achievement routes', () => {
 
     it('switches rewards on and off, and logs who did', async () => {
       expect((await goLive()).body.live).toBe(true);
-      expect(store.achievementsLive()).toBe(true);
+      expect(repo.liveFlag).toBe(true);
       expect((await moose.put('/api/gm/achievements/live').send({ live: false }).expect(200)).body.live).toBe(false);
-      expect(store.settingChanges().map(({ key, value, changedBy }) => [key, value, changedBy])).toEqual([
-        ['achievements_live', 'true', 'moose'],
-        ['achievements_live', 'false', 'moose'],
+      expect(repo.liveChanges).toEqual([
+        { live: true, changedBy: 'moose' },
+        { live: false, changedBy: 'moose' },
       ]);
     });
 
@@ -388,7 +438,7 @@ describe('achievement routes', () => {
       await setReward({ achievementId: 'kills', level: 2, reward: { ...money, gold: 100 } }).expect(200);
       await setReward({ achievementId: 'kills', level: 2, reward: money }).expect(200);
       expect((await achievement('kills')).levels[1].reward).toBeNull();
-      expect(store.achievementRewards()).toEqual([]);
+      expect(repo.rewardRows).toEqual([]);
     });
 
     it('is 404 for an achievement or level that does not exist', async () => {
@@ -403,7 +453,7 @@ describe('achievement routes', () => {
       const res = await setReward({ achievementId: 'kills', level: 1, reward: { ...money, items: [item] } });
       expect(res.status).toBe(422);
       expect(res.body.message).toBe(message);
-      expect(store.achievementRewards()).toEqual([]);
+      expect(repo.rewardRows).toEqual([]);
     });
 
     it('refuses an item the game client does not have', async () => {
@@ -432,6 +482,12 @@ describe('achievement routes', () => {
     it('sends a test announcement', async () => {
       await moose.post('/api/gm/achievements/test-announcement').expect(204);
       expect(control.announcements).toEqual(['Test announcement from the portal, sent by moose']);
+    });
+
+    it('is 503 when the switch or a reward cannot be saved', async () => {
+      repo.failWith = new Error('Invalid object name');
+      expect((await moose.put('/api/gm/achievements/live').send({ live: true })).status).toBe(503);
+      expect((await setReward({ achievementId: 'kills', level: 1, reward: { ...money, gold: 1 } })).status).toBe(503);
     });
 
     it('is 503 for a test announcement while the control server is down', async () => {

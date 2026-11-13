@@ -54,6 +54,8 @@ export type AchievementLevel = {
   /** 1 is the first. */
   level: number;
   threshold: number;
+  /** The threshold written the way `valueText` is, such as `10,000`, `+22` or `100M`. */
+  thresholdText: string;
   /** What to do, such as `Defeat 10,000 monsters`. */
   goal: string;
   reward: AchievementReward | null;

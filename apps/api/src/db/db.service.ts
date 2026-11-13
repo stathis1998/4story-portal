@@ -42,6 +42,8 @@ export function tableNames(config: AppConfig) {
     monsterKills: `${game}.TCHARMONKILLTABLE`,
     pets: `${game}.TPETTABLE`,
     achievementAwards: `${game}.TPORTALACHIEVEMENTTABLE`,
+    achievementRewards: `${game}.TPORTALACHIEVEMENTREWARD`,
+    portalSettings: `${game}.TPORTALSETTING`,
     achievementProcedure: `${game}.TPortalAchievementAward`,
   };
 }

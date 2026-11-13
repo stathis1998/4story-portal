@@ -1,6 +1,6 @@
 import { type Achievement, achievementLevelName } from '@4story-portal/shared'
 import { useId, useState } from 'react'
-import { formatThreshold, nextLevel, paysSomething, progressRatio } from '../../lib/achievements'
+import { nextLevel, paysSomething, progressRatio } from '../../lib/achievements'
 import { formatDay } from '../../lib/stats'
 import { RewardSummary } from './RewardSummary'
 
@@ -59,7 +59,7 @@ export function AchievementCard({ achievement, players }: Props) {
           <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
         </span>
         <span className="text-xs text-muted">
-          {next ? `${valueText} / ${formatThreshold(next.threshold, valueText)}` : valueText}
+          {next ? `${valueText} / ${next.thresholdText}` : valueText}
         </span>
         <span className="text-sm">{next ? `Next: ${next.goal}` : 'Completed'}</span>
         {next && paysSomething(next.reward) && (

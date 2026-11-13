@@ -42,12 +42,18 @@ describe('AchievementCard', () => {
     expect(header).not.toHaveTextContent('Reward')
   })
 
-  it('writes the threshold with a plus when the value has one', () => {
-    const header = show(
-      achievement({ name: 'Blacksmith', value: 22, valueText: '+22', levelsDone: 0, levels: [level({ threshold: 24, goal: 'Upgrade an item to +24' })] }),
+  it('writes the threshold the way the API wrote it', () => {
+    const smith = show(
+      achievement({ name: 'Blacksmith', value: 22, valueText: '+22', levelsDone: 0, levels: [level({ threshold: 24, thresholdText: '+24', goal: 'Upgrade an item to +24' })] }),
     )
+    expect(smith).toHaveTextContent('+22 / +24')
+  })
 
-    expect(header).toHaveTextContent('+22 / +24')
+  it('keeps a shortened value and its threshold in the same unit', () => {
+    const hitter = show(
+      achievement({ name: 'Heavy Hitter', value: 81_300_000, valueText: '81.3M', levelsDone: 0, levels: [level({ threshold: 100_000_000, thresholdText: '100M', goal: 'Deal 100M damage to monsters' })] }),
+    )
+    expect(hitter).toHaveTextContent('81.3M / 100M')
   })
 
   it('lists every level when opened, and closes again', async () => {

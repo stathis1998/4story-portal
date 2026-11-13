@@ -10,15 +10,6 @@ export class StoreUnavailableError extends Error {
   }
 }
 
-/** What one achievement level pays. A level with no row pays nothing. */
-export type StoredReward = {
-  achievementId: string;
-  level: number;
-  gold: number;
-  silver: number;
-  copper: number;
-  items: { itemId: number; count: number }[];
-};
 export type SettingChange = { key: string; value: string; changedBy: string; changedAt: string };
 
 // Run in order, once each, tracked by PRAGMA user_version. Add new ones to the end.
@@ -49,23 +40,11 @@ const MIGRATIONS = [
    )
    INSERT INTO badge_baselines (badge_id)
    SELECT badge_id FROM original WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'badges_baselined');`,
-  // The badge tables above are no longer used: tiered achievements keep their awards in the game
-  // database. Rewards stay here, so they outlive the season reset.
-  `CREATE TABLE achievement_rewards (
-     achievement_id TEXT NOT NULL,
-     level INTEGER NOT NULL,
-     gold INTEGER NOT NULL,
-     silver INTEGER NOT NULL,
-     copper INTEGER NOT NULL,
-     items TEXT NOT NULL,
-     updated_by TEXT NOT NULL,
-     updated_at TEXT NOT NULL,
-     PRIMARY KEY (achievement_id, level)
-   );`,
+  // The two badge tables are no longer used: tiered achievements keep their awards, rewards and
+  // switch in the game database.
 ];
 
 const HIDE_GMS = 'hide_gms';
-const ACHIEVEMENTS_LIVE = 'achievements_live';
 
 // The portal's own data, kept out of the game databases. A broken file must not take the stats down
 // with it, so reads fall back to defaults and only saving a setting reports a failure.
@@ -97,53 +76,18 @@ export class PortalStore implements OnModuleDestroy {
   }
 
   setHideGms(value: boolean, changedBy: string): void {
-    this.changeSetting(HIDE_GMS, String(value), changedBy);
-  }
-
-  /** Whether achievement levels are awarded, mailed and announced. Off until a GM switches it on. */
-  achievementsLive(): boolean {
-    return this.read(() => this.setting(ACHIEVEMENTS_LIVE) === 'true', false);
-  }
-
-  setAchievementsLive(value: boolean, changedBy: string): void {
-    this.changeSetting(ACHIEVEMENTS_LIVE, String(value), changedBy);
-  }
-
-  achievementRewards(): StoredReward[] {
-    return this.read(() => {
-      const rows = this.db!.prepare(
-        'SELECT achievement_id AS achievementId, level, gold, silver, copper, items FROM achievement_rewards ORDER BY achievement_id, level',
-      ).all() as (Omit<StoredReward, 'items'> & { items: string })[];
-      return rows.map((row) => ({ ...row, items: JSON.parse(row.items) as StoredReward['items'] }));
-    }, []);
-  }
-
-  /** Saves what a level pays. A reward with no money and no items removes the row. */
-  setAchievementReward(reward: StoredReward, changedBy: string): void {
     const db = this.db;
     if (!db) throw new StoreUnavailableError();
-    const empty = reward.gold + reward.silver + reward.copper === 0 && reward.items.length === 0;
     try {
-      if (empty) {
-        db.prepare('DELETE FROM achievement_rewards WHERE achievement_id = ? AND level = ?').run(reward.achievementId, reward.level);
-        return;
-      }
-      db.prepare(
-        `INSERT INTO achievement_rewards (achievement_id, level, gold, silver, copper, items, updated_by, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (achievement_id, level) DO UPDATE SET
-           gold = excluded.gold, silver = excluded.silver, copper = excluded.copper, items = excluded.items,
-           updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
-      ).run(
-        reward.achievementId,
-        reward.level,
-        reward.gold,
-        reward.silver,
-        reward.copper,
-        JSON.stringify(reward.items),
-        changedBy,
-        new Date().toISOString(),
-      );
+      this.transaction(db, () => {
+        this.saveSetting(db, HIDE_GMS, String(value));
+        db.prepare('INSERT INTO setting_changes (key, value, changed_by, changed_at) VALUES (?, ?, ?, ?)').run(
+          HIDE_GMS,
+          String(value),
+          changedBy,
+          new Date().toISOString(),
+        );
+      });
     } catch (error) {
       throw new StoreUnavailableError(error);
     }
@@ -172,25 +116,6 @@ export class PortalStore implements OnModuleDestroy {
   private setting(key: string): string | undefined {
     const row = this.db!.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value;
-  }
-
-  /** Saves a setting and logs who changed it. */
-  private changeSetting(key: string, value: string, changedBy: string): void {
-    const db = this.db;
-    if (!db) throw new StoreUnavailableError();
-    try {
-      this.transaction(db, () => {
-        this.saveSetting(db, key, value);
-        db.prepare('INSERT INTO setting_changes (key, value, changed_by, changed_at) VALUES (?, ?, ?, ?)').run(
-          key,
-          value,
-          changedBy,
-          new Date().toISOString(),
-        );
-      });
-    } catch (error) {
-      throw new StoreUnavailableError(error);
-    }
   }
 
   private saveSetting(db: DatabaseSync, key: string, value: string): void {

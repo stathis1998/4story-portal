@@ -1,9 +1,11 @@
 import type { Achievement, AchievementLevel, AchievementsOverview } from '@4story-portal/shared'
 
 export function level(overrides: Partial<AchievementLevel> = {}): AchievementLevel {
+  const threshold = overrides.threshold ?? 100
   return {
     level: 1,
-    threshold: 100,
+    threshold,
+    thresholdText: threshold.toLocaleString('en-US'),
     goal: 'Defeat 100 monsters',
     reward: null,
     done: false,

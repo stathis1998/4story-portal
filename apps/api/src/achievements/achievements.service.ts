@@ -20,7 +20,6 @@ import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../
 import { itemIcons } from '../gm/game-icons.generated.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
 import type { AccountStatsRow } from '../stats/stats-rules.js';
-import { PortalStore, StoreUnavailableError, type StoredReward } from '../store/portal-store.js';
 import { AchievementAwarder, rewardKey } from './achievement-awarder.js';
 import { ACHIEVEMENTS, type AchievementFamily, formatValue, levelReached, LEVELS_TOTAL } from './achievement-rules.js';
 import {
@@ -28,6 +27,7 @@ import {
   type AchievementsRepository,
   ANNOUNCE_WAITING,
   type AwardRow,
+  type RewardRow,
 } from './achievements.repository.js';
 
 const NEWS_ITEMS = 20;
@@ -40,13 +40,17 @@ export class AchievementsService {
   constructor(
     @Inject(ACHIEVEMENTS_REPOSITORY) private readonly repo: AchievementsRepository,
     private readonly stats: StatsService,
-    private readonly store: PortalStore,
     private readonly control: ControlClient,
     private readonly awarder: AchievementAwarder,
   ) {}
 
   async overview(user: SessionUser): Promise<AchievementsOverview> {
-    const [{ stats, ranked }, awards, rewards] = await Promise.all([this.stats.achievementStats(), this.awards(), this.rewards()]);
+    const [{ stats, ranked }, awards, rewards, live] = await Promise.all([
+      this.stats.achievementStats(),
+      this.awards(),
+      this.rewards(),
+      this.live(),
+    ]);
     const mine = stats.accounts.get(user.userId);
 
     // The highest level each account has been awarded, and when this one got each of its own.
@@ -75,6 +79,7 @@ export class AchievementsService {
         levels: family.levels.map((threshold, index) => ({
           level: index + 1,
           threshold,
+          thresholdText: formatValue(family, threshold),
           goal: family.goal(threshold),
           reward: rewards.get(rewardKey(family.id, index + 1)) ?? null,
           done: index + 1 <= levelsDone,
@@ -89,7 +94,7 @@ export class AchievementsService {
       levelsDone: achievements.reduce((total, achievement) => total + achievement.levelsDone, 0),
       levelsTotal: LEVELS_TOTAL,
       players: ranked.length,
-      live: this.store.achievementsLive(),
+      live,
     };
   }
 
@@ -105,9 +110,9 @@ export class AchievementsService {
   }
 
   async gm(): Promise<GmAchievements> {
-    const [awards, rewards] = await Promise.all([this.awards(), this.rewards()]);
+    const [awards, rewards, live] = await Promise.all([this.awards(), this.rewards(), this.live()]);
     return {
-      live: this.store.achievementsLive(),
+      live,
       control: this.control.status().state,
       awards: awards.length,
       pendingAnnouncements: awards.filter((award) => award.announced === ANNOUNCE_WAITING).length,
@@ -129,12 +134,12 @@ export class AchievementsService {
     const family = ACHIEVEMENTS.find((entry) => entry.id === achievementId);
     if (!family || level > family.levels.length) throw new NotFoundException('No such achievement level');
     await this.checkItems(reward.items);
-    this.save(() => this.store.setAchievementReward({ achievementId, level, ...reward }, changedBy));
+    await this.save(() => this.repo.setReward({ achievementId, level, ...reward }, changedBy));
     return this.gm();
   }
 
   async setLive(live: boolean, changedBy: string): Promise<GmAchievements> {
-    this.save(() => this.store.setAchievementsLive(live, changedBy));
+    await this.save(() => this.repo.setLive(live, changedBy));
     // Everything already completed is due the moment the switch goes on, whoever is online.
     if (live) this.awarder.wake();
     return this.gm();
@@ -150,12 +155,13 @@ export class AchievementsService {
     }
   }
 
-  private save(change: () => void): void {
+  private async save(change: () => Promise<void>): Promise<void> {
     try {
-      change();
+      await change();
     } catch (error) {
-      if (error instanceof StoreUnavailableError) throw new HttpException('The setting could not be saved', 503);
-      throw error;
+      // Most likely the achievement tables are not in this game database yet.
+      this.logger.warn(`Could not save an achievement setting: ${describe(error)}`);
+      throw new HttpException('The setting could not be saved', 503);
     }
   }
 
@@ -179,20 +185,32 @@ export class AchievementsService {
     }
   }
 
-  /** The awards so far. Empty when they can't be read, so the levels still show. */
-  private async awards(): Promise<AwardRow[]> {
+  // The pages keep working when the achievement tables can't be read (before they are added to the
+  // game database, say): levels still show, with no dates, no rewards and the switch off. Only the
+  // awarder needs the real answers, and it asks the database itself.
+  private async readOr<T>(what: string, read: () => Promise<T>, fallback: T): Promise<T> {
     try {
-      return await this.repo.awards();
+      return await read();
     } catch (error) {
-      this.logger.warn(`Could not read the achievement awards: ${error instanceof Error ? error.message : error}`);
-      return [];
+      this.logger.warn(`Could not read the achievement ${what}: ${describe(error)}`);
+      return fallback;
     }
+  }
+
+  private awards(): Promise<AwardRow[]> {
+    return this.readOr('awards', () => this.repo.awards(), []);
+  }
+
+  private live(): Promise<boolean> {
+    return this.readOr('switch', () => this.repo.live(), false);
   }
 
   /** Every saved reward, ready to show, by achievement and level. */
   private async rewards(): Promise<Map<string, AchievementReward>> {
-    const stored = this.store.achievementRewards();
-    const names = await this.itemNames(stored);
+    const stored = await this.readOr<RewardRow[]>('rewards', () => this.repo.rewards(), []);
+    const ids = [...new Set(stored.flatMap((reward) => reward.items.map((item) => item.itemId)))];
+    const found = await this.readOr('reward item names', () => this.repo.findItems(ids), []);
+    const names = new Map(found.map((row) => [row.itemId, row.name]));
     return new Map(
       stored.map(({ achievementId, level, gold, silver, copper, items }) => [
         rewardKey(achievementId, level),
@@ -210,14 +228,6 @@ export class AchievementsService {
       ]),
     );
   }
-
-  private async itemNames(stored: StoredReward[]): Promise<Map<number, string>> {
-    const ids = [...new Set(stored.flatMap((reward) => reward.items.map((item) => item.itemId)))];
-    try {
-      return new Map((await this.repo.findItems(ids)).map((row) => [row.itemId, row.name]));
-    } catch (error) {
-      this.logger.warn(`Could not read reward item names: ${error instanceof Error ? error.message : error}`);
-      return new Map();
-    }
-  }
 }
+
+const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));

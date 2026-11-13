@@ -40,5 +40,7 @@ it('builds bracketed three-part table names from the configured databases', () =
     monsterKills: '[TGAME_GSP_TEST].dbo.TCHARMONKILLTABLE',
     pets: '[TGAME_GSP_TEST].dbo.TPETTABLE',
     achievementAwards: '[TGAME_GSP_TEST].dbo.TPORTALACHIEVEMENTTABLE',
+    achievementRewards: '[TGAME_GSP_TEST].dbo.TPORTALACHIEVEMENTREWARD',
+    portalSettings: '[TGAME_GSP_TEST].dbo.TPORTALSETTING',
     achievementProcedure: '[TGAME_GSP_TEST].dbo.TPortalAchievementAward',
   }));

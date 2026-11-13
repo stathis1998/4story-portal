@@ -48,9 +48,13 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: 
   const [items, setItems] = useState<ItemRow[]>(() => (reward?.items ?? []).map((item) => ({ ...item, stack: null })))
   const [picking, setPicking] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // A number field the browser can't read (`1,000`, `5-`) reports an empty value, which must not save as 0.
+  const [unreadable, setUnreadable] = useState<Partial<Record<(typeof COINS)[number]['key'], boolean>>>({})
 
   function submit(event: { preventDefault(): void }) {
     event.preventDefault()
+    const bad = COINS.find((coin) => unreadable[coin.key])
+    if (bad) return setProblem(`${bad.label}: Enter a whole number`)
     // A blank coin counts as 0, so only the ones that pay need typing.
     const amount = (value: string) => (value.trim() ? Number(value) : 0)
     const parsed = achievementRewardSchema.safeParse({
@@ -91,7 +95,11 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: 
               autoFocus={index === 0}
               onFocus={(event) => event.target.select()}
               value={money[key]}
-              onChange={(event) => setMoney((current) => ({ ...current, [key]: event.target.value }))}
+              onChange={(event) => {
+                const { value, validity } = event.target
+                setMoney((current) => ({ ...current, [key]: value }))
+                setUnreadable((current) => ({ ...current, [key]: validity.badInput }))
+              }}
               className={`${field} w-24`}
             />
           </div>

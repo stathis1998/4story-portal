@@ -36,7 +36,9 @@ function useGmAchievementsMutation<Input>(key: string, path: string) {
   return useMutation({
     mutationKey: ['gm', 'achievements', key],
     mutationFn: (input: Input) => apiFetch<GmAchievements>(path, { method: 'PUT', body: JSON.stringify(input) }),
-    onSuccess: (state) => {
+    onSuccess: async (state) => {
+      // A poll already on its way would put the old state back over this answer.
+      await queryClient.cancelQueries({ queryKey: gmAchievementsQueryOptions.queryKey })
       queryClient.setQueryData(gmAchievementsQueryOptions.queryKey, state)
       // Players see the rewards and the live note too.
       void queryClient.invalidateQueries({ queryKey: achievementsQueryOptions.queryKey })
@@ -74,9 +76,6 @@ export function progressRatio(achievement: Achievement) {
   return Math.min(Math.max(achievement.value / next.threshold, 0), 1)
 }
 
-/** A threshold next to `valueText`: `10,000`, or `+24` when the value is written as `+22`. */
-export const formatThreshold = (threshold: number, valueText: string) =>
-  `${valueText.startsWith('+') ? '+' : ''}${threshold.toLocaleString('en-US')}`
 
 /** A reward the API would have sent as null. */
 export const paysSomething = (reward: AchievementReward | null): reward is AchievementReward =>
