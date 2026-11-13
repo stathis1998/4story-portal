@@ -10,7 +10,6 @@ export class StoreUnavailableError extends Error {
   }
 }
 
-export type BadgeUnlock = { userId: number; badgeId: string; firstSeen: string | null };
 export type SettingChange = { key: string; value: string; changedBy: string; changedAt: string };
 
 // Run in order, once each, tracked by PRAGMA user_version. Add new ones to the end.
@@ -41,6 +40,8 @@ const MIGRATIONS = [
    )
    INSERT INTO badge_baselines (badge_id)
    SELECT badge_id FROM original WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'badges_baselined');`,
+  // The two badge tables are no longer used: tiered achievements keep their awards, rewards and
+  // switch in the game database.
 ];
 
 const HIDE_GMS = 'hide_gms';
@@ -98,39 +99,6 @@ export class PortalStore implements OnModuleDestroy {
         this.db!.prepare(
           'SELECT key, value, changed_by AS changedBy, changed_at AS changedAt FROM setting_changes ORDER BY id',
         ).all() as SettingChange[],
-      [],
-    );
-  }
-
-  /**
-   * Remembers the badges each account holds. Those already held the first time a badge exists get no
-   * date, so a newly added badge doesn't look newly earned. `known` is every badge that exists now.
-   */
-  recordBadges(held: Map<number, string[]>, today: string, known: readonly string[]): void {
-    const db = this.db;
-    if (!db) return;
-    try {
-      this.transaction(db, () => {
-        const rows = db.prepare('SELECT badge_id AS badgeId FROM badge_baselines').all() as { badgeId: string }[];
-        const baselined = new Set(rows.map((row) => row.badgeId));
-        const insert = db.prepare('INSERT OR IGNORE INTO badge_unlocks (user_id, badge_id, first_seen) VALUES (?, ?, ?)');
-        for (const [userId, badges] of held) {
-          for (const badge of badges) insert.run(userId, badge, baselined.has(badge) ? today : null);
-        }
-        const mark = db.prepare('INSERT OR IGNORE INTO badge_baselines (badge_id) VALUES (?)');
-        for (const badge of known) mark.run(badge);
-      });
-    } catch (error) {
-      this.logger.warn(`Could not record badges: ${describe(error)}`);
-    }
-  }
-
-  badgeUnlocks(): BadgeUnlock[] {
-    return this.read(
-      () =>
-        this.db!.prepare(
-          'SELECT user_id AS userId, badge_id AS badgeId, first_seen AS firstSeen FROM badge_unlocks ORDER BY user_id, badge_id',
-        ).all() as BadgeUnlock[],
       [],
     );
   }

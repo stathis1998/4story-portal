@@ -7,6 +7,8 @@ import {
   type CompanionRow,
   type GearRow,
   type OptionRuleRow,
+  type PetRow,
+  type ProgressRow,
   type SessionRow,
   type SocialRow,
   type LotteryStreakRow,
@@ -16,6 +18,7 @@ import {
   type TitleRow,
   UPGRADE_DESTROYED,
   UPGRADE_KIND_SCROLL,
+  UPGRADE_SUCCESS,
   type UpgradeAttemptRow,
   type UpgradeFailureRow,
   type UpgradeLossRow,
@@ -31,7 +34,9 @@ const INVEN_EQUIP = 254; // NetCode.h
 const STORAGE_INVEN = 0;
 const TOWNER_CHAR = 0;
 // enum CHARCOUNTER in TMapType.h
+const COUNTER_UPGRADE_SUCCESS = 0;
 const COUNTER_UPGRADE_FAIL = 1;
+const COUNTER_MONEY_LOOTED = 2;
 const COUNTER_MONEY_SPENT = 3;
 const COUNTER_SOULLOT_WON = 4;
 const COUNTER_SOULLOT_LOST = 5;
@@ -126,6 +131,8 @@ export class SqlStatsRepository implements StatsRepository {
       upgradeAttempts,
       upgradeLosses,
       upgradeFailures,
+      progress,
+      pets,
       accounts,
     ] = await Promise.all([
       this.characters(),
@@ -143,6 +150,8 @@ export class SqlStatsRepository implements StatsRepository {
       this.upgradeAttempts(),
       this.upgradeLosses(),
       this.upgradeFailures(),
+      this.progress(),
+      this.pets(),
       this.accounts(),
     ]);
     return {
@@ -161,6 +170,8 @@ export class SqlStatsRepository implements StatsRepository {
       upgradeAttempts,
       upgradeLosses,
       upgradeFailures,
+      progress,
+      pets,
       accounts,
     };
   }
@@ -201,6 +212,49 @@ export class SqlStatsRepository implements StatsRepository {
     );
     // The driver returns bigint as text.
     return result.recordset.map((row) => ({ charId: row.charId, failed: Number(row.failed) }));
+  }
+
+  // One row per character, with zeros where the game has recorded nothing yet.
+  private async progress(): Promise<ProgressRow[]> {
+    const { characters, characterStats, characterCounters, upgradeLog, skills, monsterKills } = this.db.tables;
+    const counter = (statId: number) =>
+      `ISNULL((SELECT n.nValue FROM ${characterCounters} n WHERE n.dwCharID = c.dwCharID AND n.wStatID = ${statId}), 0)`;
+    type Raw = Omit<ProgressRow, 'damageTaken' | 'healDone' | 'upgradesSucceeded' | 'copperLooted'> & {
+      damageTaken: string;
+      healDone: string;
+      upgradesSucceeded: string;
+      copperLooted: string;
+    };
+    const result = await this.db.pool.request().query<Raw>(
+      `SELECT c.dwCharID AS charId,
+              ISNULL(s.nDamageTaken, 0) AS damageTaken, ISNULL(s.nHealDone, 0) AS healDone,
+              ISNULL((SELECT SUM(CAST(k.bLevel AS int)) FROM ${skills} k WHERE k.dwCharID = c.dwCharID), 0) AS skillLevels,
+              ISNULL(m.kinds, 0) AS monsterTypes, ISNULL(m.mostKills, 0) AS topMonsterKills,
+              ISNULL((SELECT MAX(l.bLevelAfter) FROM ${upgradeLog} l
+                      WHERE l.dwCharID = c.dwCharID AND l.bKind = ${UPGRADE_KIND_SCROLL} AND l.bResult = ${UPGRADE_SUCCESS}), 0) AS highestUpgrade,
+              ${counter(COUNTER_UPGRADE_SUCCESS)} AS upgradesSucceeded,
+              ${counter(COUNTER_MONEY_LOOTED)} AS copperLooted
+       FROM ${characters} c
+       LEFT JOIN ${characterStats} s ON s.dwCharID = c.dwCharID
+       LEFT JOIN (SELECT dwCharID, COUNT(*) AS kinds, MAX(dwKills) AS mostKills FROM ${monsterKills} WHERE dwKills > 0 GROUP BY dwCharID) m
+         ON m.dwCharID = c.dwCharID
+       WHERE c.bDelete = 0`,
+    );
+    // The driver returns bigint as text.
+    return result.recordset.map((row) => ({
+      ...row,
+      damageTaken: Number(row.damageTaken),
+      healDone: Number(row.healDone),
+      upgradesSucceeded: Number(row.upgradesSucceeded),
+      copperLooted: Number(row.copperLooted),
+    }));
+  }
+
+  private async pets(): Promise<PetRow[]> {
+    const result = await this.db.pool
+      .request()
+      .query<PetRow>(`SELECT p.dwUserID AS userId, COUNT(*) AS pets FROM ${this.db.tables.pets} p GROUP BY p.dwUserID`);
+    return result.recordset;
   }
 
   // Gaps and islands: numbering each draw by the wins before it puts every run of losses in its own

@@ -8,6 +8,7 @@ export const MSG = {
   OPLOGIN_REQ: 0x9302,
   OPLOGIN_ACK: 0x9303,
   GROUPLIST_ACK: 0x9306,
+  ANNOUNCEMENT_REQ: 0x932a,
   USERKICKOUT_REQ: 0x932c,
   USERMOVE_REQ: 0x932e,
   USERPOSITION_REQ: 0x9344,
@@ -157,6 +158,11 @@ export function encodeUserPosition(world: number, target: string, names: string[
 
 export function encodeUserKickout(name: string): Buffer {
   return encodeFrame(MSG.USERKICKOUT_REQ, new BodyWriter().string(name).toBuffer());
+}
+
+/** A line every online player sees in world chat, from "Operator". World 0 is every world. */
+export function encodeAnnouncement(world: number, text: string): Buffer {
+  return encodeFrame(MSG.ANNOUNCEMENT_REQ, new BodyWriter().dword(world).string(text).toBuffer());
 }
 
 function writeEvent(w: BodyWriter, e: ControlEvent): void {

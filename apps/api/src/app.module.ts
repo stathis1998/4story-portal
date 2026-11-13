@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AchievementsModule } from './achievements/achievements.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CharactersModule } from './characters/characters.module.js';
 import { ConfigModule } from './config/config.js';
@@ -26,6 +27,7 @@ import { WeaponsModule } from './weapons/weapons.module.js';
     GmModule,
     OnlineModule,
     StatsModule,
+    AchievementsModule,
     WeaponsModule,
     StoreModule,
   ],

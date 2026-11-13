@@ -21,13 +21,13 @@ const mailText = (min: number, max: number) =>
 // Silver and copper (Luna and Cron) roll over at 1000 in game.
 const coin = z.number().int().min(0).max(999);
 
-const moneySchema = z.object({
+export const moneySchema = z.object({
   gold: z.number().int().min(0).max(MAIL_MAX_GOLD),
   silver: coin,
   copper: coin,
 });
 
-const mailItemSchema = z.object({
+export const mailItemSchema = z.object({
   itemId: z.number().int().min(1).max(32767),
   count: z.number().int().min(1).max(255),
 });

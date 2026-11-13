@@ -1,3 +1,17 @@
+import {
+  type AchievementsRepository,
+  ANNOUNCE_SENT,
+  ANNOUNCE_WAITING,
+  AWARD_ALREADY_GIVEN,
+  AWARD_NO_CHARACTER,
+  AWARD_SWITCHED_OFF,
+  type AwardInput,
+  type AwardRow,
+  isEmptyReward,
+  type RecipientRow,
+  type RewardItemRow,
+  type RewardRow,
+} from '../src/achievements/achievements.repository.js';
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository, GearEffectRow, LevelFreezeRow } from '../src/characters/characters.repository.js';
@@ -98,7 +112,7 @@ export class FakeAccountsRepository implements AccountsRepository {
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
 export class FakeStatsRepository implements StatsRepository {
-  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, optionRules: [], social: [], combat: [], spending: [], soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], accounts: [] };
+  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, optionRules: [], social: [], combat: [], spending: [], soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], progress: [], pets: [], accounts: [] };
   loads = 0;
   failWith?: Error;
 
@@ -110,12 +124,13 @@ export class FakeStatsRepository implements StatsRepository {
 }
 
 export class FakeControlClient
-  implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'listEvents' | 'changeEvent'>
+  implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'announce' | 'listEvents' | 'changeEvent'>
 {
   state: ControlState = 'connected';
   worlds: { id: number; name: string }[] = [{ id: 1, name: 'Lapiris' }];
   readonly moves: unknown[] = [];
   readonly kicks: string[] = [];
+  readonly announcements: string[] = [];
   events: ControlEvent[] = [];
   readonly changes: { kind: EventKind; event: ControlEvent }[] = [];
   /** What the server answers a change with. */
@@ -145,6 +160,11 @@ export class FakeControlClient
     this.requireConnected();
     this.kicks.push(name);
     this.onKick?.(name);
+  }
+
+  announce(text: string): void {
+    this.requireConnected();
+    this.announcements.push(text);
   }
 
   async listEvents(): Promise<ControlEvent[]> {
@@ -301,5 +321,112 @@ export class FakeMailRepository implements MailRepository {
     if (this.missingOnSend.has(letter.charId)) return 0;
     this.sent.push(letter);
     return this.nextPostId++;
+  }
+}
+
+// Stands in for the achievement tables and TPortalAchievementAward: everything lives in memory.
+export class FakeAchievementsRepository implements AchievementsRepository {
+  liveFlag = false;
+  readonly liveChanges: { live: boolean; changedBy: string }[] = [];
+  rewardRows: RewardRow[] = [];
+  rows: AwardRow[] = [];
+  recipientRows: RecipientRow[] = [];
+  items: RewardItemRow[] = [];
+  /** Everything award() was asked for, including calls that awarded nothing. */
+  readonly sent: AwardInput[] = [];
+  /** The letters that went out, with the reward the "database" attached. */
+  readonly letters: { charId: number; title: string; message: string; reward: RewardRow | null }[] = [];
+  active = true;
+  activeChecks = 0;
+  /** The database's clock: stamps new awards and ages old ones. */
+  now = () => new Date();
+  /** Every call fails with this. */
+  failWith?: Error;
+  /** Awards this returns true for fail. */
+  failAward?: (input: AwardInput) => boolean;
+  /** Runs after each award that was given: a test uses it to change something mid-batch. */
+  onAward?: () => void;
+  /** Plays another portal process that takes every announcement first. */
+  claimedElsewhere = false;
+  private nextId = 1;
+
+  async live(): Promise<boolean> {
+    if (this.failWith) throw this.failWith;
+    return this.liveFlag;
+  }
+
+  async setLive(live: boolean, changedBy: string): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.liveFlag = live;
+    this.liveChanges.push({ live, changedBy });
+  }
+
+  async rewards(): Promise<RewardRow[]> {
+    if (this.failWith) throw this.failWith;
+    return this.rewardRows;
+  }
+
+  async setReward(reward: RewardRow): Promise<void> {
+    if (this.failWith) throw this.failWith;
+    this.rewardRows = this.rewardRows.filter((row) => !(row.achievementId === reward.achievementId && row.level === reward.level));
+    if (!isEmptyReward(reward)) this.rewardRows.push(reward);
+  }
+
+  async awards(): Promise<AwardRow[]> {
+    if (this.failWith) throw this.failWith;
+    const now = this.now().getTime();
+    return this.rows.map((row) => ({ ...row, ageSeconds: Math.floor((now - row.earnedAt.getTime()) / 1000) }));
+  }
+
+  async award(input: AwardInput): Promise<number> {
+    if (this.failWith) throw this.failWith;
+    this.sent.push(input);
+    if (this.failAward?.(input)) throw new Error('award failed');
+    if (!this.liveFlag) return AWARD_SWITCHED_OFF;
+    const given = this.rows.some(
+      (row) => row.userId === input.userId && row.achievementId === input.achievementId && row.level === input.level,
+    );
+    if (given) return AWARD_ALREADY_GIVEN;
+    if (!this.recipientRows.some((recipient) => recipient.charId === input.charId)) return AWARD_NO_CHARACTER;
+    const reward = this.rewardRows.find((row) => row.achievementId === input.achievementId && row.level === input.level) ?? null;
+    this.letters.push({ charId: input.charId, title: input.title, message: input.message + (reward ? input.rewardNote : ''), reward });
+    const id = this.nextId++;
+    this.rows.push({
+      id,
+      userId: input.userId,
+      achievementId: input.achievementId,
+      level: input.level,
+      earnedAt: this.now(),
+      ageSeconds: 0,
+      text: input.text,
+      announced: ANNOUNCE_WAITING,
+    });
+    this.onAward?.();
+    return id;
+  }
+
+  async recipients(): Promise<RecipientRow[]> {
+    return this.recipientRows;
+  }
+
+  async claimAnnouncement(id: number): Promise<boolean> {
+    const row = this.rows.find((entry) => entry.id === id);
+    if (!row || row.announced !== ANNOUNCE_WAITING) return false;
+    row.announced = ANNOUNCE_SENT;
+    return !this.claimedElsewhere;
+  }
+
+  async markAnnounced(id: number, state: number): Promise<void> {
+    const row = this.rows.find((entry) => entry.id === id);
+    if (row) row.announced = state;
+  }
+
+  async recentlyActive(): Promise<boolean> {
+    this.activeChecks++;
+    return this.active;
+  }
+
+  async findItems(itemIds: number[]): Promise<RewardItemRow[]> {
+    return this.items.filter((item) => itemIds.includes(item.itemId));
   }
 }

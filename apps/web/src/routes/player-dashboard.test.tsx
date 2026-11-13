@@ -1,7 +1,7 @@
-import type { ActiveEvents, BadgeView, CharacterProfile, HallOfFame, PlayerOverview } from '@4story-portal/shared'
+import type { ActiveEvents, CharacterProfile, HallOfFame, NewsItem, PlayerOverview } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import { achievement, achievementsOverview, simple } from '../test/achievements'
 import { character } from '../test/characters'
 import { gearItem } from '../test/gear'
 import { json, mockApi, sentBodies } from '../test/mock-api'
@@ -10,21 +10,6 @@ import { renderRoute } from '../test/render-route'
 
 const me = { userId: 1, username: 'friend', isGm: false }
 const gm = { userId: 2, username: 'moose', isGm: true }
-
-const badge = (overrides: Partial<BadgeView> = {}): BadgeView => ({
-  id: 'level-50',
-  name: 'Level 50',
-  description: 'Reach level 50',
-  category: 'progress',
-  comingSoon: false,
-  earned: true,
-  holders: 2,
-  players: 5,
-  firstSeen: null,
-  isNew: false,
-  firstToEarn: false,
-  ...overrides,
-})
 
 const overview = (overrides: Partial<PlayerOverview> = {}): PlayerOverview => ({
   today: '2026-11-01',
@@ -36,7 +21,6 @@ const overview = (overrides: Partial<PlayerOverview> = {}): PlayerOverview => ({
     { date: '2026-10-30', minutes: 45 },
     { date: '2026-10-31', minutes: 200 },
   ],
-  badges: [badge()],
   characters: [{ id: 1, progress: 0.25, hoursPlayed: 30 }],
   ...overrides,
 })
@@ -73,84 +57,6 @@ describe('characters page stats', () => {
     expect(screen.queryByRole('img', { name: /^2026-11-02/ })).not.toBeInTheDocument()
   })
 
-  it('shows badges with rarity, new and first to earn, earned ones first', async () => {
-    mockApi(
-      base({
-        'GET /me/overview': () =>
-          json(
-            200,
-            overview({
-              badges: [
-                badge({ id: 'level-90', name: 'Level 90', earned: false, holders: 1 }),
-                badge({ id: 'level-50', firstSeen: '2026-10-30', isNew: true, firstToEarn: true }),
-              ],
-            }),
-          ),
-      }),
-    )
-    renderRoute('/characters', { me })
-
-    const list = within(await screen.findByRole('list', { name: 'Achievements' }))
-    const items = list.getAllByRole('listitem')
-    expect(within(items[0]).getByText('Level 50')).toBeInTheDocument()
-    expect(within(items[0]).getByText('New')).toBeInTheDocument()
-    expect(within(items[0]).getByText('First to earn')).toBeInTheDocument()
-    expect(within(items[0]).getByText('Held by 2 of 5 players')).toBeInTheDocument()
-    expect(within(items[0]).getByText('Earned 30 Oct')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Level 90')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Not earned yet')).toBeInTheDocument()
-    expect(screen.getByText('1 of 2 earned')).toBeInTheDocument()
-  })
-
-  describe('achievement categories', () => {
-    const categorised = () =>
-      overview({
-        badges: [
-          badge({ id: 'level-50', name: 'Level 50', category: 'progress' }),
-          badge({ id: 'level-90', name: 'Level 90', category: 'progress', earned: false }),
-          badge({ id: 'hours-10', name: '10 Hours', category: 'playtime', earned: false }),
-          badge({ id: 'quests-10', name: 'Helping Hand', category: 'progress', comingSoon: true, earned: false, holders: 0 }),
-          badge({ id: 'deaths-1', name: 'Ouch', description: 'Die for the first time', category: 'misfortune', comingSoon: true, earned: false, holders: 0 }),
-        ],
-      })
-    const show = async () => {
-      mockApi(base({ 'GET /me/overview': () => json(200, categorised()) }))
-      renderRoute('/characters', { me })
-      await screen.findByRole('tablist')
-    }
-
-    it('has a tab per category with its count, leaving out coming soon ones', async () => {
-      await show()
-      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Progress 1/2', 'Playtime 0/1', 'Misfortune'])
-      expect(screen.getByText('1 of 3 earned')).toBeInTheDocument()
-    })
-
-    it('shows one category at a time', async () => {
-      await show()
-      expect(screen.getByText('Level 50')).toBeInTheDocument()
-      expect(screen.queryByText('10 Hours')).not.toBeInTheDocument()
-
-      await userEvent.click(screen.getByRole('tab', { name: 'Playtime 0/1' }))
-      expect(screen.getByText('10 Hours')).toBeInTheDocument()
-      expect(screen.queryByText('Level 50')).not.toBeInTheDocument()
-      expect(screen.getByRole('tabpanel', { name: 'Playtime 0/1' })).toBeInTheDocument()
-    })
-
-    it('marks coming soon ones, after the rest and without rarity', async () => {
-      await show()
-      const items = within(screen.getByRole('list', { name: 'Achievements' })).getAllByRole('listitem')
-      expect(items.map((item) => within(item).getAllByText(/Level|Helping/)[0].textContent)).toEqual(['Level 50', 'Level 90', 'Helping Hand'])
-      expect(within(items[2]).getByText('Coming soon')).toBeInTheDocument()
-      expect(within(items[2]).queryByText(/Held by/)).not.toBeInTheDocument()
-      expect(within(items[2]).queryByText('Not earned yet')).not.toBeInTheDocument()
-
-      await userEvent.click(screen.getByRole('tab', { name: 'Misfortune' }))
-      expect(screen.getByText('Ouch')).toBeInTheDocument()
-      expect(screen.getByText('Die for the first time')).toBeInTheDocument()
-      expect(screen.getByText('Coming soon')).toBeInTheDocument()
-    })
-  })
-
   it('adds progress and hours to the card, and links to the character', async () => {
     mockApi(base())
     renderRoute('/characters', { me })
@@ -181,13 +87,168 @@ describe('characters page stats', () => {
       base({
         'GET /characters': () => json(200, []),
         'GET /me/overview': () =>
-          json(200, overview({ hoursPlayed: 0, daysPlayed: 0, currentStreak: 0, longestStreak: 0, activity: [], characters: [], badges: [badge({ earned: false })] })),
+          json(200, overview({ hoursPlayed: 0, daysPlayed: 0, currentStreak: 0, longestStreak: 0, activity: [], characters: [] })),
       }),
     )
     renderRoute('/characters', { me })
 
     expect(await screen.findByText('No characters yet. Create one in the game.')).toBeInTheDocument()
-    expect(await screen.findByText('0 of 1 earned')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Your journey' })).toBeInTheDocument()
+  })
+
+  describe('latest news', () => {
+    const SERVER_NOW = '2026-11-01T16:30:00'
+    const item = (id: number, at: string, overrides: Partial<NewsItem> = {}): NewsItem => ({
+      id,
+      at,
+      text: `Moosey completed Slayer ${id}`,
+      mine: false,
+      ...overrides,
+    })
+    const news = (items: NewsItem[]) => ({ 'GET /news': () => json(200, { serverNow: SERVER_NOW, items }) })
+    const panel = async () => within(await screen.findByRole('region', { name: 'Latest news' }))
+
+    it('lists the news with how long ago it was, on the server clock', async () => {
+      mockApi(
+        base(
+          news([
+            item(4, '2026-11-01T16:29:40'),
+            item(3, '2026-11-01T16:25:00'),
+            item(2, '2026-11-01T13:10:00'),
+            item(1, '2026-10-30T10:00:00'),
+          ]),
+        ),
+      )
+      renderRoute('/characters', { me })
+
+      const lines = (await panel()).getAllByRole('listitem')
+      expect(lines.map((line) => line.textContent)).toEqual([
+        'Moosey completed Slayer 4just now',
+        'Moosey completed Slayer 35 min ago',
+        'Moosey completed Slayer 23 h ago',
+        'Moosey completed Slayer 12 d ago',
+      ])
+    })
+
+    it('sits above the characters, and marks your own news', async () => {
+      mockApi(
+        base(
+          news([
+            item(2, '2026-11-01T16:00:00', { text: 'Kaelith completed Slayer III: Defeat 10,000 monsters', mine: true }),
+            item(1, '2026-11-01T15:00:00'),
+          ]),
+        ),
+      )
+      renderRoute('/characters', { me })
+
+      const [mine, theirs] = (await panel()).getAllByRole('listitem')
+      expect(mine).toHaveTextContent('Kaelith completed Slayer III: Defeat 10,000 monsters')
+      expect(mine).toHaveClass('border-accent', 'text-accent-text')
+      expect(theirs).not.toHaveClass('border-accent')
+      const heading = screen.getByRole('heading', { name: 'Your characters' })
+      expect(mine.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('says so when there is none yet', async () => {
+      mockApi(base(news([])))
+      renderRoute('/characters', { me })
+
+      expect((await panel()).getByText('Nothing yet. Achievement completions will show up here.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Show all' })).not.toBeInTheDocument()
+    })
+
+    it('shows the newest eight until asked for all', async () => {
+      const ten = Array.from({ length: 10 }, (_, index) => item(10 - index, '2026-11-01T12:00:00'))
+      mockApi(base(news(ten)))
+      const { user } = renderRoute('/characters', { me })
+
+      const list = await panel()
+      expect(list.getAllByRole('listitem')).toHaveLength(8)
+      expect(list.getByText('Moosey completed Slayer 3')).toBeInTheDocument()
+      expect(list.queryByText('Moosey completed Slayer 2')).not.toBeInTheDocument()
+
+      await user.click(list.getByRole('button', { name: 'Show all' }))
+      expect(list.getAllByRole('listitem')).toHaveLength(10)
+      expect(list.getByText('Moosey completed Slayer 1')).toBeInTheDocument()
+
+      await user.click(list.getByRole('button', { name: 'Show fewer' }))
+      expect(list.getAllByRole('listitem')).toHaveLength(8)
+    })
+
+    it('has no toggle for eight or fewer', async () => {
+      mockApi(base(news(Array.from({ length: 8 }, (_, index) => item(8 - index, '2026-11-01T12:00:00')))))
+      renderRoute('/characters', { me })
+
+      expect((await panel()).getAllByRole('listitem')).toHaveLength(8)
+      expect(screen.queryByRole('button', { name: 'Show all' })).not.toBeInTheDocument()
+    })
+
+    it('shows nothing when the call fails', async () => {
+      mockApi(base({ 'GET /news': () => json(500, { statusCode: 500, message: 'x' }) }))
+      renderRoute('/characters', { me })
+
+      await screen.findByRole('region', { name: 'Your journey' })
+      expect(screen.queryByRole('region', { name: 'Latest news' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('almost there', () => {
+    const closest = (achievements = [simple('a', 'Alpha', 100), simple('b', 'Bravo', 30), simple('c', 'Charlie', 95), achievement(), simple('e', 'Echo', 0), simple('f', 'Foxtrot', 50)]) => ({
+      'GET /me/achievements': () => json(200, achievementsOverview({ achievements })),
+    })
+    const cards = async () =>
+      within(await screen.findByRole('list', { name: 'Almost there' }))
+        .getAllByRole('button')
+        .map((card) => /^[A-Z][a-z]+/.exec(card.textContent ?? '')?.[0])
+
+    it('shows the three achievements closest to their next level, below the journey', async () => {
+      mockApi(base(closest()))
+      renderRoute('/characters', { me })
+
+      // Alpha is finished, Slayer is at 74%, Foxtrot at 50%.
+      expect(await cards()).toEqual(['Charlie', 'Slayer', 'Foxtrot'])
+      const journey = await screen.findByRole('region', { name: 'Your journey' })
+      const list = screen.getByRole('list', { name: 'Almost there' })
+      expect(journey.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'All achievements' })).toHaveAttribute('href', '/achievements')
+    })
+
+    it('shows each one closed, and opens it on a click', async () => {
+      mockApi(base(closest([achievement()])))
+      const { user } = renderRoute('/characters', { me })
+
+      const card = await screen.findByRole('button', { name: /^Slayer/ })
+      expect(card).toHaveAttribute('aria-expanded', 'false')
+      expect(card).toHaveTextContent('Next: Defeat 10,000 monsters')
+
+      await user.click(card)
+      expect(screen.getByRole('list', { name: 'Slayer levels' })).toBeInTheDocument()
+    })
+
+    it('leaves out the ones with nothing counted yet', async () => {
+      mockApi(base(closest([simple('e', 'Echo', 0), simple('b', 'Bravo', 30)])))
+      renderRoute('/characters', { me })
+
+      expect(await cards()).toEqual(['Bravo'])
+    })
+
+    it('shows nothing when everything is finished or untouched', async () => {
+      const fetchMock = mockApi(base(closest([simple('a', 'Alpha', 100), simple('e', 'Echo', 0)])))
+      renderRoute('/characters', { me })
+
+      await screen.findByRole('region', { name: 'Your journey' })
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => input === '/api/me/achievements')).toBe(true))
+      expect(screen.queryByRole('heading', { name: 'Almost there' })).not.toBeInTheDocument()
+    })
+
+    it('shows nothing when the call fails, and keeps the rest of the page', async () => {
+      mockApi(base({ 'GET /me/achievements': () => json(500, { statusCode: 500, message: 'x' }) }))
+      renderRoute('/characters', { me })
+
+      expect(await screen.findByRole('region', { name: 'Your journey' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Kaelith' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Almost there' })).not.toBeInTheDocument()
+    })
   })
 
   describe('event banner', () => {

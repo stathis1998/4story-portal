@@ -1,8 +1,6 @@
 import type { ItemInstance, OptionRule } from './item-tooltip.js';
-// How player stats and badges are worked out, from rows the game already stores. Section 3 of the
+// How player stats are worked out, from rows the game already stores. Section 3 of the
 // design defines each one. No database or clock in here: `today` is passed in.
-
-import type { BadgeCategoryId } from '@4story-portal/shared';
 
 export type CharacterRow = {
   id: number;
@@ -52,6 +50,24 @@ export type UpgradeAttemptRow = {
 export type UpgradeLossRow = { charId: number; itemId: number; name: string | null; level: number; at: Date };
 /** The failed upgrade counter, which started a day before the upgrade log. */
 export type UpgradeFailureRow = { charId: number; failed: number };
+/** Numbers only the achievements read, one row per character. */
+export type ProgressRow = {
+  charId: number;
+  damageTaken: number;
+  healDone: number;
+  /** Every learned skill's level, added up. */
+  skillLevels: number;
+  /** Different monsters defeated at least once. */
+  monsterTypes: number;
+  /** Kills of the monster this character has defeated most. */
+  topMonsterKills: number;
+  /** The highest + a scroll has taken an item to, from the upgrade log. 0 before the log. */
+  highestUpgrade: number;
+  upgradesSucceeded: number;
+  copperLooted: number;
+};
+/** Mounts and pets belong to the account. */
+export type PetRow = { userId: number; pets: number };
 
 export const UPGRADE_KIND_SCROLL = 1;
 export const UPGRADE_KIND_GEM = 2;
@@ -75,6 +91,8 @@ export type StatRows = {
   upgradeAttempts: UpgradeAttemptRow[];
   upgradeLosses: UpgradeLossRow[];
   upgradeFailures: UpgradeFailureRow[];
+  progress: ProgressRow[];
+  pets: PetRow[];
   optionRules: OptionRuleRow[];
   accounts: AccountRow[];
 };
@@ -110,6 +128,18 @@ export type CharacterStatsRow = {
   upgradesFailed: number;
   /** Items lost to failed upgrade scrolls, from the upgrade log. */
   itemsDestroyed: number;
+  /** Failed upgrade scrolls that cost the item levels, from the upgrade log. */
+  upgradeSetbacks: number;
+  gemSuccesses: number;
+  damageTaken: number;
+  healDone: number;
+  skillLevels: number;
+  monsterTypes: number;
+  topMonsterKills: number;
+  /** The best + reached: what is worn now, or what the upgrade log saw. */
+  highestUpgrade: number;
+  upgradesSucceeded: number;
+  copperLooted: number;
 };
 
 export type AccountStatsRow = {
@@ -123,6 +153,7 @@ export type AccountStatsRow = {
   nightSessions: number;
   earlySessions: number;
   weekendSessions: number;
+  pets: number;
   activity: { date: string; minutes: number }[];
 };
 
@@ -143,13 +174,6 @@ const SUNDAY = 0;
 const SATURDAY = 6;
 // The 53-week calendar, so a full year always fits.
 const ACTIVITY_DAYS = 53 * 7;
-// Main weapon, head, body, pants, feet and hands (ES_* in NetCode.h).
-const MAIN_GEAR_SLOTS = [0, 3, 5, 6, 7, 8];
-// Neck, both rings and both earrings.
-const JEWELLERY_SLOTS = [9, 10, 11, 12, 13];
-// Hat, dress, accessory and race.
-const COSTUME_SLOTS = [15, 16, 17, 18];
-
 const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const dayNumber = (key: string) => Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10))) / DAY_MS;
 
@@ -221,11 +245,17 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
   const soulLottery = new Map(rows.soulLottery.map((row) => [row.charId, row]));
   const lotteryStreaks = new Map(rows.lotteryStreaks.map((row) => [row.charId, row]));
   const upgradeFailures = new Map(rows.upgradeFailures.map((row) => [row.charId, row.failed]));
+  const progress = new Map(rows.progress.map((row) => [row.charId, row]));
+  const pets = new Map(rows.pets.map((row) => [row.userId, row.pets]));
   const itemsDestroyed = new Map<number, number>();
+  const upgradeSetbacks = new Map<number, number>();
+  const gemSuccesses = new Map<number, number>();
+  const count = (counts: Map<number, number>, row: UpgradeAttemptRow) =>
+    counts.set(row.charId, (counts.get(row.charId) ?? 0) + row.attempts);
   for (const row of rows.upgradeAttempts) {
-    if (row.kind === UPGRADE_KIND_SCROLL && row.result === UPGRADE_DESTROYED) {
-      itemsDestroyed.set(row.charId, (itemsDestroyed.get(row.charId) ?? 0) + row.attempts);
-    }
+    if (row.kind === UPGRADE_KIND_SCROLL && row.result === UPGRADE_DESTROYED) count(itemsDestroyed, row);
+    if (row.kind === UPGRADE_KIND_SCROLL && row.result === UPGRADE_LOST_LEVELS) count(upgradeSetbacks, row);
+    if (row.kind === UPGRADE_KIND_GEM && row.result === UPGRADE_SUCCESS) count(gemSuccesses, row);
   }
 
   const characters = new Map<number, CharacterStatsRow>();
@@ -260,6 +290,8 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
 
     const charGear = gear.get(row.id) ?? [];
     const charCompanions = companions.get(row.id) ?? [];
+    const charProgress = progress.get(row.id);
+    const bestItem = charGear.reduce<GearRow | null>((best, item) => (!best || item.upgrade > best.upgrade ? item : best), null);
     characters.set(row.id, {
       row,
       progress: levelProgress(row),
@@ -269,7 +301,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       longestSessionMinutes: Math.round(longestMs / MINUTE_MS),
       ageDays: row.createdAt ? dayNumber(today) - dayNumber(row.createdAt.toISOString()) : null,
       gear: charGear,
-      bestItem: charGear.reduce<GearRow | null>((best, item) => (!best || item.upgrade > best.upgrade ? item : best), null),
+      bestItem,
       companions: charCompanions,
       companionLevel: Math.max(0, ...charCompanions.map((companion) => companion.level)),
       titles: titles.get(row.id) ?? [],
@@ -288,6 +320,16 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       currentLoseStreak: lotteryStreaks.get(row.id)?.currentLoseStreak ?? 0,
       upgradesFailed: upgradeFailures.get(row.id) ?? 0,
       itemsDestroyed: itemsDestroyed.get(row.id) ?? 0,
+      upgradeSetbacks: upgradeSetbacks.get(row.id) ?? 0,
+      gemSuccesses: gemSuccesses.get(row.id) ?? 0,
+      damageTaken: charProgress?.damageTaken ?? 0,
+      healDone: charProgress?.healDone ?? 0,
+      skillLevels: charProgress?.skillLevels ?? 0,
+      monsterTypes: charProgress?.monsterTypes ?? 0,
+      topMonsterKills: charProgress?.topMonsterKills ?? 0,
+      highestUpgrade: Math.max(bestItem?.upgrade ?? 0, charProgress?.highestUpgrade ?? 0),
+      upgradesSucceeded: charProgress?.upgradesSucceeded ?? 0,
+      copperLooted: charProgress?.copperLooted ?? 0,
     });
   }
 
@@ -308,6 +350,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       nightSessions: accountNights.get(userId) ?? 0,
       earlySessions: accountEarly.get(userId) ?? 0,
       weekendSessions: accountWeekend.get(userId) ?? 0,
+      pets: pets.get(userId) ?? 0,
       activity: [...days.entries()]
         .filter(([date]) => dayNumber(date) > oldestDay)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -317,304 +360,6 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
 
   return { today, titlesTotal: rows.titlesTotal, characters, accounts };
 }
-
-export type BadgeDefinition = {
-  id: string;
-  name: string;
-  description: string;
-  category: BadgeCategoryId;
-  earned: (account: AccountStatsRow) => boolean;
-};
-
-export type ComingSoonBadge = Omit<BadgeDefinition, 'earned'>;
-
-const anyCharacter = (test: (character: CharacterStatsRow) => boolean) => (account: AccountStatsRow) =>
-  account.characters.some(test);
-
-const hasSlots = (character: CharacterStatsRow, slots: number[]) =>
-  slots.every((slot) => character.gear.some((item) => item.slot === slot));
-
-const levelBadge = (level: number): BadgeDefinition => ({
-  id: `level-${level}`,
-  name: `Level ${level}`,
-  description: `Reach level ${level}`,
-  category: 'progress',
-  earned: anyCharacter(({ row }) => row.level >= level),
-});
-
-const hoursBadge = (hours: number): BadgeDefinition => ({
-  id: `hours-${hours}`,
-  name: `${hours} Hours`,
-  description: `Play for ${hours} hours across your characters`,
-  category: 'playtime',
-  earned: (account) => account.minutesPlayed >= hours * 60,
-});
-
-const daysBadge = (days: number): BadgeDefinition => ({
-  id: `days-${days}`,
-  name: `${days} Days Played`,
-  description: `Play on ${days} different days`,
-  category: 'playtime',
-  earned: (account) => account.daysPlayed >= days,
-});
-
-const streakBadge = (days: number): BadgeDefinition => ({
-  id: `streak-${days}`,
-  name: `${days} Day Streak`,
-  description: `Play ${days} days in a row`,
-  category: 'playtime',
-  earned: (account) => account.longestStreak >= days,
-});
-
-const upgradeBadge = (upgrade: number): BadgeDefinition => ({
-  id: `upgrade-${upgrade}`,
-  name: `+${upgrade} Item`,
-  description: `Equip an item upgraded to +${upgrade}`,
-  category: 'gear',
-  earned: anyCharacter(({ bestItem }) => (bestItem?.upgrade ?? 0) >= upgrade),
-});
-
-const titlesBadge = (count: number): BadgeDefinition => ({
-  id: `titles-${count}`,
-  name: `${count} Titles`,
-  description: `Collect ${count} titles on one character`,
-  category: 'collection',
-  earned: anyCharacter(({ titles }) => titles.length >= count),
-});
-
-const classesBadge = (id: string, name: string, count: number, description: string): BadgeDefinition => ({
-  id,
-  name,
-  description,
-  category: 'collection',
-  earned: (account) => new Set(account.characters.map(({ row }) => row.classCode)).size >= count,
-});
-
-const wealthBadge = (id: string, name: string, gold: number): BadgeDefinition => ({
-  id,
-  name,
-  description: `Hold ${gold.toLocaleString('en-US')} gold on one character`,
-  category: 'collection',
-  earned: anyCharacter(({ row }) => row.gold >= gold),
-});
-
-/** Adds a number up across the account's characters. */
-const accountTotal = (account: AccountStatsRow, value: (character: CharacterStatsRow) => number) =>
-  account.characters.reduce((sum, character) => sum + value(character), 0);
-
-const killsBadge = (kills: number, name: string): BadgeDefinition => ({
-  id: `kills-${kills}`,
-  name,
-  description: `Defeat ${kills.toLocaleString('en-US')} monsters across your characters`,
-  category: 'combat',
-  earned: (account) => accountTotal(account, (character) => character.kills) >= kills,
-});
-
-const damageBadge = (id: string, name: string, damage: number, amount: string): BadgeDefinition => ({
-  id,
-  name,
-  description: `Deal ${amount} damage to monsters across your characters`,
-  category: 'combat',
-  earned: (account) => accountTotal(account, (character) => character.damageDealt) >= damage,
-});
-
-const failedUpgradesBadge = (count: number, name: string): BadgeDefinition => ({
-  id: `failed-upgrades-${count}`,
-  name,
-  description: count === 1 ? 'Fail an upgrade' : `Fail ${count} upgrades across your characters`,
-  category: 'misfortune',
-  earned: (account) => accountTotal(account, (character) => character.upgradesFailed) >= count,
-});
-
-const destroyedBadge = (count: number, name: string): BadgeDefinition => ({
-  id: `destroyed-${count}`,
-  name,
-  description: count === 1 ? 'Lose an item to a failed upgrade' : `Lose ${count} items to failed upgrades`,
-  category: 'misfortune',
-  earned: (account) => accountTotal(account, (character) => character.itemsDestroyed) >= count,
-});
-
-const duelsBadge = (wins: number, name: string): BadgeDefinition => ({
-  id: `duels-${wins}`,
-  name,
-  description: wins === 1 ? 'Win a duel' : `Win ${wins} duels across your characters`,
-  category: 'social',
-  earned: (account) => account.characters.reduce((total, { duelWins }) => total + duelWins, 0) >= wins,
-});
-
-export const BADGES: readonly BadgeDefinition[] = [
-  ...[10, 25, 50, 75, 90].map(levelBadge),
-  {
-    id: 'level-50-x3',
-    name: 'Three of a Kind',
-    description: 'Have three characters at level 50',
-    category: 'progress',
-    earned: (account) => account.characters.filter(({ row }) => row.level >= 50).length >= 3,
-  },
-
-  ...[10, 50, 100, 500].map(hoursBadge),
-  ...[7, 30, 100].map(daysBadge),
-  ...[3, 7, 30].map(streakBadge),
-  {
-    id: 'night-owl',
-    name: 'Night Owl',
-    description: 'Log in between midnight and 5 AM, 10 times',
-    category: 'playtime',
-    earned: (account) => account.nightSessions >= 10,
-  },
-  {
-    id: 'early-bird',
-    name: 'Early Bird',
-    description: 'Log in between 5 AM and 8 AM, 10 times',
-    category: 'playtime',
-    earned: (account) => account.earlySessions >= 10,
-  },
-  {
-    id: 'weekend-warrior',
-    name: 'Weekend Warrior',
-    description: 'Log in on a Saturday or Sunday, 10 times',
-    category: 'playtime',
-    earned: (account) => account.weekendSessions >= 10,
-  },
-  {
-    id: 'marathon',
-    name: 'Marathon',
-    description: 'Stay logged in for 8 hours in one session',
-    category: 'playtime',
-    earned: anyCharacter(({ longestSessionMinutes }) => longestSessionMinutes >= 8 * 60),
-  },
-  {
-    id: 'veteran',
-    name: 'Veteran',
-    description: 'Have a character at least a year old',
-    category: 'playtime',
-    earned: anyCharacter(({ ageDays }) => (ageDays ?? 0) >= 365),
-  },
-
-  ...[10, 15, 20].map(upgradeBadge),
-  {
-    id: 'geared',
-    name: 'Fully Geared',
-    description: 'Equip a main weapon, head, body, pants, feet and hands on one character',
-    category: 'gear',
-    earned: anyCharacter((character) => hasSlots(character, MAIN_GEAR_SLOTS)),
-  },
-  {
-    id: 'jeweller',
-    name: 'Fully Jewelled',
-    description: 'Equip a necklace, two rings and two earrings on one character',
-    category: 'gear',
-    earned: anyCharacter((character) => hasSlots(character, JEWELLERY_SLOTS)),
-  },
-  {
-    id: 'dressed-up',
-    name: 'Dressed Up',
-    description: 'Equip a costume item',
-    category: 'gear',
-    earned: anyCharacter(({ gear }) => gear.some((item) => COSTUME_SLOTS.includes(item.slot))),
-  },
-
-  ...[5, 10, 25].map(titlesBadge),
-  {
-    id: 'companion-first',
-    name: 'New Best Friend',
-    description: 'Get a companion',
-    category: 'collection',
-    earned: anyCharacter(({ companions }) => companions.length >= 1),
-  },
-  {
-    id: 'companion-20',
-    name: 'Beast Master',
-    description: 'Raise a companion to level 20',
-    category: 'collection',
-    earned: anyCharacter(({ companionLevel }) => companionLevel >= 20),
-  },
-  {
-    id: 'companion-5',
-    name: 'Full Pack',
-    description: 'Have 5 companions on one character',
-    category: 'collection',
-    earned: anyCharacter(({ companions }) => companions.length >= 5),
-  },
-  classesBadge('classes-3', 'Jack of Trades', 3, 'Have characters of 3 different classes'),
-  classesBadge('classes-6', 'Master of All', 6, 'Have a character of every class'),
-  {
-    id: 'races-3',
-    name: 'World Traveller',
-    description: 'Have a character of every race',
-    category: 'collection',
-    earned: (account) => new Set(account.characters.map(({ row }) => row.raceCode)).size >= 3,
-  },
-  wealthBadge('wealth-100', 'Pocket Money', 100),
-  wealthBadge('wealth-1000', 'Treasure Hoard', 1000),
-  wealthBadge('wealth-10000', 'Dragon Hoard', 10000),
-
-  {
-    id: 'friends-1',
-    name: 'First Friend',
-    description: 'Add a friend',
-    category: 'social',
-    earned: anyCharacter(({ friends }) => friends >= 1),
-  },
-  {
-    id: 'friends-5',
-    name: 'Good Company',
-    description: 'Have 5 friends on one character',
-    category: 'social',
-    earned: anyCharacter(({ friends }) => friends >= 5),
-  },
-  {
-    id: 'guild-member',
-    name: 'Guild Member',
-    description: 'Join a guild',
-    category: 'social',
-    earned: anyCharacter(({ inGuild }) => inGuild),
-  },
-  {
-    id: 'guild-leader',
-    name: 'Guild Leader',
-    description: 'Lead a guild',
-    category: 'social',
-    earned: anyCharacter(({ leadsGuild }) => leadsGuild),
-  },
-  duelsBadge(1, 'First Blood'),
-  duelsBadge(10, 'Duellist'),
-  duelsBadge(50, 'Champion'),
-
-  // Kills and damage are counted since 6 November 2026, failed upgrades since 9 November and
-  // destroyed items since 10 November.
-  killsBadge(100, 'Hunter'),
-  killsBadge(1000, 'Slayer'),
-  killsBadge(10000, 'Exterminator'),
-  killsBadge(100000, 'Extinction Event'),
-  damageBadge('damage-1m', 'Heavy Hitter', 1_000_000, '1 million'),
-  damageBadge('damage-10m', 'Wrecking Ball', 10_000_000, '10 million'),
-  damageBadge('damage-100m', 'Force of Nature', 100_000_000, '100 million'),
-
-  failedUpgradesBadge(1, 'Bad Luck'),
-  failedUpgradesBadge(10, 'Cursed Anvil'),
-  failedUpgradesBadge(100, 'Why Do I Keep Trying'),
-  destroyedBadge(1, 'Gone'),
-  destroyedBadge(10, 'Heartbreak'),
-];
-
-// Shown but not earnable: the game doesn't record these. TMapSvr's LogUserDie is commented out, and
-// no field in the monster chart is known to mark a boss.
-export const COMING_SOON_BADGES: readonly ComingSoonBadge[] = [
-  { id: 'quests-10', name: 'Helping Hand', description: 'Finish 10 quests', category: 'progress' },
-  { id: 'quests-100', name: 'Adventurer', description: 'Finish 100 quests', category: 'progress' },
-  { id: 'quests-500', name: 'Living Legend', description: 'Finish 500 quests', category: 'progress' },
-
-  { id: 'bosses-1', name: 'Giant Killer', description: 'Defeat a boss', category: 'combat' },
-  { id: 'bosses-10', name: 'Boss Slayer', description: 'Defeat 10 bosses', category: 'combat' },
-
-  { id: 'deaths-1', name: 'Ouch', description: 'Die for the first time', category: 'misfortune' },
-  { id: 'deaths-100', name: 'Back Again', description: 'Die 100 times', category: 'misfortune' },
-  { id: 'deaths-1000', name: 'Death Is a Habit', description: 'Die 1,000 times', category: 'misfortune' },
-];
-
-export const earnedBadges = (account: AccountStatsRow): string[] =>
-  BADGES.filter((badge) => badge.earned(account)).map((badge) => badge.id);
 
 export type RankCandidate<K> = { key: K; name: string; value: number };
 export type Ranked<K> = RankCandidate<K> & { place: number };

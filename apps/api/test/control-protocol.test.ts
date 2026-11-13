@@ -13,6 +13,7 @@ import {
   encodeEventChange,
   encodeEventList,
   encodeFrame,
+  encodeAnnouncement,
   encodeLogin,
   encodeUserMove,
   encodeUserKickout,
@@ -155,6 +156,17 @@ describe('control protocol events', () => {
 });
 
 describe('control protocol encoding', () => {
+  it('encodes CT_ANNOUNCEMENT_REQ as the world, then the text', () => {
+    const frame = encodeAnnouncement(0, 'Kaelith completed Slayer III');
+    expect(frame.readUInt16LE(0)).toBe(16 + 4 + 4 + 28);
+    expect(frame.readUInt16LE(2)).toBe(0x932a);
+    expect(frame.subarray(16)).toEqual(Buffer.concat([hex('00000000'), text('Kaelith completed Slayer III')]));
+  });
+
+  it('can address one world', () => {
+    expect(encodeAnnouncement(1, 'Hi').subarray(16, 20)).toEqual(hex('01000000'));
+  });
+
   it('encodes CT_USERKICKOUT_REQ as the bare character name', () => {
     const frame = encodeUserKickout('Kaelith');
     expect(frame.readUInt16LE(0)).toBe(27);
