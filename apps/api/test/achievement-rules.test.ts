@@ -1,9 +1,14 @@
 import { ACHIEVEMENT_CATEGORIES, ACHIEVEMENT_MAX_LEVELS } from '@4story-portal/shared';
 import { describe, expect, it } from 'vitest';
 import {
+  ACCOUNT_ACHIEVEMENTS,
+  ACCOUNT_LEVELS_TOTAL,
   ACHIEVEMENTS,
   type AchievementFamily,
-  LEVELS_TOTAL,
+  CHARACTER_ACHIEVEMENTS,
+  CHARACTER_LEVELS_TOTAL,
+  accountLevelsDone,
+  characterLevelsDone,
   formatValue,
   levelReached,
   levelsDone,
@@ -58,9 +63,15 @@ const rows = (overrides: Partial<StatRows> = {}): StatRows => ({
   ...overrides,
 });
 
-const account = (overrides: Partial<StatRows> = {}) => computeStats(rows(overrides), '2026-11-01').accounts.get(10)!;
+const stats = (overrides: Partial<StatRows> = {}) => computeStats(rows(overrides), '2026-11-01');
+const account = (overrides: Partial<StatRows> = {}) => stats(overrides).accounts.get(10)!;
+const char = (overrides: Partial<StatRows> = {}, id = 1) => stats(overrides).characters.get(id)!;
 const family = (id: string): AchievementFamily => ACHIEVEMENTS.find((entry) => entry.id === id)!;
-const value = (id: string, overrides: Partial<StatRows>) => family(id).value(account(overrides));
+/** A character achievement's value for one character, or an account achievement's for the account. */
+function value(id: string, overrides: Partial<StatRows>, charId = 1): number {
+  const entry = family(id);
+  return entry.scope === 'character' ? entry.value(char(overrides, charId)) : entry.value(account(overrides));
+}
 const progress = (charId: number, overrides: Partial<StatRows['progress'][number]>) => ({
   charId,
   damageTaken: 0,
@@ -132,14 +143,36 @@ describe('the catalogue', () => {
     }
   });
 
-  it('counts every level', () => {
-    expect(LEVELS_TOTAL).toBe(ACHIEVEMENTS.reduce((total, entry) => total + entry.levels.length, 0));
+  it('counts every level of each kind', () => {
+    const count = (entries: readonly AchievementFamily[]) => entries.reduce((total, entry) => total + entry.levels.length, 0);
+    expect(CHARACTER_LEVELS_TOTAL).toBe(count(CHARACTER_ACHIEVEMENTS));
+    expect(ACCOUNT_LEVELS_TOTAL).toBe(count(ACCOUNT_ACHIEVEMENTS));
+    expect(CHARACTER_LEVELS_TOTAL + ACCOUNT_LEVELS_TOTAL).toBe(count(ACHIEVEMENTS));
+  });
+
+  it('marks each achievement as a character or an account one', () => {
+    expect(CHARACTER_ACHIEVEMENTS.every((entry) => entry.scope === 'character')).toBe(true);
+    expect(ACCOUNT_ACHIEVEMENTS.every((entry) => entry.scope === 'account')).toBe(true);
+    expect(ACHIEVEMENTS).toHaveLength(CHARACTER_ACHIEVEMENTS.length + ACCOUNT_ACHIEVEMENTS.length);
+  });
+
+  it('keeps what a player does over time, and what the account owns, for the account', () => {
+    const ids = ACCOUNT_ACHIEVEMENTS.map((entry) => entry.id).sort();
+    expect(ids).toEqual(['classes', 'days', 'early-bird', 'hours', 'marathon', 'night-owl', 'pets', 'roster', 'streak', 'weekend-warrior']);
+  });
+
+  it('never asks one character for something "on one character"', () => {
+    for (const entry of CHARACTER_ACHIEVEMENTS) {
+      for (const threshold of entry.levels) expect(entry.goal(threshold), entry.id).not.toMatch(/one character|your characters/);
+    }
   });
 });
 
 describe('values', () => {
-  it('takes the highest level character', () => {
-    expect(value('level', { characters: [character({ level: 40 }), character({ id: 2, level: 72 })] })).toBe(72);
+  it('reads each character its own level', () => {
+    const characters = [character({ level: 40 }), character({ id: 2, level: 72 })];
+    expect(value('level', { characters }, 1)).toBe(40);
+    expect(value('level', { characters }, 2)).toBe(72);
   });
 
   it('counts characters at level 50', () => {
@@ -147,14 +180,15 @@ describe('values', () => {
     expect(value('roster', { characters })).toBe(2);
   });
 
-  it('adds kills up across the account', () => {
+  it('counts a character own kills, not the account total', () => {
     const characters = [character(), character({ id: 2 })];
     const combat = [
       { charId: 1, kills: 600, damageDealt: 10 },
       { charId: 2, kills: 400, damageDealt: 5 },
     ];
-    expect(value('kills', { characters, combat })).toBe(1000);
-    expect(value('damage', { characters, combat })).toBe(15);
+    expect(value('kills', { characters, combat }, 1)).toBe(600);
+    expect(value('kills', { characters, combat }, 2)).toBe(400);
+    expect(value('damage', { characters, combat }, 2)).toBe(5);
   });
 
   it('reads the numbers only achievements use', () => {
@@ -166,14 +200,16 @@ describe('values', () => {
         progress(2, { damageTaken: 50, healDone: 3, skillLevels: 44, monsterTypes: 20, topMonsterKills: 300, upgradesSucceeded: 6, copperLooted: 700_000 }),
       ],
     };
-    expect(value('damage-taken', rowsWith)).toBe(150);
-    expect(value('healing', rowsWith)).toBe(10);
-    expect(value('skills', rowsWith)).toBe(44);
-    expect(value('bestiary', rowsWith)).toBe(20);
+    expect(value('damage-taken', rowsWith)).toBe(100);
+    expect(value('healing', rowsWith)).toBe(7);
+    expect(value('skills', rowsWith)).toBe(30);
+    expect(value('bestiary', rowsWith)).toBe(12);
     expect(value('nemesis', rowsWith)).toBe(900);
-    expect(value('upgrade-successes', rowsWith)).toBe(10);
-    // 2.2 gold looted, counted in whole gold.
-    expect(value('gold-looted', rowsWith)).toBe(2);
+    expect(value('upgrade-successes', rowsWith)).toBe(4);
+    // 1.5 gold looted, counted in whole gold.
+    expect(value('gold-looted', rowsWith)).toBe(1);
+    expect(value('skills', rowsWith, 2)).toBe(44);
+    expect(value('gold-looted', rowsWith, 2)).toBe(0);
   });
 
   it('takes the best upgrade from what is worn or what the log saw', () => {
@@ -188,8 +224,10 @@ describe('values', () => {
     const gear = [item(0, 17, 2), item(3, 22, 0), item(5, 16, 4), item(0, 20, 5, 2)];
     const characters = [character(), character({ id: 2 })];
     expect(value('glowing', { characters, gear })).toBe(2);
-    expect(value('gem-level', { characters, gear })).toBe(5);
+    expect(value('gem-level', { characters, gear })).toBe(4);
     expect(value('equipped', { characters, gear })).toBe(3);
+    expect(value('gem-level', { characters, gear }, 2)).toBe(5);
+    expect(value('equipped', { characters, gear }, 2)).toBe(1);
   });
 
   it('counts gemstone successes and scroll setbacks from the upgrade log', () => {
@@ -237,13 +275,27 @@ describe('values', () => {
   });
 });
 
-describe('levelsDone', () => {
+describe('levels done', () => {
+  // Level 40 is two levels of `level`; 1,000 kills is one of `kills`. Level 60 is three, and puts one character on the roster.
+  const played = {
+    characters: [character({ level: 40 }), character({ id: 2, level: 60 }), character({ id: 3, level: 90, banned: true })],
+    combat: [{ charId: 1, kills: 1000, damageDealt: 0 }],
+  };
+
   it('is 0 for a fresh account', () => expect(levelsDone(account())).toBe(0));
 
-  it('adds up the levels reached in every achievement', () => {
-    // Level 40 is two levels of `level`; 1,000 kills is one of `kills`.
-    const done = levelsDone(account({ characters: [character({ level: 40 })], combat: [{ charId: 1, kills: 1000, damageDealt: 0 }] }));
-    expect(done).toBe(3);
+  it('counts a character own levels', () => {
+    expect(characterLevelsDone(char(played, 1))).toBe(3);
+    expect(characterLevelsDone(char(played, 2))).toBe(3);
+  });
+
+  it('counts the account own levels', () => {
+    // Two characters at level 50 or more: the banned one still counts as owned.
+    expect(accountLevelsDone(account(played))).toBe(2);
+  });
+
+  it('adds the account and its characters up, leaving banned characters out', () => {
+    expect(levelsDone(account(played))).toBe(3 + 3 + 2);
   });
 });
 

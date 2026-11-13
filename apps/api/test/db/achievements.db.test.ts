@@ -56,9 +56,10 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
 
   const input = (overrides: Partial<AwardInput> = {}): AwardInput => ({
     userId: character.userId,
+    charId: character.charId,
+    rebirth: 0,
     achievementId: 'kills',
     level: 2,
-    charId: character.charId,
     sender: 'Achievements',
     title: 'Achievement: Slayer II',
     message: 'You completed Slayer II: Defeat 10,000 monsters.',
@@ -104,6 +105,7 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
         szAchievement: string;
         bLevel: number;
         dwCharID: number;
+        bRebirth: number;
         dwPostID: number;
         dwGold: number;
         dwSilver: number;
@@ -209,6 +211,7 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
           szAchievement: 'kills',
           bLevel: 2,
           dwCharID: character.charId,
+          bRebirth: 0,
           dwGold: 12,
           dwSilver: 340,
           dwCooper: 5,
@@ -273,6 +276,54 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
       });
     });
 
+    it('awards the same level again in a character next life, and keeps the first', async () => {
+      await withLiveRepo(async (repo, tx) => {
+        await repo.setReward(reward(), 'moose');
+        expect(await repo.award(input())).toBeGreaterThan(0);
+        expect(await repo.award(input({ rebirth: 1 }))).toBeGreaterThan(0);
+        expect(await repo.award(input({ rebirth: 1 }))).toBe(AWARD_ALREADY_GIVEN);
+
+        expect((await repo.awards()).map(({ charId, rebirth, level }) => ({ charId, rebirth, level }))).toEqual([
+          { charId: character.charId, rebirth: 0, level: 2 },
+          { charId: character.charId, rebirth: 1, level: 2 },
+        ]);
+        // Paid both times.
+        expect(await count(tx, 'TPOSTTABLE', `dwCharID = ${character.charId} AND szSender = 'Achievements' AND dwGold = 12`)).toBe(2);
+      });
+    });
+
+    it('records an account achievement without a letter, and never with a reward', async () => {
+      await withLiveRepo(async (repo, tx) => {
+        // A reward row for it must be ignored: account achievements pay nothing.
+        await repo.setReward(reward({ achievementId: 'hours', level: 1 }), 'moose');
+        const id = await repo.award(input({ charId: 0, achievementId: 'hours', level: 1, text: 'account award' }));
+        expect(id).toBeGreaterThan(0);
+
+        const row = (
+          await new sql.Request(tx).query<{ dwCharID: number; dwPostID: number; dwGold: number; szItems: string; szText: string }>(
+            `SELECT dwCharID, dwPostID, dwGold, szItems, szText FROM [${gameName}].dbo.TPORTALACHIEVEMENTTABLE WHERE dwID = ${id}`,
+          )
+        ).recordset[0];
+        expect(row).toEqual({ dwCharID: 0, dwPostID: 0, dwGold: 0, szItems: '', szText: 'account award' });
+        expect(await count(tx, 'TPOSTTABLE', `szSender = 'Achievements'`)).toBe(0);
+        expect(await repo.award(input({ charId: 0, achievementId: 'hours', level: 1 }))).toBe(AWARD_ALREADY_GIVEN);
+      });
+    });
+
+    it('keeps two characters of one account apart', async () => {
+      await withLiveRepo(async (repo, tx) => {
+        const other = (
+          await new sql.Request(tx).query<{ charId: number }>(
+            `SELECT TOP 1 dwCharID AS charId FROM ${db.tables.characters} WHERE bDelete = 0 AND dwCharID <> ${character.charId} ORDER BY dwCharID`,
+          )
+        ).recordset[0];
+        expect(await repo.award(input())).toBeGreaterThan(0);
+        // Same account, achievement and level, another character.
+        expect(await repo.award(input({ charId: other.charId }))).toBeGreaterThan(0);
+        expect(await count(tx, 'TPOSTTABLE', `dwCharID = ${other.charId} AND szSender = 'Achievements'`)).toBe(1);
+      });
+    });
+
     it('writes nothing for a character that does not exist', async () => {
       await withLiveRepo(async (repo, tx) => {
         expect(await repo.award(input({ charId: 2_000_000_000 }))).toBe(AWARD_NO_CHARACTER);
@@ -295,7 +346,7 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
           { id: first, level: 1, text: 'first', announced: ANNOUNCE_WAITING },
           { id: second, level: 2, text: 'second', announced: ANNOUNCE_WAITING },
         ]);
-        expect(awards[0]).toMatchObject({ userId: character.userId, achievementId: 'kills' });
+        expect(awards[0]).toMatchObject({ userId: character.userId, charId: character.charId, rebirth: 0, achievementId: 'kills' });
         expect(awards[0].earnedAt).toBeInstanceOf(Date);
         expect(awards[0].ageSeconds).toBeGreaterThanOrEqual(0);
         expect(awards[0].ageSeconds).toBeLessThan(60);
@@ -331,61 +382,6 @@ describe('SqlAchievementsRepository against the _TEST copy', () => {
         await repo.markAnnounced(id, ANNOUNCE_SKIPPED);
         expect(await repo.claimAnnouncement(id)).toBe(false);
         expect(await repo.claimAnnouncement(2_000_000_000)).toBe(false);
-      });
-    });
-  });
-
-  describe('who gets the letter', () => {
-    const NOT_BANNED = `c.bDelete = 0 AND NOT EXISTS (SELECT 1 FROM ALLCHARS a WHERE a.dwCharID = c.dwCharID AND a.Ban <> 0)`;
-
-    it('picks one recipient for each account with a character that is not banned or deleted', async () => {
-      await withRepo(async (repo, tx) => {
-        const recipients = await repo.recipients();
-        const where = NOT_BANNED.replace('ALLCHARS', db.tables.allCharacters);
-        const accounts = (await new sql.Request(tx).query<{ n: number }>(`SELECT COUNT(DISTINCT c.dwUserID) AS n FROM ${db.tables.characters} c WHERE ${where}`)).recordset[0].n;
-        expect(accounts).toBeGreaterThan(0);
-        expect(recipients).toHaveLength(accounts);
-        expect(new Set(recipients.map((recipient) => recipient.userId)).size).toBe(accounts);
-
-        const picked = recipients.map((recipient) => recipient.charId).join(', ');
-        const wrong = (await new sql.Request(tx).query<{ n: number }>(`SELECT COUNT(*) AS n FROM ${db.tables.characters} c WHERE c.dwCharID IN (${picked}) AND NOT (${where})`)).recordset[0].n;
-        expect(wrong).toBe(0);
-        expect(recipients.every((recipient) => recipient.name.length > 0)).toBe(true);
-      });
-    });
-
-    it('never picks a banned character', async () => {
-      await withRepo(async (repo, tx) => {
-        const before = (await repo.recipients()).find((recipient) => recipient.userId === character.userId)!;
-        await new sql.Request(tx).query(`UPDATE ${db.tables.allCharacters} SET Ban = 1 WHERE dwCharID = ${before.charId}`);
-        const after = (await repo.recipients()).find((recipient) => recipient.userId === character.userId);
-        expect(after?.charId).not.toBe(before.charId);
-      });
-    });
-
-    it('prefers the character played last', async () => {
-      await withRepo(async (repo, tx) => {
-        const account = (
-          await new sql.Request(tx).query<{ userId: number }>(
-            `SELECT TOP 1 c.dwUserID AS userId FROM ${db.tables.characters} c
-             WHERE ${NOT_BANNED.replace('ALLCHARS', db.tables.allCharacters)}
-               AND NOT EXISTS (SELECT 1 FROM ${db.tables.currentUsers} u JOIN ${db.tables.characters} o ON o.dwCharID = u.dwCharID WHERE o.dwUserID = c.dwUserID)
-             GROUP BY c.dwUserID HAVING COUNT(*) >= 2`,
-          )
-        ).recordset[0];
-        // The copy may have no account with two characters.
-        if (!account) return;
-        const chars = (
-          await new sql.Request(tx).query<{ charId: number }>(
-            `SELECT c.dwCharID AS charId FROM ${db.tables.characters} c WHERE c.dwUserID = ${account.userId} AND ${NOT_BANNED.replace('ALLCHARS', db.tables.allCharacters)} ORDER BY c.dwCharID`,
-          )
-        ).recordset;
-        const last = chars[chars.length - 1].charId;
-        await new sql.Request(tx).query(
-          `UPDATE ${db.tables.characters} SET dLogoutDate = '2000-01-01' WHERE dwUserID = ${account.userId};
-           UPDATE ${db.tables.characters} SET dLogoutDate = GETDATE() WHERE dwCharID = ${last};`,
-        );
-        expect((await repo.recipients()).find((recipient) => recipient.userId === account.userId)!.charId).toBe(last);
       });
     });
   });

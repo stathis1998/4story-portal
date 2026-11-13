@@ -5,10 +5,10 @@ import {
   AWARD_ALREADY_GIVEN,
   AWARD_NO_CHARACTER,
   AWARD_SWITCHED_OFF,
+  NO_CHARACTER,
   type AwardInput,
   type AwardRow,
   isEmptyReward,
-  type RecipientRow,
   type RewardItemRow,
   type RewardRow,
 } from '../src/achievements/achievements.repository.js';
@@ -330,7 +330,8 @@ export class FakeAchievementsRepository implements AchievementsRepository {
   readonly liveChanges: { live: boolean; changedBy: string }[] = [];
   rewardRows: RewardRow[] = [];
   rows: AwardRow[] = [];
-  recipientRows: RecipientRow[] = [];
+  /** Characters the "database" no longer has: awarding to one writes nothing. */
+  readonly goneCharacters = new Set<number>();
   items: RewardItemRow[] = [];
   /** Everything award() was asked for, including calls that awarded nothing. */
   readonly sent: AwardInput[] = [];
@@ -384,16 +385,26 @@ export class FakeAchievementsRepository implements AchievementsRepository {
     if (this.failAward?.(input)) throw new Error('award failed');
     if (!this.liveFlag) return AWARD_SWITCHED_OFF;
     const given = this.rows.some(
-      (row) => row.userId === input.userId && row.achievementId === input.achievementId && row.level === input.level,
+      (row) =>
+        row.userId === input.userId &&
+        row.charId === input.charId &&
+        row.rebirth === input.rebirth &&
+        row.achievementId === input.achievementId &&
+        row.level === input.level,
     );
     if (given) return AWARD_ALREADY_GIVEN;
-    if (!this.recipientRows.some((recipient) => recipient.charId === input.charId)) return AWARD_NO_CHARACTER;
-    const reward = this.rewardRows.find((row) => row.achievementId === input.achievementId && row.level === input.level) ?? null;
-    this.letters.push({ charId: input.charId, title: input.title, message: input.message + (reward ? input.rewardNote : ''), reward });
+    // Only a character gets a letter, and with it the level's reward.
+    if (input.charId !== NO_CHARACTER) {
+      if (this.goneCharacters.has(input.charId)) return AWARD_NO_CHARACTER;
+      const reward = this.rewardRows.find((row) => row.achievementId === input.achievementId && row.level === input.level) ?? null;
+      this.letters.push({ charId: input.charId, title: input.title, message: input.message + (reward ? input.rewardNote : ''), reward });
+    }
     const id = this.nextId++;
     this.rows.push({
       id,
       userId: input.userId,
+      charId: input.charId,
+      rebirth: input.rebirth,
       achievementId: input.achievementId,
       level: input.level,
       earnedAt: this.now(),
@@ -405,9 +416,6 @@ export class FakeAchievementsRepository implements AchievementsRepository {
     return id;
   }
 
-  async recipients(): Promise<RecipientRow[]> {
-    return this.recipientRows;
-  }
 
   async claimAnnouncement(id: number): Promise<boolean> {
     const row = this.rows.find((entry) => entry.id === id);

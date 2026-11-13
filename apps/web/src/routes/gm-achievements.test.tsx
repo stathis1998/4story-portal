@@ -185,6 +185,14 @@ describe('GM achievements page', () => {
       expect(rowOf('Ouch')).toHaveTextContent('Die for the first time')
     })
 
+    it('says why the account achievements are not there', async () => {
+      mockApi(base())
+      renderRoute('/gm/achievements', { me: gm })
+
+      const rewards = within(await screen.findByRole('region', { name: 'Rewards' }))
+      expect(rewards.getByText('Only character achievements are listed. Account achievements pay no reward.')).toBeInTheDocument()
+    })
+
     it('lists each level with its goal and what it pays', async () => {
       mockApi(base())
       renderRoute('/gm/achievements', { me: gm })

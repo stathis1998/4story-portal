@@ -35,7 +35,7 @@ const character = (overrides: Partial<CharacterRow>): CharacterRow => ({
 });
 
 const baseRows = (): StatRows => ({
-  // Level 60 is three levels of `level` and one of `roster`; nothing else is reached.
+  // Level 60 is three levels of the character's `level`, and one of the account's `roster`; nothing else is reached.
   characters: [character({ id: 1, level: 60 }), character({ id: 3, name: 'Moosey', userId: MOOSE, level: 20 })],
   sessions: [],
   gear: [],
@@ -80,10 +80,7 @@ describe('achievement routes', () => {
     stats.rows = baseRows();
     repo = new FakeAchievementsRepository();
     repo.now = serverNow;
-    repo.recipientRows = [
-      { userId: PLAYER, charId: 1, name: 'Kaelith' },
-      { userId: MOOSE, charId: 3, name: 'Moosey' },
-    ];
+
     repo.items = [{ itemId, name: 'Potion', stack: 20 }];
     control = new FakeControlClient();
     store = new PortalStore(':memory:');
@@ -107,8 +104,13 @@ describe('achievement routes', () => {
   /** Moves the clock past the stats cache, so changed rows are read. */
   const advance = (ms = MINUTE + 1) => vi.setSystemTime(Date.now() + ms);
   const overview = async (agent = player) => (await agent.get('/api/me/achievements').expect(200)).body as AchievementsOverview;
-  const achievement = async (id: string, agent = player): Promise<Achievement> =>
-    (await overview(agent)).achievements.find((entry) => entry.id === id)!;
+  /** An achievement as the viewer's highest level character has it, or as the account has it. */
+  const achievement = async (id: string, agent = player): Promise<Achievement> => {
+    const body = await overview(agent);
+    return [...(body.characters[0]?.achievements ?? []), ...body.account.achievements].find((entry) => entry.id === id)!;
+  };
+  const KAELITH = 1;
+  const MOOSEY = 3;
   const goLive = () => moose.put('/api/gm/achievements/live').send({ live: true }).expect(200);
   const awardsOf = (userId: number) => repo.rows.filter((row) => row.userId === userId).map((row) => `${row.achievementId}:${row.level}`);
 
@@ -134,7 +136,7 @@ describe('achievement routes', () => {
   describe('GET /me/achievements', () => {
     it('shows each achievement as one block with its levels', async () => {
       const level = await achievement('level');
-      expect(level).toMatchObject({ name: 'Adventurer', category: 'progress', value: 60, valueText: '60', levelsDone: 3 });
+      expect(level).toMatchObject({ name: 'Adventurer', category: 'progress', scope: 'character', value: 60, valueText: '60', levelsDone: 3 });
       expect(level.levels.map((entry) => [entry.level, entry.threshold, entry.done])).toEqual([
         [1, 20, true],
         [2, 40, true],
@@ -153,42 +155,78 @@ describe('achievement routes', () => {
 
     it('says rewards are off, and still shows levels, when the switch cannot be read', async () => {
       repo.failWith = new Error('Invalid object name');
-      expect(await overview()).toMatchObject({ live: false, levelsDone: 4 });
-    });
-
-    it('counts the levels done and how many players have each', async () => {
       const body = await overview();
-      expect(body).toMatchObject({ levelsDone: 4, players: 2, live: false });
-      expect(body.levelsTotal).toBeGreaterThan(150);
-      const level = body.achievements.find((entry) => entry.id === 'level')!;
-      // Moose's level 20 character has the first level too.
-      expect(level.levels.map((entry) => entry.holders)).toEqual([2, 1, 1, 0, 0]);
+      expect(body.live).toBe(false);
+      expect(body.characters[0].levelsDone).toBe(3);
     });
 
-    it('names who has each level, by their highest level character', async () => {
+    it('gives each of the viewer characters its own set, highest level first, and the account another', async () => {
+      stats.rows = { ...baseRows(), characters: [...baseRows().characters, character({ id: 2, name: 'Alt', level: 25, classCode: 3 })] };
+      const body = await overview();
+      expect(body.live).toBe(false);
+      expect(body.characters.map(({ id, name, level, levelsDone }) => ({ id, name, level, levelsDone }))).toEqual([
+        { id: 1, name: 'Kaelith', level: 60, levelsDone: 3 },
+        { id: 2, name: 'Alt', level: 25, levelsDone: 1 },
+      ]);
+      expect(body.characters[0].className).not.toBe(body.characters[1].className);
+      expect(body.characters[0].levelsTotal).toBeGreaterThan(100);
+      expect(body.characters[0].achievements.every((entry) => entry.scope === 'character')).toBe(true);
+      // One character at level 50 is the first level of the roster, and two classes the first of that one.
+      expect(body.account.levelsDone).toBe(2);
+      expect(body.account.levelsTotal).toBeGreaterThan(30);
+      expect(body.account.achievements.every((entry) => entry.scope === 'account')).toBe(true);
+      expect(body.account.achievements.find((entry) => entry.id === 'roster')).toMatchObject({ value: 1, levelsDone: 1 });
+    });
+
+    it('measures a character achievement against characters, and an account one against accounts', async () => {
+      stats.rows = { ...baseRows(), characters: [...baseRows().characters, character({ id: 2, name: 'Alt', level: 25 })] };
+      const level = await achievement('level');
+      // Kaelith, Alt and Moosey: all three have level 20, only Kaelith has 40 and 60.
+      expect(level.population).toBe(3);
+      expect(level.levels.map((entry) => entry.holders)).toEqual([3, 1, 1, 0, 0]);
+      expect(level.levels[0].holderNames).toEqual(['Alt', 'Kaelith', 'Moosey']);
+
+      const roster = await achievement('roster');
+      expect(roster.population).toBe(2);
+      expect(roster.levels[0]).toMatchObject({ holders: 1, holderNames: ['Kaelith'] });
+    });
+
+    it('never shows a reward on an account achievement', async () => {
+      // A reward row left over from before the split.
+      repo.rewardRows = [{ achievementId: 'roster', level: 1, gold: 9, silver: 0, copper: 0, items: [] }];
+      expect((await achievement('roster')).levels[0].reward).toBeNull();
+    });
+
+    it('names an account by its highest level character', async () => {
       stats.rows = {
         ...baseRows(),
-        characters: [...baseRows().characters, character({ id: 2, name: 'Alt', level: 10 }), character({ id: 4, name: 'Zed', userId: MOOSE, level: 5 })],
+        characters: [...baseRows().characters, character({ id: 2, name: 'Zed', level: 55 }), character({ id: 4, name: 'Bigger', userId: MOOSE, level: 70 })],
       };
-      const level = await achievement('level');
-      expect(level.levels.map((entry) => entry.holderNames)).toEqual([['Kaelith', 'Moosey'], ['Kaelith'], ['Kaelith'], [], []]);
+      const roster = await achievement('roster');
+      expect(roster.levels.map((entry) => entry.holderNames)).toEqual([['Bigger', 'Kaelith'], ['Kaelith'], [], [], []]);
     });
 
-    it('names nobody from an account that is hidden or banned', async () => {
+    it('counts nobody from an account that is hidden, and no banned character', async () => {
+      stats.rows = { ...baseRows(), characters: [...baseRows().characters, character({ id: 2, name: 'Cheat', level: 90, banned: true })] };
       store.setHideGms(true, 'moose');
-      expect((await achievement('level')).levels[0]).toMatchObject({ holders: 1, holderNames: ['Kaelith'] });
+      const level = await achievement('level');
+      expect(level.population).toBe(1);
+      expect(level.levels[0]).toMatchObject({ holders: 1, holderNames: ['Kaelith'] });
+      expect(level.levels[4]).toMatchObject({ holders: 0, holderNames: [] });
     });
 
     it('is all zeros for an account with no characters', async () => {
       stats.rows = { ...baseRows(), characters: [character({ id: 3, userId: MOOSE, level: 20 })] };
       const body = await overview();
-      expect(body.levelsDone).toBe(0);
-      expect(body.achievements.every((entry) => entry.value === 0)).toBe(true);
+      expect(body.characters).toEqual([]);
+      expect(body.account.levelsDone).toBe(0);
+      expect(body.account.achievements.every((entry) => entry.value === 0)).toBe(true);
     });
 
     it('still shows levels when the awards cannot be read', async () => {
       repo.failWith = new Error('Invalid object name');
-      expect((await overview()).levelsDone).toBe(4);
+      const body = await overview();
+      expect([body.characters[0].levelsDone, body.account.levelsDone]).toEqual([3, 1]);
     });
   });
 
@@ -202,13 +240,21 @@ describe('achievement routes', () => {
     it('awards every level already reached, lowest levels first, each with a letter and an announcement', async () => {
       await goLive();
       expect(await awarder.tick()).toEqual({ awarded: 5, announced: 5 });
-      expect(awardsOf(PLAYER)).toEqual(['level:1', 'roster:1', 'level:2', 'level:3']);
+      expect(awardsOf(PLAYER)).toEqual(['roster:1', 'level:1', 'level:2', 'level:3']);
       expect(awardsOf(MOOSE)).toEqual(['level:1']);
+      // Each character's own levels are recorded against that character, in its first life.
+      expect(repo.rows.filter((row) => row.achievementId === 'level').map((row) => [row.charId, row.rebirth])).toEqual([
+        [KAELITH, 0],
+        [MOOSEY, 0],
+        [KAELITH, 0],
+        [KAELITH, 0],
+      ]);
 
       const third = repo.sent.find((sent) => sent.achievementId === 'level' && sent.level === 3)!;
       expect(third).toMatchObject({
         userId: PLAYER,
-        charId: 1,
+        charId: KAELITH,
+        rebirth: 0,
         sender: 'Achievements',
         title: 'Achievement: Adventurer III',
         message: 'You completed Adventurer III: Reach level 60.',
@@ -224,6 +270,49 @@ describe('achievement routes', () => {
       });
       expect(control.announcements).toContain('Kaelith completed Adventurer III: Reach level 60');
       expect(repo.rows.every((row) => row.announced === ANNOUNCE_SENT)).toBe(true);
+    });
+
+    it('records and announces an account achievement under the top character, without a letter', async () => {
+      await goLive();
+      await awarder.tick();
+      expect(repo.rows.find((row) => row.achievementId === 'roster')).toMatchObject({ userId: PLAYER, charId: 0, level: 1 });
+      expect(control.announcements).toContain('Kaelith completed Full Roster I: Have a character at level 50');
+      // Four character levels, four letters: the roster sent none.
+      expect(repo.letters.map((letter) => letter.title)).toEqual([
+        'Achievement: Adventurer I',
+        'Achievement: Adventurer I',
+        'Achievement: Adventurer II',
+        'Achievement: Adventurer III',
+      ]);
+    });
+
+    it('lets every character of an account earn the same level', async () => {
+      stats.rows = { ...baseRows(), characters: [...baseRows().characters, character({ id: 2, name: 'Alt', level: 45 })] };
+      repo.rewardRows = [{ achievementId: 'level', level: 1, gold: 10, silver: 0, copper: 0, items: [] }];
+      await goLive();
+      await awarder.tick();
+      const firstLevel = repo.letters.filter((letter) => letter.title === 'Achievement: Adventurer I');
+      expect(firstLevel.map((letter) => [letter.charId, letter.reward?.gold])).toEqual([
+        [KAELITH, 10],
+        [2, 10],
+        [MOOSEY, 10],
+      ]);
+      expect(control.announcements).toContain('Alt completed Adventurer II: Reach level 40');
+    });
+
+    it('awards a banned character nothing, while the rest of its account carries on', async () => {
+      stats.rows = { ...baseRows(), characters: [...baseRows().characters, character({ id: 2, name: 'Cheat', level: 90, banned: true })] };
+      await goLive();
+      await awarder.tick();
+      expect(repo.sent.some((sent) => sent.charId === 2)).toBe(false);
+      expect(repo.sent.some((sent) => sent.charId === KAELITH)).toBe(true);
+    });
+
+    it('writes nothing for a character the game no longer has, and carries on', async () => {
+      repo.goneCharacters.add(MOOSEY);
+      await goLive();
+      expect(await awarder.tick()).toEqual({ awarded: 4, announced: 4 });
+      expect(awardsOf(MOOSE)).toEqual([]);
     });
 
     it('never awards a level twice', async () => {
@@ -307,9 +396,8 @@ describe('achievement routes', () => {
       expect(repo.rows.map((row) => row.level)).toEqual(repo.rows.map((row) => row.level).sort((a, b) => a - b));
     });
 
-    it('skips an account with no character to write to: all banned, or gone', async () => {
-      // The database only offers characters that are neither banned nor deleted.
-      repo.recipientRows = [];
+    it('skips an account whose characters are all banned', async () => {
+      stats.rows = { ...baseRows(), characters: [character({ id: 1, level: 60, banned: true })] };
       await goLive();
       await awarder.tick();
       expect(repo.sent).toEqual([]);
@@ -462,6 +550,15 @@ describe('achievement routes', () => {
     it('is 404 for an achievement or level that does not exist', async () => {
       expect((await setReward({ achievementId: 'nope', level: 1, reward: money })).status).toBe(404);
       expect((await setReward({ achievementId: 'guild-member', level: 2, reward: money })).status).toBe(404);
+    });
+
+    it('lists only character achievements, and refuses a reward on an account one', async () => {
+      const ids = (await gm()).achievements.map((entry) => entry.id);
+      expect(ids).toContain('kills');
+      expect(ids).not.toContain('hours');
+      expect(ids).not.toContain('roster');
+      expect((await setReward({ achievementId: 'hours', level: 1, reward: { ...money, gold: 5 } })).status).toBe(404);
+      expect(repo.rewardRows).toEqual([]);
     });
 
     it.each([

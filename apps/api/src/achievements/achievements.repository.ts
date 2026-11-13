@@ -6,6 +6,10 @@ import { DbService } from '../db/db.service.js';
 export type AwardRow = {
   id: number;
   userId: number;
+  /** The character that earned it. 0 for an account achievement. */
+  charId: number;
+  /** Which life of the character it was earned in. 0 until characters can be reborn. */
+  rebirth: number;
   achievementId: string;
   level: number;
   /** The server's wall clock, held as UTC like every date the driver returns. */
@@ -21,11 +25,14 @@ export const ANNOUNCE_WAITING = 0;
 export const ANNOUNCE_SENT = 1;
 export const ANNOUNCE_SKIPPED = 2;
 
-/** The character that gets an account's reward letters. */
-export type RecipientRow = { userId: number; charId: number; name: string };
+/** An account achievement belongs to no character. */
+export const NO_CHARACTER = 0;
+/** The life every character is in until rebirth exists. */
+export const FIRST_LIFE = 0;
+
 export type RewardItemRow = { itemId: number; name: string; stack: number };
 
-/** What one achievement level pays: a row of TPORTALACHIEVEMENTREWARD. A level with no row pays nothing. */
+/** What one character achievement level pays: a row of TPORTALACHIEVEMENTREWARD. A level with no row pays nothing. */
 export type RewardRow = {
   achievementId: string;
   level: number;
@@ -37,9 +44,11 @@ export type RewardRow = {
 
 export type AwardInput = {
   userId: number;
+  /** The character that earned it, who gets the letter. NO_CHARACTER for an account achievement: no letter. */
+  charId: number;
+  rebirth: number;
   achievementId: string;
   level: number;
-  charId: number;
   sender: string;
   title: string;
   message: string;
@@ -62,12 +71,11 @@ export interface AchievementsRepository {
   /** Every award this season, oldest first. */
   awards(): Promise<AwardRow[]>;
   /**
-   * Sends the letter, with the level's saved reward, and records the award together.
-   * The new award's ID, or one of the AWARD_* results when nothing was written.
+   * Records the award and, for a character achievement, sends that character the letter with the
+   * level's saved reward, together. The new award's ID, or one of the AWARD_* results when nothing
+   * was written.
    */
   award(input: AwardInput): Promise<number>;
-  /** One per account that has a character that isn't banned: the one online now, else the one played last. */
-  recipients(): Promise<RecipientRow[]>;
   /** Takes a waiting announcement for sending. False when another tick or process already has. */
   claimAnnouncement(id: number): Promise<boolean>;
   markAnnounced(id: number, state: number): Promise<void>;
@@ -174,7 +182,7 @@ export class SqlAchievementsRepository implements AchievementsRepository {
 
   async awards(): Promise<AwardRow[]> {
     const result = await this.request().query<AwardRow>(
-      `SELECT dwID AS id, dwUserID AS userId, szAchievement AS achievementId, bLevel AS level,
+      `SELECT dwID AS id, dwUserID AS userId, dwCharID AS charId, bRebirth AS rebirth, szAchievement AS achievementId, bLevel AS level,
               dEarned AS earnedAt, DATEDIFF(second, dEarned, GETDATE()) AS ageSeconds, szText AS text, bAnnounced AS announced
        FROM ${this.db.tables.achievementAwards}
        ORDER BY dwID`,
@@ -185,9 +193,10 @@ export class SqlAchievementsRepository implements AchievementsRepository {
   async award(input: AwardInput): Promise<number> {
     const result = await this.request()
       .input('userId', sql.Int, input.userId)
+      .input('charId', sql.Int, input.charId)
+      .input('rebirth', sql.TinyInt, input.rebirth)
       .input('achievement', sql.VarChar(40), input.achievementId)
       .input('level', sql.TinyInt, input.level)
-      .input('charId', sql.Int, input.charId)
       .input('sender', sql.VarChar(50), input.sender)
       .input('title', sql.VarChar(240), input.title)
       .input('message', sql.VarChar(1800), input.message)
@@ -196,30 +205,11 @@ export class SqlAchievementsRepository implements AchievementsRepository {
       .query<{ id: number }>(
         `DECLARE @r INT;
          EXEC @r = ${this.db.tables.achievementProcedure}
-           @dwUserID = @userId, @szAchievement = @achievement, @bLevel = @level, @pCharID = @charId,
+           @dwUserID = @userId, @dwCharID = @charId, @bRebirth = @rebirth, @szAchievement = @achievement, @bLevel = @level,
            @pSender = @sender, @pTitle = @title, @pMessage = @message, @pRewardNote = @rewardNote, @szText = @text;
          SELECT @r AS id;`,
       );
     return result.recordset[0]?.id ?? AWARD_NO_CHARACTER;
-  }
-
-  async recipients(): Promise<RecipientRow[]> {
-    const { characters, currentUsers, allCharacters } = this.db.tables;
-    const result = await this.request().query<RecipientRow>(
-      `SELECT userId, charId, name FROM (
-         SELECT c.dwUserID AS userId, c.dwCharID AS charId, c.szNAME AS name,
-                ROW_NUMBER() OVER (
-                  PARTITION BY c.dwUserID
-                  ORDER BY CASE WHEN EXISTS (SELECT 1 FROM ${currentUsers} u WHERE u.dwCharID = c.dwCharID) THEN 0 ELSE 1 END,
-                           c.dLogoutDate DESC, c.dwCharID
-                ) AS pick
-         FROM ${characters} c
-         WHERE c.bDelete = 0
-           AND NOT EXISTS (SELECT 1 FROM ${allCharacters} a WHERE a.dwCharID = c.dwCharID AND a.Ban <> 0)
-       ) ranked
-       WHERE pick = 1`,
-    );
-    return result.recordset;
   }
 
   async claimAnnouncement(id: number): Promise<boolean> {

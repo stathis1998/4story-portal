@@ -1,4 +1,5 @@
--- What each achievement level pays, set by a GM on the portal. A level with no row pays nothing.
+-- What each character achievement level pays, set by a GM on the portal. A level with no row pays
+-- nothing, and account achievements never pay.
 -- TPortalAchievementAward reads it inside the award's own transaction. Kept through the season reset.
 IF OBJECT_ID('dbo.TPORTALACHIEVEMENTREWARD', 'U') IS NULL
 	CREATE TABLE dbo.TPORTALACHIEVEMENTREWARD (

@@ -7,12 +7,12 @@ import { RewardSummary } from './RewardSummary'
 
 type Props = {
   achievement: Achievement
-  /** Ranked accounts, the `of y` behind every level's holders. */
-  players: number
+  /** Whose it is, where cards of several owners sit together: a character's name, or `Account`. */
+  owner?: string
 }
 
 /** One achievement at a glance: its level and the next goal. A click opens every level in a pop-up. */
-export function AchievementCard({ achievement, players }: Props) {
+export function AchievementCard({ achievement, owner }: Props) {
   const [open, setOpen] = useState(false)
   // Stable, so the pop-up's key listener isn't re-attached on every refresh of the data.
   const close = useCallback(() => setOpen(false), [])
@@ -34,7 +34,15 @@ export function AchievementCard({ achievement, players }: Props) {
         }`}
       >
         <span className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 font-bold break-words">{name}</span>
+          <span className="min-w-0 break-words">
+            <span className="font-bold">{name}</span>
+            {owner && (
+              <>
+                {' '}
+                <span className="ml-1 rounded-xs border border-line px-1.5 py-0.5 text-xs whitespace-nowrap text-muted">{owner}</span>
+              </>
+            )}
+          </span>
           <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
             {single ? (notStarted ? 'Not done' : 'Done') : `Level ${levelsDone}/${levels.length}`}
             {!single && <LevelPips levels={levels} />}
@@ -62,7 +70,7 @@ export function AchievementCard({ achievement, players }: Props) {
           {single ? 'View details' : 'View levels'} <span aria-hidden="true">›</span>
         </span>
       </button>
-      {open && <AchievementDialog achievement={achievement} players={players} onClose={close} />}
+      {open && <AchievementDialog achievement={achievement} onClose={close} />}
     </li>
   )
 }

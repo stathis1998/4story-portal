@@ -6,7 +6,7 @@ import { AchievementCard } from './AchievementCard'
 // Its own query, so the page keeps working without it. Nothing to show for a failure or a fresh account.
 export function AlmostThere() {
   const { data } = useQuery(achievementsQueryOptions)
-  const closest = data ? almostThere(data.achievements) : []
+  const closest = data ? almostThere(data) : []
   if (!data || closest.length === 0) return null
 
   return (
@@ -20,8 +20,8 @@ export function AlmostThere() {
         </Link>
       </div>
       <ul aria-labelledby="almost-there-heading" className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {closest.map((achievement) => (
-          <AchievementCard key={achievement.id} achievement={achievement} players={data.players} />
+        {closest.map(({ key, owner, achievement }) => (
+          <AchievementCard key={key} achievement={achievement} owner={owner} />
         ))}
       </ul>
     </section>
