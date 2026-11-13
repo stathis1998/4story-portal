@@ -28,7 +28,8 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
       { to: '/upgrade-simulator', label: 'Upgrade Simulator' },
       { to: '/soul-lottery', label: 'Soul Lottery' },
       { to: '/effects', label: 'Effects' },
-      { to: '/mounts-chakras', label: 'Mounts & Chakras' },
+      { to: '/mounts-pets', label: 'Mounts & Pets' },
+      { to: '/chakras-auras', label: 'Chakras & Auras' },
     ],
   },
 ]
