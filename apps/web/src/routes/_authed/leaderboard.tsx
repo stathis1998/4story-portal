@@ -19,7 +19,8 @@ function LeaderboardPage() {
         Totals per character. Every party member near a kill gets credit for it. Damage is the HP actually removed, and pets and
         summons count for their owner. Gold spent is what was paid to NPCs and in fees, not trades, player stores, mail or auctions.
         Counted since 6 November 2026 and saved every 5 minutes and at logout. Soul lotteries are counted since November 2026, and
-        soul lottery gold includes consolation prizes.
+        soul lottery gold includes consolation prizes. A lose streak is the most soul lotteries a character lost in a row, counted
+        from 13 November 2026 and right after each draw.
       </p>
 
       <CharacterSearch />

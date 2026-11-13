@@ -34,6 +34,8 @@ export type SocialRow = { charId: number; friends: number; inGuild: boolean; lea
 export type CombatRow = { charId: number; kills: number; damageDealt: number };
 export type SpendingRow = { charId: number; copper: number };
 export type SoulLotteryRow = { charId: number; won: number; lost: number; copperWon: number; copperConsolation: number };
+/** From the soul lottery log: the longest run of losses, and the run since the last win (0 after a win). */
+export type LotteryStreakRow = { charId: number; longestLoseStreak: number; currentLoseStreak: number };
 /** Upgrade log rows grouped by character, kind, level, result and day. Codes are the UPGRADELOG_* enums in TMapType.h. */
 export type UpgradeAttemptRow = {
   charId: number;
@@ -69,6 +71,7 @@ export type StatRows = {
   combat: CombatRow[];
   spending: SpendingRow[];
   soulLottery: SoulLotteryRow[];
+  lotteryStreaks: LotteryStreakRow[];
   upgradeAttempts: UpgradeAttemptRow[];
   upgradeLosses: UpgradeLossRow[];
   upgradeFailures: UpgradeFailureRow[];
@@ -100,6 +103,9 @@ export type CharacterStatsRow = {
   lotteriesLost: number;
   lotteryCopperWon: number;
   lotteryCopperConsolation: number;
+  /** Soul lottery losses in a row, from the soul lottery log. */
+  longestLoseStreak: number;
+  currentLoseStreak: number;
   /** Failed upgrade scrolls, from the counter. */
   upgradesFailed: number;
   /** Items lost to failed upgrade scrolls, from the upgrade log. */
@@ -213,6 +219,7 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
   const spending = new Map(rows.spending.map((row) => [row.charId, row.copper]));
   const combat = new Map(rows.combat.map((row) => [row.charId, row]));
   const soulLottery = new Map(rows.soulLottery.map((row) => [row.charId, row]));
+  const lotteryStreaks = new Map(rows.lotteryStreaks.map((row) => [row.charId, row]));
   const upgradeFailures = new Map(rows.upgradeFailures.map((row) => [row.charId, row.failed]));
   const itemsDestroyed = new Map<number, number>();
   for (const row of rows.upgradeAttempts) {
@@ -277,6 +284,8 @@ export function computeStats(rows: StatRows, today: string): ComputedStats {
       lotteriesLost: soulLottery.get(row.id)?.lost ?? 0,
       lotteryCopperWon: soulLottery.get(row.id)?.copperWon ?? 0,
       lotteryCopperConsolation: soulLottery.get(row.id)?.copperConsolation ?? 0,
+      longestLoseStreak: lotteryStreaks.get(row.id)?.longestLoseStreak ?? 0,
+      currentLoseStreak: lotteryStreaks.get(row.id)?.currentLoseStreak ?? 0,
       upgradesFailed: upgradeFailures.get(row.id) ?? 0,
       itemsDestroyed: itemsDestroyed.get(row.id) ?? 0,
     });

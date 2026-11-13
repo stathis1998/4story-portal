@@ -64,6 +64,13 @@ describe('leaderboard page', () => {
     expect(await screen.findByText(/soul lottery gold includes consolation prizes/i)).toBeInTheDocument()
   })
 
+  it('explains what a lose streak counts and since when', async () => {
+    mockApi(route())
+    renderRoute('/leaderboard', { me })
+
+    expect(await screen.findByText(/most soul lotteries a character lost in a row, counted\s+from 13 November 2026/i)).toBeInTheDocument()
+  })
+
   it('says when nobody is on a board yet', async () => {
     mockApi(route())
     renderRoute('/leaderboard', { me })

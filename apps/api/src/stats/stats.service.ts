@@ -130,7 +130,21 @@ const LEADERBOARD_CATEGORIES: Category<LeaderboardCategoryId>[] = [
     display: gold,
     detail: (c) => `${total(c.lotteriesWon)} won, ${total(c.lotteriesLost)} lost${winRate(c.lotteriesWon, c.lotteriesLost)}`,
   },
+  {
+    id: 'loseStreak',
+    label: 'Soul lottery lose streak',
+    value: (c) => c.longestLoseStreak,
+    display: (v) => `${total(v)} in a row`,
+    detail: (c) => loseStreakNow(c.longestLoseStreak, c.currentLoseStreak),
+  },
 ];
+
+// How the character's current run compares with its longest one.
+function loseStreakNow(longest: number, current: number): string {
+  if (current === 0) return 'Ended by a win';
+  if (current === longest) return 'Still going';
+  return `Now ${total(current)} in a row`;
+}
 
 // Whole percent, with `<1%` for a rare win so it never reads as 0%. Empty when nothing was played.
 function winRate(won: number, lost: number): string {
