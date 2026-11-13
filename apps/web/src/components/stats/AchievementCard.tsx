@@ -1,7 +1,8 @@
-import { type Achievement, achievementLevelName } from '@4story-portal/shared'
-import { useId, useState } from 'react'
+import type { Achievement } from '@4story-portal/shared'
+import { useCallback, useState } from 'react'
 import { nextLevel, paysSomething, progressRatio } from '../../lib/achievements'
-import { formatDay } from '../../lib/stats'
+import { AchievementDialog } from './AchievementDialog'
+import { LevelPips } from './LevelPips'
 import { RewardSummary } from './RewardSummary'
 
 type Props = {
@@ -10,10 +11,11 @@ type Props = {
   players: number
 }
 
-/** One achievement with all its levels: the next goal at a glance, every level once opened. */
+/** One achievement at a glance: its level and the next goal. A click opens every level in a pop-up. */
 export function AchievementCard({ achievement, players }: Props) {
   const [open, setOpen] = useState(false)
-  const listId = useId()
+  // Stable, so the pop-up's key listener isn't re-attached on every refresh of the data.
+  const close = useCallback(() => setOpen(false), [])
   const { name, levels, levelsDone, valueText } = achievement
   const next = nextLevel(achievement)
   const percent = Math.round(progressRatio(achievement) * 100)
@@ -21,31 +23,21 @@ export function AchievementCard({ achievement, players }: Props) {
   const notStarted = levelsDone === 0
 
   return (
-    <li
-      className={`rounded-xs border ${
-        notStarted
-          ? `border-dashed border-line ${open ? '' : 'opacity-60 focus-within:opacity-100 hover:opacity-100'}`
-          : 'border-line bg-surface'
-      }`}
-    >
+    // Dimmed until it has a level, and back to full while it is pointed at or focused.
+    <li className={`rounded-xs ${notStarted ? 'opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100' : ''}`}>
       <button
         type="button"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((current) => !current)}
-        className="flex w-full flex-col gap-1.5 rounded-xs p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-text"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+        className={`group flex h-full w-full cursor-pointer flex-col gap-1.5 rounded-xs border p-3 text-left outline-none transition-colors hover:border-accent hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-accent-text ${
+          notStarted ? 'border-dashed border-line' : 'border-line bg-surface'
+        }`}
       >
         <span className="flex items-baseline justify-between gap-2">
           <span className="min-w-0 font-bold break-words">{name}</span>
           <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
             {single ? (notStarted ? 'Not done' : 'Done') : `Level ${levelsDone}/${levels.length}`}
-            {!single && (
-              <span aria-hidden="true" className="flex gap-0.5">
-                {levels.map((level) => (
-                  <span key={level.level} className={`size-1.5 rounded-full ${level.done ? 'bg-accent' : 'bg-line'}`} />
-                ))}
-              </span>
-            )}
+            {!single && <LevelPips levels={levels} />}
           </span>
         </span>
         <span
@@ -58,9 +50,7 @@ export function AchievementCard({ achievement, players }: Props) {
         >
           <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
         </span>
-        <span className="text-xs text-muted">
-          {next ? `${valueText} / ${next.thresholdText}` : valueText}
-        </span>
+        <span className="text-xs text-muted">{next ? `${valueText} / ${next.thresholdText}` : valueText}</span>
         <span className="text-sm">{next ? `Next: ${next.goal}` : 'Completed'}</span>
         {next && paysSomething(next.reward) && (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -68,30 +58,11 @@ export function AchievementCard({ achievement, players }: Props) {
             <RewardSummary reward={next.reward} />
           </span>
         )}
+        <span className="mt-auto self-end pt-1 text-xs font-bold text-accent-text group-hover:underline">
+          {single ? 'View details' : 'View levels'} <span aria-hidden="true">›</span>
+        </span>
       </button>
-      {open && (
-        <ol id={listId} aria-label={`${name} levels`} className="border-t border-line">
-          {levels.map((level) => (
-            <li key={level.level} className="flex flex-col gap-0.5 border-b border-line px-3 py-2 text-sm last:border-b-0">
-              <span className="flex items-baseline justify-between gap-2">
-                <span className={`font-bold ${level.done ? 'text-accent-text' : ''}`}>
-                  {achievementLevelName(name, level.level, levels.length)}
-                </span>
-                {level.done && (
-                  <span className="shrink-0 text-xs text-muted">
-                    {level.earnedAt ? `Earned ${formatDay(level.earnedAt)}` : 'Done'}
-                  </span>
-                )}
-              </span>
-              <span className="text-muted">{level.goal}</span>
-              {paysSomething(level.reward) && <RewardSummary reward={level.reward} names />}
-              <span className="text-xs text-muted">
-                {level.holders} of {players} players
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+      {open && <AchievementDialog achievement={achievement} players={players} onClose={close} />}
     </li>
   )
 }

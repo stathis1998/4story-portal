@@ -8,6 +8,7 @@ import { sha1Hex } from '../src/auth/sha1.js';
 import { itemIcons } from '../src/gm/game-icons.generated.js';
 import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
 import { serverNow } from '../src/stats/stats.service.js';
+import { PortalStore } from '../src/store/portal-store.js';
 import { FakeAccountsRepository, FakeAchievementsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
 import { createTestApp } from './test-app.js';
 
@@ -63,6 +64,7 @@ describe('achievement routes', () => {
   let stats: FakeStatsRepository;
   let repo: FakeAchievementsRepository;
   let control: FakeControlClient;
+  let store: PortalStore;
   let awarder: AchievementAwarder;
   let moose: ReturnType<typeof request.agent>;
   let player: ReturnType<typeof request.agent>;
@@ -84,7 +86,8 @@ describe('achievement routes', () => {
     ];
     repo.items = [{ itemId, name: 'Potion', stack: 20 }];
     control = new FakeControlClient();
-    app = await createTestApp({ accounts, control, stats, achievements: repo });
+    store = new PortalStore(':memory:');
+    app = await createTestApp({ accounts, control, stats, store, achievements: repo });
     awarder = app.get(AchievementAwarder);
     const login = async (username: string) => {
       const agent = request.agent(app.getHttpServer());
@@ -97,6 +100,7 @@ describe('achievement routes', () => {
 
   afterEach(async () => {
     await app.close();
+    store.close();
     vi.useRealTimers();
   });
 
@@ -159,6 +163,20 @@ describe('achievement routes', () => {
       const level = body.achievements.find((entry) => entry.id === 'level')!;
       // Moose's level 20 character has the first level too.
       expect(level.levels.map((entry) => entry.holders)).toEqual([2, 1, 1, 0, 0]);
+    });
+
+    it('names who has each level, by their highest level character', async () => {
+      stats.rows = {
+        ...baseRows(),
+        characters: [...baseRows().characters, character({ id: 2, name: 'Alt', level: 10 }), character({ id: 4, name: 'Zed', userId: MOOSE, level: 5 })],
+      };
+      const level = await achievement('level');
+      expect(level.levels.map((entry) => entry.holderNames)).toEqual([['Kaelith', 'Moosey'], ['Kaelith'], ['Kaelith'], [], []]);
+    });
+
+    it('names nobody from an account that is hidden or banned', async () => {
+      store.setHideGms(true, 'moose');
+      expect((await achievement('level')).levels[0]).toMatchObject({ holders: 1, holderNames: ['Kaelith'] });
     });
 
     it('is all zeros for an account with no characters', async () => {

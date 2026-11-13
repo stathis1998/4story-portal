@@ -11,6 +11,7 @@ export function level(overrides: Partial<AchievementLevel> = {}): AchievementLev
     done: false,
     earnedAt: null,
     holders: 0,
+    holderNames: [],
     ...overrides,
   }
 }
@@ -25,14 +26,15 @@ export function achievement(overrides: Partial<Achievement> = {}): Achievement {
     valueText: '7,420',
     levelsDone: 2,
     levels: [
-      level({ level: 1, done: true, earnedAt: '2026-11-09T18:30:00', holders: 4 }),
-      level({ level: 2, threshold: 1000, goal: 'Defeat 1,000 monsters', done: true, holders: 3 }),
+      level({ level: 1, done: true, earnedAt: '2026-11-09T18:30:00', holders: 4, holderNames: ['Aki', 'Bo', 'Cy', 'Dee'] }),
+      level({ level: 2, threshold: 1000, goal: 'Defeat 1,000 monsters', done: true, holders: 3, holderNames: ['Aki', 'Bo', 'Cy'] }),
       level({
         level: 3,
         threshold: 10_000,
         goal: 'Defeat 10,000 monsters',
         reward: { gold: 5, silver: 0, copper: 250, items: [{ itemId: 51, count: 3, name: 'Small Potion', icon: 12 }] },
         holders: 1,
+        holderNames: ['Aki'],
       }),
       level({ level: 4, threshold: 50_000, goal: 'Defeat 50,000 monsters' }),
       level({ level: 5, threshold: 100_000, goal: 'Defeat 100,000 monsters' }),
