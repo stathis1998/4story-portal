@@ -8,8 +8,6 @@ import { RewardSummary } from './RewardSummary'
 
 type Props = {
   achievement: Achievement
-  /** Ranked accounts, the `of y` behind every level's holders. */
-  players: number
   onClose: () => void
 }
 
@@ -21,14 +19,15 @@ function listNames(names: string[]) {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
-function reachedBy({ holders, holderNames }: AchievementLevel, players: number) {
+// A character achievement is measured against the ranked characters, an account one against the ranked accounts.
+function reachedBy({ holders, holderNames }: AchievementLevel, { scope, population }: Achievement) {
   if (holders === 0) return 'Nobody has reached this yet'
-  const count = `${holders} of ${players} players`
+  const count = `${holders} of ${population} ${scope === 'character' ? 'characters' : 'players'}`
   return holderNames.length > 0 ? `Reached by ${listNames(holderNames)} · ${count}` : count
 }
 
 /** Everything about one achievement, over the page: each level, its reward, who has it and how far you are. */
-export function AchievementDialog({ achievement, players, onClose }: Props) {
+export function AchievementDialog({ achievement, onClose }: Props) {
   const titleId = useId()
   const panel = useRef<HTMLDivElement>(null)
   const close = useRef<HTMLButtonElement>(null)
@@ -37,6 +36,7 @@ export function AchievementDialog({ achievement, players, onClose }: Props) {
   const percent = Math.round(progressRatio(achievement) * 100)
   const single = levels.length === 1
   const category = ACHIEVEMENT_CATEGORIES.find(({ id }) => id === achievement.category)?.label
+  const kind = achievement.scope === 'character' ? 'Character' : 'Account'
 
   // Focus goes in while it is open and back to where it was after, and the page behind holds still.
   useEffect(() => {
@@ -92,7 +92,7 @@ export function AchievementDialog({ achievement, players, onClose }: Props) {
         <header className="flex flex-col gap-2 border-b border-line p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              {category && <p className="text-xs font-bold tracking-wider text-muted uppercase">{category}</p>}
+              <p className="text-xs font-bold tracking-wider text-muted uppercase">{category ? `${category} · ${kind}` : kind}</p>
               <h2 id={titleId} className="text-2xl break-words">
                 {name}
               </h2>
@@ -155,7 +155,7 @@ export function AchievementDialog({ achievement, players, onClose }: Props) {
                     <RewardSummary reward={level.reward} names />
                   </p>
                 )}
-                <p className="text-xs text-muted">{reachedBy(level, players)}</p>
+                <p className="text-xs text-muted">{reachedBy(level, achievement)}</p>
               </li>
             )
           })}

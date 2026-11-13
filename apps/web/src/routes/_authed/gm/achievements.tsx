@@ -199,6 +199,9 @@ function GmAchievementsPage() {
                 <p className="mt-1 text-sm text-muted">
                   Each tab counts the levels that pay something. Saving a level moves on to the next one.
                 </p>
+                <p className="mt-1 text-sm text-muted">
+                  Only character achievements are listed. Account achievements pay no reward.
+                </p>
               </div>
               {active ? (
                 <>

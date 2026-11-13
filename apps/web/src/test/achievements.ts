@@ -1,4 +1,10 @@
-import type { Achievement, AchievementLevel, AchievementsOverview } from '@4story-portal/shared'
+import type {
+  Achievement,
+  AchievementGroup,
+  AchievementLevel,
+  AchievementsOverview,
+  CharacterAchievements,
+} from '@4story-portal/shared'
 
 export function level(overrides: Partial<AchievementLevel> = {}): AchievementLevel {
   const threshold = overrides.threshold ?? 100
@@ -16,12 +22,17 @@ export function level(overrides: Partial<AchievementLevel> = {}): AchievementLev
   }
 }
 
-/** Slayer: two of five levels done, 7,420 of the 10,000 for the third, which pays coins and an item. */
+/**
+ * Slayer, a character achievement measured against five characters: two of five levels done, 7,420 of
+ * the 10,000 for the third, which pays coins and an item.
+ */
 export function achievement(overrides: Partial<Achievement> = {}): Achievement {
   return {
     id: 'slayer',
     name: 'Slayer',
     category: 'combat',
+    scope: 'character',
+    population: 5,
     value: 7420,
     valueText: '7,420',
     levelsDone: 2,
@@ -43,7 +54,7 @@ export function achievement(overrides: Partial<Achievement> = {}): Achievement {
   }
 }
 
-/** A one-level achievement, `percent` of the way there, or done at 100. */
+/** A one-level achievement, `percent` of the way there, or done at 100. It pays nothing. */
 export function simple(id: string, name: string, percent: number, overrides: Partial<Achievement> = {}): Achievement {
   const done = percent >= 100
   return achievement({
@@ -57,14 +68,37 @@ export function simple(id: string, name: string, percent: number, overrides: Par
   })
 }
 
-/** The totals follow from the achievements unless given. */
-export function achievementsOverview(overrides: Partial<AchievementsOverview> = {}): AchievementsOverview {
-  const achievements = overrides.achievements ?? [achievement()]
+/** A set of achievements with the totals that follow from them. */
+export function achievementGroup(achievements: Achievement[]): AchievementGroup {
   return {
     achievements,
     levelsDone: achievements.reduce((sum, { levelsDone }) => sum + levelsDone, 0),
     levelsTotal: achievements.reduce((sum, { levels }) => sum + levels.length, 0),
-    players: 5,
+  }
+}
+
+/** Kaelith, a level 50 Warrior, with Slayer unless given other achievements. */
+export function characterGroup(overrides: Partial<CharacterAchievements> = {}): CharacterAchievements {
+  return {
+    id: 1,
+    name: 'Kaelith',
+    level: 50,
+    className: 'Warrior',
+    ...achievementGroup(overrides.achievements ?? [achievement()]),
+    ...overrides,
+  }
+}
+
+/** The account's own achievements, each marked as one. */
+export function accountGroup(achievements: Achievement[] = []): AchievementGroup {
+  return achievementGroup(achievements.map((item) => ({ ...item, scope: 'account' })))
+}
+
+/** One character, Kaelith with Slayer, and an account with no achievements of its own, unless given. */
+export function achievementsOverview(overrides: Partial<AchievementsOverview> = {}): AchievementsOverview {
+  return {
+    account: accountGroup(),
+    characters: [characterGroup()],
     live: true,
     ...overrides,
   }

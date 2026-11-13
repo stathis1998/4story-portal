@@ -73,7 +73,16 @@ function Profile({ profile }: { profile: CharacterProfile }) {
   return (
     <div className="flex flex-col gap-4">
       <header>
-        <h1 className="text-4xl">{profile.name}</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h1 className="text-4xl">{profile.name}</h1>
+          <Link
+            to="/achievements"
+            search={{ character: profile.id }}
+            className="text-sm font-bold text-accent-text hover:underline"
+          >
+            Achievements
+          </Link>
+        </div>
         <p className="mt-1 text-muted">
           Level {profile.level} {profile.className}, {profile.race}, {profile.country}
         </p>

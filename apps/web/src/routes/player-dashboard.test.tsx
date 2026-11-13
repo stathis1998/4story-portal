@@ -1,7 +1,7 @@
 import type { ActiveEvents, CharacterProfile, HallOfFame, NewsItem, PlayerOverview } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { achievement, achievementsOverview, simple } from '../test/achievements'
+import { accountGroup, achievement, achievementsOverview, characterGroup, simple } from '../test/achievements'
 import { character } from '../test/characters'
 import { gearItem } from '../test/gear'
 import { json, mockApi, sentBodies } from '../test/mock-api'
@@ -194,12 +194,17 @@ describe('characters page stats', () => {
 
   describe('almost there', () => {
     const closest = (achievements = [simple('a', 'Alpha', 100), simple('b', 'Bravo', 30), simple('c', 'Charlie', 95), achievement(), simple('e', 'Echo', 0), simple('f', 'Foxtrot', 50)]) => ({
-      'GET /me/achievements': () => json(200, achievementsOverview({ achievements })),
+      'GET /me/achievements': () => json(200, achievementsOverview({ characters: [characterGroup({ achievements })] })),
     })
     const cards = async () =>
       within(await screen.findByRole('list', { name: 'Almost there' }))
         .getAllByRole('button')
         .map((card) => /^[A-Z][a-z]+/.exec(card.textContent ?? '')?.[0])
+    /** `Slayer Kaelith`: each card's achievement and the tag saying whose it is. */
+    const owned = async () =>
+      within(await screen.findByRole('list', { name: 'Almost there' }))
+        .getAllByRole('button')
+        .map((card) => /^[A-Z][a-z]+ [A-Z][a-z]+/.exec(card.textContent ?? '')?.[0])
 
     it('shows the three achievements closest to their next level, below the journey', async () => {
       mockApi(base(closest()))
@@ -213,6 +218,34 @@ describe('characters page stats', () => {
       expect(screen.getByRole('link', { name: 'All achievements' })).toHaveAttribute('href', '/achievements')
     })
 
+    it('picks the three across every character and the account, saying whose each one is', async () => {
+      mockApi(
+        base({
+          'GET /me/achievements': () =>
+            json(
+              200,
+              achievementsOverview({
+                account: accountGroup([simple('founder', 'Founder', 80, { category: 'playtime' }), simple('hours', 'Regular', 10)]),
+                characters: [
+                  // Slayer is at 74% for Kaelith, and both characters have it.
+                  characterGroup({ achievements: [achievement(), simple('b', 'Bravo', 30)] }),
+                  characterGroup({
+                    id: 2,
+                    name: 'Mounara',
+                    level: 30,
+                    className: 'Wizard',
+                    achievements: [simple('slayer', 'Slayer', 95), simple('e', 'Echo', 0)],
+                  }),
+                ],
+              }),
+            ),
+        }),
+      )
+      renderRoute('/characters', { me })
+
+      expect(await owned()).toEqual(['Slayer Mounara', 'Founder Account', 'Slayer Kaelith'])
+    })
+
     it('shows each one closed, and opens it on a click', async () => {
       mockApi(base(closest([achievement()])))
       const { user } = renderRoute('/characters', { me })
@@ -220,8 +253,11 @@ describe('characters page stats', () => {
       const card = await screen.findByRole('button', { name: /^Slayer/ })
       expect(card).toHaveAttribute('aria-haspopup', 'dialog')
       expect(card).toHaveTextContent('Next: Defeat 10,000 monsters')
+      expect(within(card).getByText('Kaelith')).toBeInTheDocument()
 
       await user.click(card)
+      // The pop-up is named after the achievement alone.
+      expect(screen.getByRole('dialog', { name: 'Slayer' })).toBeInTheDocument()
       expect(screen.getByRole('list', { name: 'Slayer levels' })).toBeInTheDocument()
     })
 
@@ -333,6 +369,18 @@ describe('character page', () => {
     expect(screen.getByText('2h 30m')).toBeInTheDocument()
     expect(screen.getByText('304 days')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to your characters' })).toHaveAttribute('href', '/characters')
+  })
+
+  it("links to the character's achievements", async () => {
+    mockApi(route(profile()))
+    renderRoute('/characters/1', { me })
+
+    await screen.findByRole('heading', { name: 'Kaelith' })
+    // The header has its own link to the page; this one opens it on this character.
+    expect(within(screen.getByRole('main')).getByRole('link', { name: 'Achievements' })).toHaveAttribute(
+      'href',
+      '/achievements?character=1',
+    )
   })
 
   it('shows gear in its slots, with its icon', async () => {

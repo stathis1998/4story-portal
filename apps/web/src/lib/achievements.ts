@@ -1,5 +1,6 @@
 import type {
   Achievement,
+  AchievementGroup,
   AchievementLevel,
   AchievementReward,
   AchievementRewardRequest,
@@ -88,11 +89,48 @@ const sortGroup = (achievement: Achievement) => (!nextLevel(achievement) ? 2 : a
 export const sortAchievements = (achievements: Achievement[]) =>
   [...achievements].sort((a, b) => sortGroup(a) - sortGroup(b) || progressRatio(b) - progressRatio(a))
 
-/** The unfinished achievements closest to their next level, leaving out the ones with nothing counted yet. */
-export const almostThere = (achievements: Achievement[], count = 3) =>
-  achievements
-    .filter((achievement) => nextLevel(achievement) && achievement.value > 0)
-    .sort((a, b) => progressRatio(b) - progressRatio(a))
+/** Whose achievements a group holds: one of the viewer's characters, or the account. */
+export type AchievementOwner = {
+  /** Unique among the owners, for keys. */
+  key: string
+  /** Null for the account. */
+  characterId: number | null
+  /** The character's name, or `Account`. */
+  name: string
+  /** `Lv. 50 Warrior`. Null for the account. */
+  detail: string | null
+  group: AchievementGroup
+}
+
+/** Every character in the API's order, highest level first, then the account. Never empty. */
+export const achievementOwners = ({
+  account,
+  characters,
+}: Pick<AchievementsOverview, 'account' | 'characters'>): AchievementOwner[] => [
+  ...characters.map((character) => ({
+    key: `character-${character.id}`,
+    characterId: character.id,
+    name: character.name,
+    detail: `Lv. ${character.level} ${character.className}`,
+    group: character,
+  })),
+  { key: 'account', characterId: null, name: 'Account', detail: null, group: account },
+]
+
+/** An achievement as one owner has it. Characters share achievement IDs, so the key carries the owner. */
+export type OwnedAchievement = { key: string; owner: string; achievement: Achievement }
+
+/**
+ * The unfinished achievements closest to their next level across every character and the account,
+ * leaving out the ones with nothing counted yet.
+ */
+export const almostThere = (overview: Pick<AchievementsOverview, 'account' | 'characters'>, count = 3): OwnedAchievement[] =>
+  achievementOwners(overview)
+    .flatMap(({ key, name, group }) =>
+      group.achievements.map((achievement) => ({ key: `${key}:${achievement.id}`, owner: name, achievement })),
+    )
+    .filter(({ achievement }) => nextLevel(achievement) && achievement.value > 0)
+    .sort((a, b) => progressRatio(b.achievement) - progressRatio(a.achievement))
     .slice(0, count)
 
 // Both ends are the server's clock, so any zone suffix is dropped and UTC only does the arithmetic.

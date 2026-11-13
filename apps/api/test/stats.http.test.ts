@@ -600,9 +600,12 @@ describe('player stats routes', () => {
       const after = (await player.get('/api/hall-of-fame')).body as HallOfFame;
       expect(JSON.stringify(after)).not.toContain('Moosey');
       // Level 60 or higher: Rival, and Moosey until the GM is hidden.
-      const { achievements, players } = (await player.get('/api/me/achievements')).body as AchievementsOverview;
-      expect(players).toBe(3);
-      expect(achievements.find((entry) => entry.id === 'level')!.levels[2].holders).toBe(1);
+      const { account, characters } = (await player.get('/api/me/achievements')).body as AchievementsOverview;
+      expect(account.achievements[0].population).toBe(3);
+      const level = characters[0].achievements.find((entry) => entry.id === 'level')!;
+      // Kaelith, Alt, Rival and Fourth are left to measure against.
+      expect(level.population).toBe(4);
+      expect(level.levels[2].holders).toBe(1);
 
       await hide(moose, false);
       expect(JSON.stringify((await player.get('/api/hall-of-fame')).body)).toContain('Moosey');
@@ -623,9 +626,10 @@ describe('player stats routes', () => {
       const overview = (await moose.get('/api/me/overview')).body;
       expect(overview.hoursPlayed).toBe(2);
       const achievements = (await moose.get('/api/me/achievements')).body as AchievementsOverview;
-      expect(achievements.players).toBe(3);
-      expect(achievements.achievements.find((entry) => entry.id === 'level')).toMatchObject({ levelsDone: 5 });
-      expect(achievements.achievements.find((entry) => entry.id === 'level')!.levels[4].holders).toBe(0);
+      expect(achievements.account.achievements[0].population).toBe(3);
+      const level = achievements.characters[0].achievements.find((entry) => entry.id === 'level')!;
+      expect(level).toMatchObject({ levelsDone: 5 });
+      expect(level.levels[4].holders).toBe(0);
 
       const profile = (await moose.get('/api/characters/3/profile')).body;
       expect(profile).toMatchObject({ name: 'Moosey', ranked: false, rankings: [] });

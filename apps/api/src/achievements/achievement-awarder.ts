@@ -3,13 +3,15 @@ import { achievementLevelName } from '@4story-portal/shared';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
 import type { AccountStatsRow } from '../stats/stats-rules.js';
-import { ACHIEVEMENTS, type AchievementFamily, levelReached } from './achievement-rules.js';
+import { ACCOUNT_ACHIEVEMENTS, type AchievementFamily, CHARACTER_ACHIEVEMENTS, levelReached } from './achievement-rules.js';
 import {
   ACHIEVEMENTS_REPOSITORY,
   type AchievementsRepository,
   ANNOUNCE_SKIPPED,
   ANNOUNCE_WAITING,
   AWARD_SWITCHED_OFF,
+  FIRST_LIFE,
+  NO_CHARACTER,
 } from './achievements.repository.js';
 
 export type AwarderTiming = {
@@ -34,12 +36,22 @@ const REWARD_NOTE = ' Your reward is attached.';
 export type TickResult = { awarded: number; announced: number };
 const NOTHING: TickResult = { awarded: 0, announced: 0 };
 
-type Due = { account: AccountStatsRow; family: AchievementFamily; level: number };
+/** A level someone has reached and not been awarded. `charId` is NO_CHARACTER for an account achievement. */
+type Due = { userId: number; charId: number; name: string; family: AchievementFamily; level: number };
 
-export const awardKey = (userId: number, achievementId: string, level: number) => `${userId}:${achievementId}:${level}`;
+export const awardKey = (userId: number, charId: number, achievementId: string, level: number, rebirth: number) =>
+  `${userId}:${charId}:${achievementId}:${level}:${rebirth}`;
 export const rewardKey = (achievementId: string, level: number) => `${achievementId}:${level}`;
 
-// Once a minute, while the switch is on: finds the levels accounts have reached and not been awarded,
+/** An account goes by its highest level character that isn't banned, as in the Hall of Fame. Empty when it has none. */
+export function shownAs(account: AccountStatsRow): string {
+  const [top] = account.characters
+    .filter(({ row }) => !row.banned)
+    .sort((a, b) => b.row.level - a.row.level || a.row.name.localeCompare(b.row.name));
+  return top?.row.name ?? '';
+}
+
+// Once a minute, while the switch is on: finds the levels characters and accounts have reached and not been awarded,
 // has the database send each one's letter and record it, then announces them in game.
 @Injectable()
 export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
@@ -101,19 +113,24 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
 
   private async awardDue(): Promise<{ awarded: number; left: number }> {
     const { stats } = await this.stats.achievementStats();
-    const [awards, recipients] = await Promise.all([this.repo.awards(), this.repo.recipients()]);
-    const given = new Set(awards.map((award) => awardKey(award.userId, award.achievementId, award.level)));
-    const recipientOf = new Map(recipients.map((recipient) => [recipient.userId, recipient]));
+    const awards = await this.repo.awards();
+    const given = new Set(awards.map((award) => awardKey(award.userId, award.charId, award.achievementId, award.level, award.rebirth)));
 
     const due: Due[] = [];
+    const add = (userId: number, charId: number, name: string, family: AchievementFamily, value: number) => {
+      const reached = levelReached(family, value);
+      for (let level = 1; level <= reached; level++) {
+        if (!given.has(awardKey(userId, charId, family.id, level, FIRST_LIFE))) due.push({ userId, charId, name, family, level });
+      }
+    };
     for (const account of stats.accounts.values()) {
-      // No recipient means no character left that isn't banned or deleted.
-      if (!recipientOf.has(account.userId)) continue;
-      for (const family of ACHIEVEMENTS) {
-        const reached = levelReached(family, family.value(account));
-        for (let level = 1; level <= reached; level++) {
-          if (!given.has(awardKey(account.userId, family.id, level))) due.push({ account, family, level });
-        }
+      const playing = account.characters.filter(({ row }) => !row.banned);
+      // An account with only banned characters earns nothing.
+      if (playing.length === 0) continue;
+      const name = shownAs(account);
+      for (const family of ACCOUNT_ACHIEVEMENTS) add(account.userId, NO_CHARACTER, name, family, family.value(account));
+      for (const character of playing) {
+        for (const family of CHARACTER_ACHIEVEMENTS) add(account.userId, character.row.id, character.row.name, family, family.value(character));
       }
     }
     // Level 1 of everything before level 2 of anything, so a backlog reads in order.
@@ -121,27 +138,28 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
 
     let awarded = 0;
     const batch = due.slice(0, this.timing.maxPerTick);
-    for (const { account, family, level } of batch) {
-      const recipient = recipientOf.get(account.userId)!;
+    for (const { userId, charId, name: who, family, level } of batch) {
       const name = achievementLevelName(family.name, level, family.levels.length);
       const goal = family.goal(family.levels[level - 1]);
       let id: number;
       try {
-        // The database attaches the level's saved reward, and refuses once the switch is off.
+        // The database sends a character its letter with the level's saved reward, records the
+        // award with it, and refuses once the switch is off.
         id = await this.repo.award({
-          userId: account.userId,
+          userId,
+          charId,
+          rebirth: FIRST_LIFE,
           achievementId: family.id,
           level,
-          charId: recipient.charId,
           sender: SENDER,
           title: `Achievement: ${name}`,
           message: `You completed ${name}: ${goal}.`,
           rewardNote: REWARD_NOTE,
-          text: `${recipient.name} completed ${name}: ${goal}`,
+          text: `${who} completed ${name}: ${goal}`,
         });
       } catch (error) {
         // One award that can't be given must not hold up the rest. Nothing was written for it.
-        this.logger.warn(`Could not award ${family.id} ${level} to account ${account.userId}: ${describe(error)}`);
+        this.logger.warn(`Could not award ${family.id} ${level} to account ${userId}, character ${charId}: ${describe(error)}`);
         continue;
       }
       if (id === AWARD_SWITCHED_OFF) return { awarded, left: 0 };
@@ -149,7 +167,6 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
     }
     return { awarded, left: due.length - batch.length };
   }
-
   private async announceWaiting(): Promise<{ announced: number; waiting: number }> {
     const waiting = (await this.repo.awards()).filter((award) => award.announced === ANNOUNCE_WAITING);
     let announced = 0;

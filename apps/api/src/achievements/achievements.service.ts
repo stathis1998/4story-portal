@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type {
   Achievement,
+  AchievementGroup,
   AchievementReward,
   AchievementRewardRequest,
   AchievementsOverview,
@@ -16,21 +17,39 @@ import type {
   News,
   SessionUser,
 } from '@4story-portal/shared';
+import { className } from '../characters/character-codes.js';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { itemIcons } from '../gm/game-icons.generated.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
-import type { AccountStatsRow } from '../stats/stats-rules.js';
-import { AchievementAwarder, rewardKey } from './achievement-awarder.js';
-import { ACHIEVEMENTS, type AchievementFamily, formatValue, levelReached, LEVELS_TOTAL } from './achievement-rules.js';
+import { AchievementAwarder, rewardKey, shownAs } from './achievement-awarder.js';
+import {
+  ACCOUNT_ACHIEVEMENTS,
+  ACCOUNT_LEVELS_TOTAL,
+  type AchievementFamily,
+  CHARACTER_ACHIEVEMENTS,
+  CHARACTER_LEVELS_TOTAL,
+  formatValue,
+  levelReached,
+} from './achievement-rules.js';
 import {
   ACHIEVEMENTS_REPOSITORY,
   type AchievementsRepository,
   ANNOUNCE_WAITING,
   type AwardRow,
+  FIRST_LIFE,
+  NO_CHARACTER,
   type RewardRow,
 } from './achievements.repository.js';
 
 const NEWS_ITEMS = 20;
+
+/** Someone an achievement is measured against, and the level they have reached in it. */
+type Standing = { name: string; reached: number };
+
+/** One subject's own view of an achievement: what it has counted, and what it has been awarded. */
+type Own = { value: number; reached: number; earnedAt: (level: number) => string | null };
+
+const subjectKey = (userId: number, charId: number, achievementId: string) => `${userId}:${charId}:${achievementId}`;
 
 // Shapes what the pages show: levels, rewards, the news feed and the GM's settings.
 @Injectable()
@@ -53,49 +72,65 @@ export class AchievementsService {
     ]);
     const mine = stats.accounts.get(user.userId);
 
-    // The highest level each account has been awarded, and when this one got each of its own.
+    // The highest level each subject has been awarded in its current life, and when.
     const awarded = new Map<string, number>();
-    const earnedAt = new Map<string, string>();
+    const earned = new Map<string, string>();
     for (const award of awards) {
-      const key = `${award.userId}:${award.achievementId}`;
+      if (award.rebirth !== FIRST_LIFE) continue;
+      const key = subjectKey(award.userId, award.charId, award.achievementId);
       awarded.set(key, Math.max(awarded.get(key) ?? 0, award.level));
-      if (award.userId === user.userId) earnedAt.set(rewardKey(award.achievementId, award.level), award.earnedAt.toISOString());
+      earned.set(`${key}:${award.level}`, award.earnedAt.toISOString());
     }
     // An awarded level stays, even when the number behind it has dropped again.
-    const level = (userId: number, family: AchievementFamily, account: AccountStatsRow | undefined) =>
-      Math.max(account ? levelReached(family, family.value(account)) : 0, awarded.get(`${userId}:${family.id}`) ?? 0);
-
-    const achievements: Achievement[] = ACHIEVEMENTS.map((family) => {
-      const value = mine ? family.value(mine) : 0;
-      const levelsDone = level(user.userId, family, mine);
-      const others = ranked.map((account) => ({ name: shownAs(account), reached: level(account.userId, family, account) }));
-      return {
-        id: family.id,
-        name: family.name,
-        category: family.category,
-        value,
-        valueText: formatValue(family, value),
-        levelsDone,
-        levels: family.levels.map((threshold, index) => ({
-          level: index + 1,
-          threshold,
-          thresholdText: formatValue(family, threshold),
-          goal: family.goal(threshold),
-          reward: rewards.get(rewardKey(family.id, index + 1)) ?? null,
-          done: index + 1 <= levelsDone,
-          earnedAt: earnedAt.get(rewardKey(family.id, index + 1)) ?? null,
-          ...holdersOf(others, index + 1),
-        })),
-      };
+    const reached = (userId: number, charId: number, family: AchievementFamily, value: number) =>
+      Math.max(levelReached(family, value), awarded.get(subjectKey(userId, charId, family.id)) ?? 0);
+    const own = (userId: number, charId: number, family: AchievementFamily, value: number): Own => ({
+      value,
+      reached: reached(userId, charId, family, value),
+      earnedAt: (level) => earned.get(`${subjectKey(userId, charId, family.id)}:${level}`) ?? null,
     });
 
-    return {
-      achievements,
-      levelsDone: achievements.reduce((total, achievement) => total + achievement.levelsDone, 0),
-      levelsTotal: LEVELS_TOTAL,
-      players: ranked.length,
-      live,
-    };
+    // Account achievements are measured against the ranked accounts, character ones against their characters.
+    const contenders = ranked.flatMap((account) => account.characters.filter(({ row }) => !row.banned));
+    const accountStandings = new Map<string, Standing[]>(
+      ACCOUNT_ACHIEVEMENTS.map((family) => [
+        family.id,
+        ranked.map((account) => ({ name: shownAs(account), reached: reached(account.userId, NO_CHARACTER, family, family.value(account)) })),
+      ]),
+    );
+    const characterStandings = new Map<string, Standing[]>(
+      CHARACTER_ACHIEVEMENTS.map((family) => [
+        family.id,
+        contenders.map((character) => ({
+          name: character.row.name,
+          reached: reached(character.row.userId, character.row.id, family, family.value(character)),
+        })),
+      ]),
+    );
+
+    const account = group(
+      ACCOUNT_ACHIEVEMENTS.map((family) =>
+        view(family, own(user.userId, NO_CHARACTER, family, mine ? family.value(mine) : 0), accountStandings.get(family.id)!, null),
+      ),
+      ACCOUNT_LEVELS_TOTAL,
+    );
+
+    const characters = [...(mine?.characters ?? [])]
+      .sort((a, b) => b.row.level - a.row.level || a.row.name.localeCompare(b.row.name))
+      .map((character) => ({
+        id: character.row.id,
+        name: character.row.name,
+        level: character.row.level,
+        className: className(character.row.classCode),
+        ...group(
+          CHARACTER_ACHIEVEMENTS.map((family) =>
+            view(family, own(user.userId, character.row.id, family, family.value(character)), characterStandings.get(family.id)!, rewards),
+          ),
+          CHARACTER_LEVELS_TOTAL,
+        ),
+      }));
+
+    return { account, characters, live };
   }
 
   async news(user: SessionUser): Promise<News> {
@@ -117,7 +152,8 @@ export class AchievementsService {
       awards: awards.length,
       pendingAnnouncements: awards.filter((award) => award.announced === ANNOUNCE_WAITING).length,
       lastCheck: this.awarder.lastCheck()?.toISOString() ?? null,
-      achievements: ACHIEVEMENTS.map((family) => ({
+      // Only the achievements that can pay: an account achievement has nothing to set.
+      achievements: CHARACTER_ACHIEVEMENTS.map((family) => ({
         id: family.id,
         name: family.name,
         category: family.category,
@@ -131,8 +167,8 @@ export class AchievementsService {
   }
 
   async setReward({ achievementId, level, reward }: AchievementRewardRequest, changedBy: string): Promise<GmAchievements> {
-    const family = ACHIEVEMENTS.find((entry) => entry.id === achievementId);
-    if (!family || level > family.levels.length) throw new NotFoundException('No such achievement level');
+    const family = CHARACTER_ACHIEVEMENTS.find((entry) => entry.id === achievementId);
+    if (!family || level > family.levels.length) throw new NotFoundException('No such character achievement level');
     await this.checkItems(reward.items);
     await this.save(() => this.repo.setReward({ achievementId, level, ...reward }, changedBy));
     return this.gm();
@@ -232,15 +268,37 @@ export class AchievementsService {
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** An account goes by its highest level character that isn't banned, as in the Hall of Fame. */
-function shownAs(account: AccountStatsRow): string {
-  const [top] = account.characters
-    .filter(({ row }) => !row.banned)
-    .sort((a, b) => b.row.level - a.row.level || a.row.name.localeCompare(b.row.name));
-  return top?.row.name ?? '';
+/** One achievement as its subject has it. `rewards` is null for an account achievement, which never pays. */
+function view(family: AchievementFamily, own: Own, standings: Standing[], rewards: Map<string, AchievementReward> | null): Achievement {
+  return {
+    id: family.id,
+    name: family.name,
+    category: family.category,
+    scope: family.scope,
+    population: standings.length,
+    value: own.value,
+    valueText: formatValue(family, own.value),
+    levelsDone: own.reached,
+    levels: family.levels.map((threshold, index) => {
+      const level = index + 1;
+      const holders = standings.filter((standing) => standing.reached >= level);
+      return {
+        level,
+        threshold,
+        thresholdText: formatValue(family, threshold),
+        goal: family.goal(threshold),
+        reward: rewards?.get(rewardKey(family.id, level)) ?? null,
+        done: level <= own.reached,
+        earnedAt: own.earnedAt(level),
+        holders: holders.length,
+        holderNames: holders.map((standing) => standing.name).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+      };
+    }),
+  };
 }
 
-function holdersOf(accounts: { name: string; reached: number }[], level: number): { holders: number; holderNames: string[] } {
-  const names = accounts.filter((account) => account.reached >= level).map((account) => account.name);
-  return { holders: names.length, holderNames: names.filter(Boolean).sort((a, b) => a.localeCompare(b)) };
-}
+const group = (achievements: Achievement[], levelsTotal: number): AchievementGroup => ({
+  achievements,
+  levelsDone: achievements.reduce((total, achievement) => total + achievement.levelsDone, 0),
+  levelsTotal,
+});

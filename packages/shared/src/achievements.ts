@@ -15,6 +15,12 @@ export const ACHIEVEMENT_CATEGORIES = [
 
 export type AchievementCategoryId = (typeof ACHIEVEMENT_CATEGORIES)[number]['id'];
 
+/**
+ * Who an achievement belongs to. A character achievement is earned by each character on its own and
+ * can pay a reward; an account achievement is earned once by the account and pays nothing.
+ */
+export type AchievementScope = 'account' | 'character';
+
 /** No achievement has more levels than this. */
 export const ACHIEVEMENT_MAX_LEVELS = 5;
 
@@ -62,9 +68,9 @@ export type AchievementLevel = {
   done: boolean;
   /** When the reward letter went out, ISO. Null when not done, or done before the system went live. */
   earnedAt: string | null;
-  /** Accounts that have this level, out of `players`. */
+  /** How many have this level, out of the achievement's `population`. */
   holders: number;
-  /** Those accounts, each under its highest level character, by name. Never account names. */
+  /** Who they are, by character name: the characters themselves, or each account's highest level one. Never account names. */
   holderNames: string[];
 };
 
@@ -72,7 +78,10 @@ export type Achievement = {
   id: string;
   name: string;
   category: AchievementCategoryId;
-  /** The account's number right now, in the unit the thresholds use. */
+  scope: AchievementScope;
+  /** Everyone it is measured against: ranked characters for a character achievement, ranked accounts otherwise. */
+  population: number;
+  /** The character's or account's number right now, in the unit the thresholds use. */
   value: number;
   /** Ready to show next to a threshold, such as `7,420` or `+22`. */
   valueText: string;
@@ -80,12 +89,17 @@ export type Achievement = {
   levels: AchievementLevel[];
 };
 
+/** One set of achievements with its totals. */
+export type AchievementGroup = { achievements: Achievement[]; levelsDone: number; levelsTotal: number };
+
+/** One of the viewer's characters, with the character achievements as that character has them. */
+export type CharacterAchievements = AchievementGroup & { id: number; name: string; level: number; className: string };
+
 export type AchievementsOverview = {
-  achievements: Achievement[];
-  levelsDone: number;
-  levelsTotal: number;
-  /** Ranked accounts, the `of y` behind every `holders`. */
-  players: number;
+  /** The account achievements. None of them pays a reward. */
+  account: AchievementGroup;
+  /** The viewer's characters, highest level first. Empty for an account with no characters. */
+  characters: CharacterAchievements[];
   /** False until a GM switches rewards on. Levels show either way. */
   live: boolean;
 };
@@ -105,6 +119,7 @@ export type News = { serverNow: string; items: NewsItem[] };
 export type GmAchievementLevel = { level: number; goal: string; reward: AchievementReward | null };
 export type GmAchievement = { id: string; name: string; category: AchievementCategoryId; levels: GmAchievementLevel[] };
 
+/** Only character achievements are listed for a GM: account achievements pay nothing. */
 export type GmAchievements = {
   live: boolean;
   control: ControlState;

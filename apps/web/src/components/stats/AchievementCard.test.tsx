@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest'
 import { achievement, level, simple } from '../../test/achievements'
 import { AchievementCard } from './AchievementCard'
 
-function show(shown: Achievement = achievement()) {
+function show(shown: Achievement = achievement(), owner?: string) {
   render(
     <ul>
-      <AchievementCard achievement={shown} players={5} />
+      <AchievementCard achievement={shown} owner={owner} />
     </ul>,
   )
   return screen.getByRole('button', { name: new RegExp(`^${shown.name}`) })
@@ -71,7 +71,7 @@ describe('AchievementCard', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     // Outside the card, so the cards under it stay where they are.
     expect(header.closest('li')!.contains(dialog)).toBe(false)
-    expect(dialog).toHaveTextContent('Combat')
+    expect(dialog).toHaveTextContent('Combat · Character')
     expect(dialog).toHaveTextContent('Level 2/5')
 
     const levels = within(within(dialog).getByRole('list', { name: 'Slayer levels' })).getAllByRole('listitem')
@@ -80,7 +80,7 @@ describe('AchievementCard', () => {
     expect(levels[0]).toHaveTextContent('Defeat 100 monsters')
     expect(levels[0]).toHaveTextContent('Earned 9 Nov')
     expect(levels[0]).toHaveTextContent('Reached by Aki, Bo, Cy and Dee')
-    expect(levels[0]).toHaveTextContent('4 of 5 players')
+    expect(levels[0]).toHaveTextContent('4 of 5 characters')
     // Done before rewards went live, so there is no date.
     expect(levels[1]).toHaveTextContent('Slayer II')
     expect(levels[1]).toHaveTextContent('Done')
@@ -99,11 +99,61 @@ describe('AchievementCard', () => {
     expect(within(levels[2]).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '74')
     expect(levels[2]).toHaveTextContent('Small Potion')
     expect(levels[2]).toHaveTextContent('Reached by Aki')
-    expect(levels[2]).toHaveTextContent('1 of 5 players')
+    expect(levels[2]).toHaveTextContent('1 of 5 characters')
     expect(levels[2]).not.toHaveTextContent('Done')
     // Only the level being worked on has a bar.
     expect(within(levels[3]).queryByRole('progressbar')).not.toBeInTheDocument()
     expect(levels[3]).not.toHaveTextContent('In progress')
+  })
+
+  it('counts who has a level of a character achievement out of the ranked characters', async () => {
+    await userEvent.click(show(achievement({ population: 15 })))
+    const levels = within(screen.getByRole('list', { name: 'Slayer levels' })).getAllByRole('listitem')
+
+    expect(levels[0]).toHaveTextContent('Reached by Aki, Bo, Cy and Dee · 4 of 15 characters')
+    expect(levels[0]).not.toHaveTextContent('players')
+  })
+
+  it('counts who has a level of an account achievement out of the players, and shows no reward', async () => {
+    const veteran = achievement({
+      id: 'veteran',
+      name: 'Veteran',
+      category: 'playtime',
+      scope: 'account',
+      value: 40,
+      valueText: '40',
+      levelsDone: 1,
+      levels: [
+        level({ level: 1, threshold: 10, goal: 'Play for 10 hours', done: true, holders: 2, holderNames: ['Aki', 'Bo'] }),
+        level({ level: 2, threshold: 100, goal: 'Play for 100 hours' }),
+      ],
+    })
+    const header = show(veteran)
+    expect(header).not.toHaveTextContent('Reward')
+
+    await userEvent.click(header)
+    const dialog = screen.getByRole('dialog', { name: 'Veteran' })
+    expect(dialog).toHaveTextContent('Playtime · Account')
+    const levels = within(within(dialog).getByRole('list', { name: 'Veteran levels' })).getAllByRole('listitem')
+    expect(levels[0]).toHaveTextContent('Reached by Aki and Bo · 2 of 5 players')
+    expect(levels[0]).not.toHaveTextContent('characters')
+    expect(levels[1]).toHaveTextContent('Nobody has reached this yet')
+    expect(dialog).not.toHaveTextContent('Reward')
+  })
+
+  it('says whose it is when given an owner, without renaming the card or its pop-up', async () => {
+    const header = show(achievement(), 'Kaelith')
+
+    expect(within(header).getByText('Kaelith')).toHaveClass('text-muted')
+    // Right after the name, before the level.
+    expect(header).toHaveTextContent(/^Slayer KaelithLevel 2\/5/)
+    await userEvent.click(header)
+    const dialog = screen.getByRole('dialog', { name: 'Slayer' })
+    expect(dialog).not.toHaveTextContent('Kaelith')
+  })
+
+  it('has no owner tag unless given one', () => {
+    expect(show()).toHaveTextContent(/^SlayerLevel 2\/5/)
   })
 
   it('closes with its button, and puts the focus back on the card', async () => {
