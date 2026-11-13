@@ -1,6 +1,5 @@
 import { HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type {
-  BadgeView,
   CharacterInspect,
   CharacterProfile,
   CharacterRanking,
@@ -23,15 +22,13 @@ import { className, countryName, raceName } from '../characters/character-codes.
 import { itemIcons } from '../gm/game-icons.generated.js';
 import { tooltipCharts } from '../gm/game-tooltips.generated.js';
 import { buildItemTooltip, type OptionRule } from './item-tooltip.js';
-import { type BadgeUnlock, PortalStore, StoreUnavailableError } from '../store/portal-store.js';
+import { levelsDone } from '../achievements/achievement-rules.js';
+import { PortalStore, StoreUnavailableError } from '../store/portal-store.js';
 import {
   type AccountStatsRow,
-  BADGES,
   type CharacterStatsRow,
-  COMING_SOON_BADGES,
   type ComputedStats,
   computeStats,
-  earnedBadges,
   type Ranked,
   rankCategory,
   UPGRADE_KIND_GEM,
@@ -43,7 +40,6 @@ import { STATS_REPOSITORY, type StatsRepository } from './stats.repository.js';
 import { firstUpgradeDay, upgradeKindStats } from './upgrade-stats.js';
 
 const CACHE_MS = 60_000;
-const NEW_FOR_DAYS = 7;
 const TOP_PLACES = 3;
 const MAX_ROWS = 5;
 const MAX_SEARCH_RESULTS = 20;
@@ -74,9 +70,8 @@ const SLOT_NAMES = [
 
 type Snapshot = {
   stats: ComputedStats;
-  /** Badge IDs each account holds now. */
-  earned: Map<number, Set<string>>;
-  unlocks: BadgeUnlock[];
+  /** Achievement levels each account's stats reach now. */
+  levels: Map<number, number>;
   optionRules: Map<number, OptionRule>;
   upgradeAttempts: UpgradeAttemptRow[];
   upgradeLosses: UpgradeLossRow[];
@@ -108,7 +103,7 @@ const CHARACTER_CATEGORIES: Category[] = [
   { id: 'titles', label: 'Most titles', value: (c) => c.titles.length, display: (v) => plural(v, 'title') },
   { id: 'companion', label: 'Top companion', value: (c) => c.companionLevel, display: (v) => `Lv. ${v}` },
 ];
-const BADGE_CATEGORY = { id: 'badges' as const, label: 'Most achievements', display: (v: number) => plural(v, 'badge') };
+const BADGE_CATEGORY = { id: 'badges' as const, label: 'Most achievements', display: (v: number) => plural(v, 'level') };
 
 const total = (value: number) => value.toLocaleString('en-US');
 
@@ -176,7 +171,6 @@ export class StatsService {
       currentStreak: account?.currentStreak ?? 0,
       longestStreak: account?.longestStreak ?? 0,
       activity: account?.activity ?? [],
-      badges: this.badgeViews(snapshot, user.userId),
       characters: (account?.characters ?? []).map((character) => ({
         id: character.row.id,
         progress: character.progress,
@@ -337,6 +331,12 @@ export class StatsService {
     };
   }
 
+  /** What the achievements are worked out from, through the same cache as the pages. */
+  async achievementStats(): Promise<{ stats: ComputedStats; ranked: AccountStatsRow[] }> {
+    const snapshot = await this.snapshot();
+    return { stats: snapshot.stats, ranked: this.rankedAccounts(snapshot) };
+  }
+
   setHideGms(hideGms: boolean, changedBy: string): HallOfFameSettings {
     try {
       this.store.setHideGms(hideGms, changedBy);
@@ -371,7 +371,7 @@ export class StatsService {
       const [top] = account.characters
         .filter(({ row }) => !row.banned)
         .sort((a, b) => b.row.level - a.row.level || a.row.name.localeCompare(b.row.name));
-      return top ? [candidate(top, snapshot.earned.get(account.userId)?.size ?? 0)] : [];
+      return top ? [candidate(top, snapshot.levels.get(account.userId) ?? 0)] : [];
     });
     return rankCategory(candidates);
   }
@@ -414,53 +414,6 @@ export class StatsService {
     return rankings;
   }
 
-  private badgeViews(snapshot: Snapshot, userId: number): BadgeView[] {
-    const ranked = this.rankedAccounts(snapshot);
-    const rankedIds = new Set(ranked.map((account) => account.userId));
-    const mine = snapshot.earned.get(userId);
-    const { today } = snapshot.stats;
-
-    const earnable = BADGES.map((badge) => {
-      const earned = mine?.has(badge.id) ?? false;
-      const holderIds = new Set(
-        ranked.filter((account) => snapshot.earned.get(account.userId)?.has(badge.id)).map((account) => account.userId),
-      );
-      const unlocks = snapshot.unlocks.filter((unlock) => unlock.badgeId === badge.id);
-      const firstSeen = (earned && unlocks.find((unlock) => unlock.userId === userId)?.firstSeen) || null;
-      // Only current holders: the store keeps badges an account has since lost.
-      const dated = unlocks.filter((unlock) => holderIds.has(unlock.userId));
-      const allDated = dated.every((unlock) => unlock.firstSeen !== null);
-      const earliest = dated.map((unlock) => unlock.firstSeen ?? '').sort()[0];
-      return {
-        id: badge.id,
-        name: badge.name,
-        description: badge.description,
-        category: badge.category,
-        comingSoon: false,
-        earned,
-        holders: holderIds.size,
-        players: ranked.length,
-        firstSeen,
-        isNew: firstSeen !== null && daysBetween(firstSeen, today) < NEW_FOR_DAYS,
-        firstToEarn: firstSeen !== null && rankedIds.has(userId) && allDated && firstSeen === earliest,
-      };
-    });
-    const comingSoon = COMING_SOON_BADGES.map(({ id, name, description, category }) => ({
-      id,
-      name,
-      description,
-      category,
-      comingSoon: true,
-      earned: false,
-      holders: 0,
-      players: ranked.length,
-      firstSeen: null,
-      isNew: false,
-      firstToEarn: false,
-    }));
-    return [...earnable, ...comingSoon];
-  }
-
   private snapshot(): Promise<Snapshot> {
     const now = Date.now();
     if (this.cache && now - this.cache.loadedAt < CACHE_MS) return this.cache.snapshot;
@@ -478,18 +431,12 @@ export class StatsService {
     const today = serverToday();
     const rows = await this.repo.loadRows();
     const stats = computeStats(rows, today);
-    const earned = new Map<number, Set<string>>();
-    for (const account of stats.accounts.values()) earned.set(account.userId, new Set(earnedBadges(account)));
-    this.store.recordBadges(
-      new Map([...earned].map(([userId, badges]) => [userId, [...badges]])),
-      today,
-      BADGES.map((badge) => badge.id),
-    );
+    const levels = new Map<number, number>();
+    for (const account of stats.accounts.values()) levels.set(account.userId, levelsDone(account));
     const optionRules = new Map(rows.optionRules.map(({ magic, ...rule }) => [magic, rule]));
     return {
       stats,
-      earned,
-      unlocks: this.store.badgeUnlocks(),
+      levels,
       optionRules,
       upgradeAttempts: rows.upgradeAttempts,
       upgradeLosses: rows.upgradeLosses,
@@ -537,11 +484,9 @@ function hallEntry(
   };
 }
 
-const daysBetween = (from: string, to: string) => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
-
 // The API runs on the same machine as the game, so its clock is the server's.
 /** The server's wall clock held as UTC, the same way the database driver reads its dates. */
-function serverNow(): Date {
+export function serverNow(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()));
 }

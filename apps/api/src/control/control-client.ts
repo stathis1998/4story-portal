@@ -11,6 +11,7 @@ import {
   decodeEventList,
   decodeGroupList,
   decodeLoginAck,
+  encodeAnnouncement,
   encodeEventChange,
   encodeEventList,
   encodeLogin,
@@ -25,6 +26,9 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
 // What OnCT_EVENTLIST_REQ and OnCT_EVENTCHANGE_REQ check. Lower is stronger.
 const EVENT_LIST_AUTHORITY = 3;
 const EVENT_CHANGE_AUTHORITY = 7;
+// MANAGER_GMLEVEL1, which OnCT_ANNOUNCEMENT_REQ checks.
+const ANNOUNCEMENT_AUTHORITY = 5;
+const ALL_WORLDS = 0;
 
 export class ControlUnavailableError extends Error {
   constructor() {
@@ -126,6 +130,13 @@ export class ControlClient implements OnModuleInit, OnModuleDestroy {
 
   kick(name: string): void {
     this.connectedSocket().write(encodeUserKickout(name));
+  }
+
+  /** Shows `text` to every online player as an Operator line in world chat. The server sends no reply. */
+  announce(text: string): void {
+    const socket = this.connectedSocket();
+    if (this.authority > ANNOUNCEMENT_AUTHORITY) throw new ControlRefusedError();
+    socket.write(encodeAnnouncement(ALL_WORLDS, text));
   }
 
   listEvents(): Promise<ControlEvent[]> {

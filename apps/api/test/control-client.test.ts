@@ -15,6 +15,7 @@ import {
   FrameDecoder,
   MSG,
   decodeEventChangeAck,
+  encodeAnnouncement,
   encodeEventChange,
   encodeEventList,
   encodeFrame,
@@ -134,6 +135,25 @@ describe('ControlClient', () => {
     await vi.waitFor(() =>
       expect(server!.received[0]).toEqual(Buffer.concat([encodeLogin('portal', 'secret'), encodeUserKickout('Kaelith')])),
     );
+  });
+
+  it('sends an announcement to every world', async () => {
+    server = await startFakeServer();
+    const c = connect(server.port);
+    await vi.waitFor(() => expect(c.status().state).toBe('connected'));
+
+    c.announce('Kaelith completed Slayer III');
+
+    await vi.waitFor(() =>
+      expect(server!.received[0]).toEqual(
+        Buffer.concat([encodeLogin('portal', 'secret'), encodeAnnouncement(0, 'Kaelith completed Slayer III')]),
+      ),
+    );
+  });
+
+  it('does not announce before it is connected', () => {
+    const c = new ControlClient({ host: '127.0.0.1', port: 1, user: 'portal', password: 'secret' });
+    expect(() => c.announce('Hi')).toThrow(ControlUnavailableError);
   });
 
   it('warns when the portal manager authority is too low for teleports', async () => {
@@ -394,6 +414,12 @@ describe('ControlClient', () => {
       await vi.waitFor(() => expect(c.status().state).toBe('connected'));
       return { c, seen };
     };
+
+    it('refuses an announcement the server would drop, at authority 6', async () => {
+      const { c, seen } = await loggedInAt(6);
+      expect(() => c.announce('Hi')).toThrow(ControlRefusedError);
+      expect(seen).not.toContain(MSG.ANNOUNCEMENT_REQ);
+    });
 
     it('refuses to list at once when the authority is too low for the server to answer', async () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);

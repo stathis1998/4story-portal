@@ -54,7 +54,7 @@ const rows = (): StatRows => ({
   social: [],
   combat: [],
   spending: [],
-  soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
+  soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], progress: [], pets: [],
   optionRules: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },

@@ -9,5 +9,7 @@ import { StatsService } from './stats.service.js';
   imports: [AuthModule],
   controllers: [StatsController],
   providers: [StatsService, ActiveEventsService, { provide: STATS_REPOSITORY, useClass: SqlStatsRepository }],
+  // The achievements are worked out from the same cached stats.
+  exports: [StatsService],
 })
 export class StatsModule {}

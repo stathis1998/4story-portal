@@ -6,8 +6,6 @@ import { Logger } from '@nestjs/common';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PortalStore, StoreUnavailableError } from '../src/store/portal-store.js';
 
-const KNOWN = ['level-10', 'level-25'];
-
 describe('PortalStore', () => {
   const stores: PortalStore[] = [];
   const dirs: string[] = [];
@@ -62,106 +60,76 @@ describe('PortalStore', () => {
     });
   });
 
-  describe('badge dates', () => {
-    const held = (entries: [number, string[]][]) => new Map(entries);
-
-    it('stores no date for badges held at the first recording', () => {
-      const store = open();
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-01', KNOWN);
-      expect(store.badgeUnlocks()).toEqual([{ userId: 1, badgeId: 'level-10', firstSeen: null }]);
+  describe('achievements switch', () => {
+    it('is off by default', () => {
+      expect(open().achievementsLive()).toBe(false);
     });
 
-    it('dates badges seen after that', () => {
+    it('can be turned on and off, and records who did', () => {
       const store = open();
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-01', KNOWN);
-      store.recordBadges(held([[1, ['level-10', 'level-25']], [2, ['level-10']]]), '2026-11-05', KNOWN);
-
-      expect(store.badgeUnlocks()).toEqual([
-        { userId: 1, badgeId: 'level-10', firstSeen: null },
-        { userId: 1, badgeId: 'level-25', firstSeen: '2026-11-05' },
-        { userId: 2, badgeId: 'level-10', firstSeen: '2026-11-05' },
+      store.setAchievementsLive(true, 'moose');
+      expect(store.achievementsLive()).toBe(true);
+      store.setAchievementsLive(false, 'friend');
+      expect(store.achievementsLive()).toBe(false);
+      expect(store.settingChanges().map(({ key, value, changedBy }) => [key, value, changedBy])).toEqual([
+        ['achievements_live', 'true', 'moose'],
+        ['achievements_live', 'false', 'friend'],
       ]);
     });
+  });
 
-    it('keeps the first date on later recordings', () => {
+  describe('achievement rewards', () => {
+    const reward = (overrides = {}) => ({ achievementId: 'kills', level: 2, gold: 100, silver: 5, copper: 0, items: [{ itemId: 7602, count: 3 }], ...overrides });
+
+    it('has none to start with', () => {
+      expect(open().achievementRewards()).toEqual([]);
+    });
+
+    it('saves a reward for each level, with its items', () => {
       const store = open();
-      store.recordBadges(held([]), '2026-11-01', KNOWN);
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-02', KNOWN);
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-09', KNOWN);
-      expect(store.badgeUnlocks()).toEqual([{ userId: 1, badgeId: 'level-10', firstSeen: '2026-11-02' }]);
+      store.setAchievementReward(reward(), 'moose');
+      store.setAchievementReward(reward({ level: 1, gold: 10, silver: 0, items: [] }), 'moose');
+      expect(store.achievementRewards()).toEqual([reward({ level: 1, gold: 10, silver: 0, items: [] }), reward()]);
     });
 
-    it('keeps a badge the account no longer holds', () => {
+    it('replaces the reward of a level saved again', () => {
       const store = open();
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-01', KNOWN);
-      store.recordBadges(held([]), '2026-11-02', KNOWN);
-      expect(store.badgeUnlocks()).toHaveLength(1);
+      store.setAchievementReward(reward(), 'moose');
+      store.setAchievementReward(reward({ gold: 250, items: [] }), 'moose');
+      expect(store.achievementRewards()).toEqual([reward({ gold: 250, items: [] })]);
     });
 
-    it('stores no date for a badge the first time it exists, and dates it after that', () => {
+    it('removes a reward saved as nothing', () => {
       const store = open();
-      const later = [...KNOWN, 'added-later'];
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-01', KNOWN);
-      store.recordBadges(held([[1, ['level-10', 'added-later']]]), '2026-11-05', later);
-      store.recordBadges(held([[1, ['level-10', 'added-later']], [2, ['added-later']]]), '2026-11-06', later);
-
-      expect(store.badgeUnlocks()).toEqual([
-        { userId: 1, badgeId: 'added-later', firstSeen: null },
-        { userId: 1, badgeId: 'level-10', firstSeen: null },
-        { userId: 2, badgeId: 'added-later', firstSeen: '2026-11-06' },
-      ]);
+      store.setAchievementReward(reward(), 'moose');
+      store.setAchievementReward(reward({ gold: 0, silver: 0, copper: 0, items: [] }), 'moose');
+      expect(store.achievementRewards()).toEqual([]);
     });
 
-    it('dates a known badge nobody held when it first appeared', () => {
-      const store = open();
-      store.recordBadges(held([]), '2026-11-01', ['level-125']);
-      store.recordBadges(held([[1, ['level-125']]]), '2026-11-02', ['level-125']);
-      expect(store.badgeUnlocks()).toEqual([{ userId: 1, badgeId: 'level-125', firstSeen: '2026-11-02' }]);
-    });
-
-    const VERSION_1 = `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      CREATE TABLE setting_changes (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT NOT NULL, changed_by TEXT NOT NULL, changed_at TEXT NOT NULL);
-      CREATE TABLE badge_unlocks (user_id INTEGER NOT NULL, badge_id TEXT NOT NULL, first_seen TEXT, PRIMARY KEY (user_id, badge_id));
-      PRAGMA user_version = 1;`;
-
-    it('upgrades a file already in use: the original badges stay dated, new ones start blank', () => {
-      const file = join(tempDir(), 'portal.sqlite');
-      const old = new DatabaseSync(file);
-      old.exec(`${VERSION_1}
-        INSERT INTO settings VALUES ('badges_baselined', '2026-11-01');
-        INSERT INTO badge_unlocks VALUES (1, 'level-10', NULL);`);
-      old.close();
-
-      const known = ['level-10', 'level-25', 'level-125'];
-      const store = open(file);
-      store.recordBadges(held([[1, known]]), '2026-11-05', known);
-      expect(store.badgeUnlocks()).toEqual([
-        { userId: 1, badgeId: 'level-10', firstSeen: null },
-        { userId: 1, badgeId: 'level-125', firstSeen: null },
-        { userId: 1, badgeId: 'level-25', firstSeen: '2026-11-05' },
-      ]);
-    });
-
-    it('upgrades a file that never recorded anything: everything starts blank', () => {
-      const file = join(tempDir(), 'portal.sqlite');
-      const old = new DatabaseSync(file);
-      old.exec(VERSION_1);
-      old.close();
-
-      const store = open(file);
-      store.recordBadges(held([[1, ['level-25']]]), '2026-11-05', ['level-25']);
-      expect(store.badgeUnlocks()[0].firstSeen).toBeNull();
-    });
-
-    it('still treats a later run as not the first after reopening', () => {
+    it('survives reopening the file', () => {
       const file = join(tempDir(), 'portal.sqlite');
       const first = new PortalStore(file);
-      first.recordBadges(new Map(), '2026-11-01', KNOWN);
+      first.setAchievementReward(reward(), 'moose');
       first.close();
 
+      expect(open(file).achievementRewards()).toEqual([reward()]);
+    });
+
+    it('upgrades a file from before achievements had rewards, keeping its settings', () => {
+      const file = join(tempDir(), 'portal.sqlite');
+      const old = new DatabaseSync(file);
+      old.exec(`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE setting_changes (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT NOT NULL, changed_by TEXT NOT NULL, changed_at TEXT NOT NULL);
+        CREATE TABLE badge_unlocks (user_id INTEGER NOT NULL, badge_id TEXT NOT NULL, first_seen TEXT, PRIMARY KEY (user_id, badge_id));
+        CREATE TABLE badge_baselines (badge_id TEXT PRIMARY KEY);
+        INSERT INTO settings VALUES ('hide_gms', 'true');
+        PRAGMA user_version = 2;`);
+      old.close();
+
       const store = open(file);
-      store.recordBadges(held([[1, ['level-10']]]), '2026-11-02', KNOWN);
-      expect(store.badgeUnlocks()[0].firstSeen).toBe('2026-11-02');
+      expect(store.hideGms()).toBe(true);
+      store.setAchievementReward(reward(), 'moose');
+      expect(store.achievementRewards()).toEqual([reward()]);
     });
   });
 
@@ -175,15 +143,18 @@ describe('PortalStore', () => {
     it('does not throw when opening, and gives the defaults', () => {
       const store = open(corrupt());
       expect(store.hideGms()).toBe(false);
-      expect(store.badgeUnlocks()).toEqual([]);
-    });
-
-    it('ignores badge recording', () => {
-      expect(() => open(corrupt()).recordBadges(new Map([[1, ['level-10']]]), '2026-11-01', KNOWN)).not.toThrow();
+      expect(store.achievementsLive()).toBe(false);
+      expect(store.achievementRewards()).toEqual([]);
     });
 
     it('says a setting could not be saved', () => {
       expect(() => open(corrupt()).setHideGms(true, 'moose')).toThrow(StoreUnavailableError);
+      expect(() => open(corrupt()).setAchievementsLive(true, 'moose')).toThrow(StoreUnavailableError);
+    });
+
+    it('says a reward could not be saved', () => {
+      const reward = { achievementId: 'kills', level: 1, gold: 1, silver: 0, copper: 0, items: [] };
+      expect(() => open(corrupt()).setAchievementReward(reward, 'moose')).toThrow(StoreUnavailableError);
     });
   });
 });

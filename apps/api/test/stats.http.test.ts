@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import type { BadgeView, HallEntry, HallOfFame, Leaderboard, UpgradeStats } from '@4story-portal/shared';
+import type { AchievementsOverview, HallEntry, HallOfFame, Leaderboard, UpgradeStats } from '@4story-portal/shared';
 import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha1Hex } from '../src/auth/sha1.js';
@@ -61,7 +61,7 @@ const baseRows = (): StatRows => ({
   social: [],
   combat: [],
   spending: [],
-  soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
+  soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], progress: [], pets: [],
   optionRules: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
@@ -146,38 +146,10 @@ describe('player stats routes', () => {
       ]);
     });
 
-    it('lists every badge, marked earned or not, with its rarity', async () => {
-      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
-      const byId = new Map(badges.map((badge) => [badge.id, badge]));
-
-      // The account with only a banned character counts in neither number.
-      expect(byId.get('level-50')).toMatchObject({ name: 'Level 50', earned: true, holders: 3, players: 4 });
-      expect(byId.get('level-90')).toMatchObject({ earned: false, holders: 1, players: 4 });
-      expect(byId.get('upgrade-20')).toMatchObject({ earned: true, holders: 1 });
-    });
-
-    it('files each badge under a category', async () => {
-      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
-      const byId = new Map(badges.map((badge) => [badge.id, badge]));
-      expect(byId.get('level-50')).toMatchObject({ category: 'progress', comingSoon: false });
-      expect(byId.get('upgrade-20')).toMatchObject({ category: 'gear', comingSoon: false });
-    });
-
-    it('lists coming soon badges that nobody holds and that are never stored', async () => {
-      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
-      const deaths = badges.find((badge) => badge.id === 'deaths-1');
-      expect(deaths).toMatchObject({ category: 'misfortune', comingSoon: true, earned: false, holders: 0, firstSeen: null, isNew: false, firstToEarn: false });
-      const stored = store.badgeUnlocks();
-      expect(stored.length).toBeGreaterThan(0);
-      expect(stored.some((unlock) => unlock.badgeId === 'deaths-1')).toBe(false);
-    });
-
-    it('gives zeros to a player with no characters, with rarity still known', async () => {
+    it('gives zeros to a player with no characters', async () => {
       const res = await empty.get('/api/me/overview');
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ hoursPlayed: 0, daysPlayed: 0, currentStreak: 0, activity: [], characters: [] });
-      expect(res.body.badges.every((badge: BadgeView) => !badge.earned)).toBe(true);
-      expect(res.body.badges[0].players).toBe(4);
     });
 
     it('is a 500 when the game database fails', async () => {
@@ -190,72 +162,6 @@ describe('player stats routes', () => {
       await player.get('/api/me/overview');
       repo.failWith = undefined;
       expect((await player.get('/api/me/overview')).status).toBe(200);
-    });
-  });
-
-  describe('badge dates', () => {
-    const badge = async (id: string) => {
-      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
-      return badges.find((b) => b.id === id)!;
-    };
-
-    const earnLevel90 = (id: number) => {
-      repo.rows = {
-        ...repo.rows,
-        characters: repo.rows.characters.map((c) => (c.id === id ? { ...c, level: 90 } : c)),
-      };
-    };
-
-    it('shows no date for a badge held when tracking started', async () => {
-      expect(await badge('level-50')).toMatchObject({ firstSeen: null, isNew: false, firstToEarn: false });
-    });
-
-    it('dates a badge earned later, marks it new, and first to earn', async () => {
-      await badge('level-50');
-      advance(61_000);
-      earnLevel90(1);
-
-      // Moosey at 93 holds this from the first recording, so nobody can be sure who was first.
-      expect(await badge('level-90')).toMatchObject({ firstSeen: '2026-11-01', isNew: true, firstToEarn: false });
-    });
-
-    it('is first to earn when it holds the earliest date and nobody has a blank one', async () => {
-      repo.rows = { ...repo.rows, gear: [] };
-      await badge('upgrade-10');
-      advance(61_000);
-      repo.rows = { ...repo.rows, gear: baseRows().gear };
-
-      expect(await badge('upgrade-10')).toMatchObject({ firstSeen: '2026-11-01', isNew: true, firstToEarn: true });
-    });
-
-    it('stops being new after 7 days', async () => {
-      const dated = (firstSeen: string) => [{ userId: PLAYER, badgeId: 'upgrade-10', firstSeen }];
-      const unlocks = vi.spyOn(store, 'badgeUnlocks');
-
-      unlocks.mockReturnValue(dated('2026-10-26'));
-      expect(await badge('upgrade-10')).toMatchObject({ firstSeen: '2026-10-26', isNew: true, firstToEarn: true });
-
-      advance(61_000);
-      unlocks.mockReturnValue(dated('2026-10-25'));
-      expect(await badge('upgrade-10')).toMatchObject({ firstSeen: '2026-10-25', isNew: false, firstToEarn: true });
-    });
-
-    it('is first to earn even if someone who held it earlier has since lost it', async () => {
-      repo.rows = {
-        ...repo.rows,
-        characters: repo.rows.characters.map((c) => ({ ...c, gold: c.userId === PLAYER ? 1000 : 0 })),
-      };
-      vi.spyOn(store, 'badgeUnlocks').mockReturnValue([
-        { userId: OTHER, badgeId: 'wealth-1000', firstSeen: null },
-        { userId: PLAYER, badgeId: 'wealth-1000', firstSeen: '2026-10-30' },
-      ]);
-
-      expect(await badge('wealth-1000')).toMatchObject({ earned: true, holders: 1, firstToEarn: true });
-    });
-
-    it('still works with no dates when the store is broken', async () => {
-      vi.spyOn(store, 'badgeUnlocks').mockReturnValue([]);
-      expect(await badge('level-50')).toMatchObject({ earned: true, firstSeen: null, isNew: false, firstToEarn: false });
     });
   });
 
@@ -693,8 +599,10 @@ describe('player stats routes', () => {
 
       const after = (await player.get('/api/hall-of-fame')).body as HallOfFame;
       expect(JSON.stringify(after)).not.toContain('Moosey');
-      const { badges } = (await player.get('/api/me/overview')).body as { badges: BadgeView[] };
-      expect(badges.find((b) => b.id === 'level-50')).toMatchObject({ holders: 2, players: 3 });
+      // Level 60 or higher: Rival, and Moosey until the GM is hidden.
+      const { achievements, players } = (await player.get('/api/me/achievements')).body as AchievementsOverview;
+      expect(players).toBe(3);
+      expect(achievements.find((entry) => entry.id === 'level')!.levels[2].holders).toBe(1);
 
       await hide(moose, false);
       expect(JSON.stringify((await player.get('/api/hall-of-fame')).body)).toContain('Moosey');
@@ -714,7 +622,10 @@ describe('player stats routes', () => {
 
       const overview = (await moose.get('/api/me/overview')).body;
       expect(overview.hoursPlayed).toBe(2);
-      expect(overview.badges.find((b: BadgeView) => b.id === 'level-90')).toMatchObject({ earned: true, holders: 0, players: 3 });
+      const achievements = (await moose.get('/api/me/achievements')).body as AchievementsOverview;
+      expect(achievements.players).toBe(3);
+      expect(achievements.achievements.find((entry) => entry.id === 'level')).toMatchObject({ levelsDone: 5 });
+      expect(achievements.achievements.find((entry) => entry.id === 'level')!.levels[4].holders).toBe(0);
 
       const profile = (await moose.get('/api/characters/3/profile')).body;
       expect(profile).toMatchObject({ name: 'Moosey', ranked: false, rankings: [] });

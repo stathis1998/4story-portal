@@ -2,6 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
+import { AWARDER_TIMING } from '../src/achievements/achievement-awarder.js';
+import { ACHIEVEMENTS_REPOSITORY } from '../src/achievements/achievements.repository.js';
 import { ACCOUNTS_REPOSITORY, type AccountsRepository } from '../src/auth/accounts.repository.js';
 import { CHARACTERS_REPOSITORY, type CharactersRepository } from '../src/characters/characters.repository.js';
 import { CONFIG, loadConfig } from '../src/config/config.js';
@@ -17,6 +19,7 @@ import { PortalStore } from '../src/store/portal-store.js';
 import { MemoryModelCache, type ModelCache, WEAPON_CLIENT_SOURCE, WEAPON_MODEL_CACHE, type WeaponClientSource, WeaponsUnavailableError } from '../src/weapons/weapon-catalog.js';
 import {
   FakeAccountsRepository,
+  FakeAchievementsRepository,
   FakeCharactersRepository,
   FakeControlClient,
   FakeGmRepository,
@@ -28,6 +31,7 @@ import { validEnv } from './fixtures.js';
 
 export type TestAppOverrides = {
   accounts?: AccountsRepository;
+  achievements?: FakeAchievementsRepository;
   characters?: CharactersRepository;
   control?: FakeControlClient;
   gm?: FakeGmRepository;
@@ -69,6 +73,11 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue({ pollMs: 1, waitMs: 50 })
     .overrideProvider(STATS_REPOSITORY)
     .useValue(overrides.stats ?? new FakeStatsRepository())
+    .overrideProvider(ACHIEVEMENTS_REPOSITORY)
+    .useValue(overrides.achievements ?? new FakeAchievementsRepository())
+    // No timer in tests: they call the awarder's tick() themselves.
+    .overrideProvider(AWARDER_TIMING)
+    .useValue({ intervalMs: 0, maxPerTick: 20, announceGapMs: 0 })
     .overrideProvider(PortalStore)
     .useValue(overrides.store ?? new PortalStore(':memory:'))
     .overrideProvider(WEAPON_CLIENT_SOURCE)

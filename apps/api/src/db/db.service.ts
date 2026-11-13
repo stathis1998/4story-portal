@@ -38,6 +38,11 @@ export function tableNames(config: AppConfig) {
     upgradeLog: `${game}.TITEMUPGRADELOGTABLE`,
     soulLotteryLog: `${game}.TSOULLOTTERYLOGTABLE`,
     mailProcedure: `${game}.TPortalGmPost`,
+    skills: `${game}.TSKILLTABLE`,
+    monsterKills: `${game}.TCHARMONKILLTABLE`,
+    pets: `${game}.TPETTABLE`,
+    achievementAwards: `${game}.TPORTALACHIEVEMENTTABLE`,
+    achievementProcedure: `${game}.TPortalAchievementAward`,
   };
 }
 

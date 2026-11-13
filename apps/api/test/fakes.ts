@@ -1,3 +1,13 @@
+import {
+  type AchievementsRepository,
+  ANNOUNCE_WAITING,
+  AWARD_ALREADY_GIVEN,
+  AWARD_NO_CHARACTER,
+  type AwardInput,
+  type AwardRow,
+  type RecipientRow,
+  type RewardItemRow,
+} from '../src/achievements/achievements.repository.js';
 import type { ControlState, PositionDestination } from '@4story-portal/shared';
 import type { AccountRecord, AccountsRepository } from '../src/auth/accounts.repository.js';
 import type { CharacterRow, CharactersRepository, GearEffectRow, LevelFreezeRow } from '../src/characters/characters.repository.js';
@@ -98,7 +108,7 @@ export class FakeAccountsRepository implements AccountsRepository {
 // Stands in for the TControlSvr connection: connected to one world by default, and logs each move
 // instead of sending it.
 export class FakeStatsRepository implements StatsRepository {
-  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, optionRules: [], social: [], combat: [], spending: [], soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], accounts: [] };
+  rows: StatRows = { characters: [], sessions: [], gear: [], companions: [], titles: [], titlesTotal: 110, optionRules: [], social: [], combat: [], spending: [], soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [], progress: [], pets: [], accounts: [] };
   loads = 0;
   failWith?: Error;
 
@@ -110,12 +120,13 @@ export class FakeStatsRepository implements StatsRepository {
 }
 
 export class FakeControlClient
-  implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'listEvents' | 'changeEvent'>
+  implements Pick<ControlClient, 'status' | 'moveToPosition' | 'moveToCharacter' | 'kick' | 'announce' | 'listEvents' | 'changeEvent'>
 {
   state: ControlState = 'connected';
   worlds: { id: number; name: string }[] = [{ id: 1, name: 'Lapiris' }];
   readonly moves: unknown[] = [];
   readonly kicks: string[] = [];
+  readonly announcements: string[] = [];
   events: ControlEvent[] = [];
   readonly changes: { kind: EventKind; event: ControlEvent }[] = [];
   /** What the server answers a change with. */
@@ -145,6 +156,11 @@ export class FakeControlClient
     this.requireConnected();
     this.kicks.push(name);
     this.onKick?.(name);
+  }
+
+  announce(text: string): void {
+    this.requireConnected();
+    this.announcements.push(text);
   }
 
   async listEvents(): Promise<ControlEvent[]> {
@@ -301,5 +317,64 @@ export class FakeMailRepository implements MailRepository {
     if (this.missingOnSend.has(letter.charId)) return 0;
     this.sent.push(letter);
     return this.nextPostId++;
+  }
+}
+
+// Stands in for TPORTALACHIEVEMENTTABLE and TPortalAchievementAward: awards live in memory.
+export class FakeAchievementsRepository implements AchievementsRepository {
+  rows: AwardRow[] = [];
+  recipientRows: RecipientRow[] = [];
+  items: RewardItemRow[] = [];
+  /** Everything award() was asked to send, including calls that awarded nothing. */
+  readonly sent: AwardInput[] = [];
+  active = true;
+  activeChecks = 0;
+  /** The wall clock new awards are stamped with. */
+  now = () => new Date();
+  failWith?: Error;
+  private nextId = 1;
+
+  async awards(): Promise<AwardRow[]> {
+    if (this.failWith) throw this.failWith;
+    return this.rows.map((row) => ({ ...row }));
+  }
+
+  async award(input: AwardInput): Promise<number> {
+    if (this.failWith) throw this.failWith;
+    this.sent.push(input);
+    if (!this.recipientRows.some((recipient) => recipient.charId === input.charId)) return AWARD_NO_CHARACTER;
+    const given = this.rows.some(
+      (row) => row.userId === input.userId && row.achievementId === input.achievementId && row.level === input.level,
+    );
+    if (given) return AWARD_ALREADY_GIVEN;
+    const id = this.nextId++;
+    this.rows.push({
+      id,
+      userId: input.userId,
+      achievementId: input.achievementId,
+      level: input.level,
+      earnedAt: this.now(),
+      text: input.text,
+      announced: ANNOUNCE_WAITING,
+    });
+    return id;
+  }
+
+  async recipients(): Promise<RecipientRow[]> {
+    return this.recipientRows;
+  }
+
+  async markAnnounced(id: number, state: number): Promise<void> {
+    const row = this.rows.find((entry) => entry.id === id);
+    if (row) row.announced = state;
+  }
+
+  async recentlyActive(): Promise<boolean> {
+    this.activeChecks++;
+    return this.active;
+  }
+
+  async findItems(itemIds: number[]): Promise<RewardItemRow[]> {
+    return this.items.filter((item) => itemIds.includes(item.itemId));
   }
 }
