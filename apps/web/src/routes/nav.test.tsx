@@ -7,12 +7,17 @@ const me = { userId: 1, username: 'friend', isGm: false }
 const main = () => screen.getByRole('navigation', { name: 'Main' })
 
 describe('header menu', () => {
-  it('keeps five entries, with the rest grouped under Rankings and Tools', async () => {
+  it('keeps six entries, with the rest grouped under Rankings and Tools', async () => {
     mockApi()
     renderRoute('/characters', { me })
 
     await screen.findByRole('navigation', { name: 'Main' })
-    expect(within(main()).getAllByRole('link').map((link) => link.textContent)).toEqual(['Characters', 'Online', 'Shop'])
+    expect(within(main()).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Characters',
+      'Online',
+      'Achievements',
+      'Shop',
+    ])
     expect(within(main()).getAllByRole('button').map((button) => button.textContent)).toEqual(['Rankings', 'Tools'])
   })
 

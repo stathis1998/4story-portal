@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AuthedAchievementsRouteImport } from './routes/_authed/achievements'
 import { Route as AuthedChakrasAurasRouteImport } from './routes/_authed/chakras-auras'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
 import { Route as AuthedEffectsRouteImport } from './routes/_authed/effects'
@@ -26,6 +27,7 @@ import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lot
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
+import { Route as AuthedGmAchievementsRouteImport } from './routes/_authed/gm/achievements'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
@@ -51,6 +53,11 @@ const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedAchievementsRoute = AuthedAchievementsRouteImport.update({
+  id: '/achievements',
+  path: '/achievements',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedChakrasAurasRoute = AuthedChakrasAurasRouteImport.update({
   id: '/chakras-auras',
@@ -117,6 +124,11 @@ const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   path: '/characters/$id',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmAchievementsRoute = AuthedGmAchievementsRouteImport.update({
+  id: '/gm/achievements',
+  path: '/gm/achievements',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmEventsRoute = AuthedGmEventsRouteImport.update({
   id: '/gm/events',
   path: '/gm/events',
@@ -152,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/achievements': typeof AuthedAchievementsRoute
   '/chakras-auras': typeof AuthedChakrasAurasRoute
   '/characters': typeof AuthedCharactersRoute
   '/effects': typeof AuthedEffectsRoute
@@ -165,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
+  '/gm/achievements': typeof AuthedGmAchievementsRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
@@ -176,6 +190,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/achievements': typeof AuthedAchievementsRoute
   '/chakras-auras': typeof AuthedChakrasAurasRoute
   '/characters': typeof AuthedCharactersRoute
   '/effects': typeof AuthedEffectsRoute
@@ -189,6 +204,7 @@ export interface FileRoutesByTo {
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
+  '/gm/achievements': typeof AuthedGmAchievementsRoute
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
@@ -202,6 +218,7 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_authed/achievements': typeof AuthedAchievementsRoute
   '/_authed/chakras-auras': typeof AuthedChakrasAurasRoute
   '/_authed/characters': typeof AuthedCharactersRoute
   '/_authed/effects': typeof AuthedEffectsRoute
@@ -215,6 +232,7 @@ export interface FileRoutesById {
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
+  '/_authed/gm/achievements': typeof AuthedGmAchievementsRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/mail': typeof AuthedGmMailRoute
@@ -228,6 +246,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/achievements'
     | '/chakras-auras'
     | '/characters'
     | '/effects'
@@ -241,6 +260,7 @@ export interface FileRouteTypes {
     | '/upgrade-simulator'
     | '/upgrade-stats'
     | '/characters/$id'
+    | '/gm/achievements'
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
@@ -252,6 +272,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/achievements'
     | '/chakras-auras'
     | '/characters'
     | '/effects'
@@ -265,6 +286,7 @@ export interface FileRouteTypes {
     | '/upgrade-simulator'
     | '/upgrade-stats'
     | '/characters/$id'
+    | '/gm/achievements'
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
@@ -277,6 +299,7 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/login'
     | '/register'
+    | '/_authed/achievements'
     | '/_authed/chakras-auras'
     | '/_authed/characters'
     | '/_authed/effects'
@@ -290,6 +313,7 @@ export interface FileRouteTypes {
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
     | '/_authed/characters_/$id'
+    | '/_authed/gm/achievements'
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
     | '/_authed/gm/mail'
@@ -334,6 +358,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authed/achievements': {
+      id: '/_authed/achievements'
+      path: '/achievements'
+      fullPath: '/achievements'
+      preLoaderRoute: typeof AuthedAchievementsRouteImport
+      parentRoute: typeof AuthedRoute
     }
     '/_authed/chakras-auras': {
       id: '/_authed/chakras-auras'
@@ -426,6 +457,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedCharactersIdRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/achievements': {
+      id: '/_authed/gm/achievements'
+      path: '/gm/achievements'
+      fullPath: '/gm/achievements'
+      preLoaderRoute: typeof AuthedGmAchievementsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/events': {
       id: '/_authed/gm/events'
       path: '/gm/events'
@@ -472,6 +510,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedRouteChildren {
+  AuthedAchievementsRoute: typeof AuthedAchievementsRoute
   AuthedChakrasAurasRoute: typeof AuthedChakrasAurasRoute
   AuthedCharactersRoute: typeof AuthedCharactersRoute
   AuthedEffectsRoute: typeof AuthedEffectsRoute
@@ -485,6 +524,7 @@ interface AuthedRouteChildren {
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
+  AuthedGmAchievementsRoute: typeof AuthedGmAchievementsRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmMailRoute: typeof AuthedGmMailRoute
@@ -494,6 +534,7 @@ interface AuthedRouteChildren {
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedAchievementsRoute: AuthedAchievementsRoute,
   AuthedChakrasAurasRoute: AuthedChakrasAurasRoute,
   AuthedCharactersRoute: AuthedCharactersRoute,
   AuthedEffectsRoute: AuthedEffectsRoute,
@@ -507,6 +548,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
+  AuthedGmAchievementsRoute: AuthedGmAchievementsRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmMailRoute: AuthedGmMailRoute,

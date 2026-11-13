@@ -72,7 +72,8 @@ export const ACHIEVEMENTS: readonly AchievementFamily[] = [
     id: 'skills',
     name: 'Scholar',
     category: 'progress',
-    levels: [30, 60, 90, 120, 150],
+    // A level 89 character had 134 learned and 238 points unspent a week into the 2026 season.
+    levels: [50, 100, 150, 200, 250],
     value: best((c) => c.skillLevels),
     goal: (t) => `Learn ${t} skill levels on one character`,
   },

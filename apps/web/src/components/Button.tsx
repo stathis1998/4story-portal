@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 
 const variants = {
   primary: 'bg-accent text-accent-fg hover:bg-accent-hover',
@@ -10,7 +10,8 @@ const sizes = {
   sm: 'px-3 py-1.5',
 }
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof variants; size?: keyof typeof sizes }
+// ComponentProps rather than ButtonHTMLAttributes, so a caller can pass a ref to move the focus here.
+type Props = ComponentProps<'button'> & { variant?: keyof typeof variants; size?: keyof typeof sizes }
 
 export function Button({ variant = 'primary', size = 'md', type = 'button', className = '', ...props }: Props) {
   return (

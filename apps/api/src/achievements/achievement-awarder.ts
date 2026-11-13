@@ -70,7 +70,7 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
     this.timer = null;
   }
 
-  /** When the awarder last looked. Null before its first look. */
+  /** When the awarder last looked, on the server's wall clock like the award dates. Null before its first look. */
   lastCheck(): Date | null {
     return this.checkedAt;
   }
@@ -88,7 +88,7 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
       const { awarded, left } = await this.awardDue();
       const { announced, waiting } = await this.announceWaiting();
       this.force = left > 0 || waiting > 0;
-      this.checkedAt = new Date();
+      this.checkedAt = serverNow();
       return { awarded, announced };
     } catch (error) {
       // The next tick tries again: an award is only ever recorded together with its letter.

@@ -297,7 +297,7 @@ describe('achievement routes', () => {
       expect(awarder.lastCheck()).toBeNull();
       await goLive();
       await awarder.tick();
-      expect(awarder.lastCheck()).toEqual(new Date());
+      expect(awarder.lastCheck()).toEqual(serverNow());
     });
   });
 
@@ -426,7 +426,7 @@ describe('achievement routes', () => {
       control.state = 'disconnected';
       await goLive();
       await awarder.tick();
-      expect(await gm()).toMatchObject({ live: true, control: 'disconnected', awards: 5, pendingAnnouncements: 5, lastCheck: new Date().toISOString() });
+      expect(await gm()).toMatchObject({ live: true, control: 'disconnected', awards: 5, pendingAnnouncements: 5, lastCheck: serverNow().toISOString() });
     });
 
     it('sends a test announcement', async () => {

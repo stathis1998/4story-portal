@@ -3,8 +3,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '../../components/Button'
 import { CharacterCard } from '../../components/CharacterCard'
 import { AccountSummary } from '../../components/stats/AccountSummary'
-import { BadgeGrid } from '../../components/stats/BadgeGrid'
+import { AlmostThere } from '../../components/stats/AlmostThere'
 import { EventBanner } from '../../components/stats/EventBanner'
+import { NewsPanel } from '../../components/stats/NewsPanel'
 import { charactersQueryOptions } from '../../lib/characters'
 import { overviewQueryOptions } from '../../lib/stats'
 
@@ -20,6 +21,7 @@ function CharactersPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       <EventBanner />
+      <NewsPanel />
       <h1 className="text-4xl">Your characters</h1>
       <p className="mt-1 mb-8 text-muted">Everyone on your account, as the server last saved them.</p>
 
@@ -52,12 +54,8 @@ function CharactersPage() {
       )}
 
       {statsFailed && <p className="mb-8 text-sm text-muted">Your stats could not be loaded right now.</p>}
-      {overview && (
-        <>
-          <AccountSummary overview={overview} />
-          <BadgeGrid badges={overview.badges} />
-        </>
-      )}
+      {overview && <AccountSummary overview={overview} />}
+      <AlmostThere />
     </main>
   )
 }
