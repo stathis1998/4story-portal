@@ -64,6 +64,8 @@ export type AchievementLevel = {
   earnedAt: string | null;
   /** Accounts that have this level, out of `players`. */
   holders: number;
+  /** Those accounts, each under its highest level character, by name. Never account names. */
+  holderNames: string[];
 };
 
 export type Achievement = {

@@ -218,7 +218,7 @@ describe('characters page stats', () => {
       const { user } = renderRoute('/characters', { me })
 
       const card = await screen.findByRole('button', { name: /^Slayer/ })
-      expect(card).toHaveAttribute('aria-expanded', 'false')
+      expect(card).toHaveAttribute('aria-haspopup', 'dialog')
       expect(card).toHaveTextContent('Next: Defeat 10,000 monsters')
 
       await user.click(card)

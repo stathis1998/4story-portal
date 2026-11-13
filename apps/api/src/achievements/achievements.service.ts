@@ -68,7 +68,7 @@ export class AchievementsService {
     const achievements: Achievement[] = ACHIEVEMENTS.map((family) => {
       const value = mine ? family.value(mine) : 0;
       const levelsDone = level(user.userId, family, mine);
-      const others = ranked.map((account) => level(account.userId, family, account));
+      const others = ranked.map((account) => ({ name: shownAs(account), reached: level(account.userId, family, account) }));
       return {
         id: family.id,
         name: family.name,
@@ -84,7 +84,7 @@ export class AchievementsService {
           reward: rewards.get(rewardKey(family.id, index + 1)) ?? null,
           done: index + 1 <= levelsDone,
           earnedAt: earnedAt.get(rewardKey(family.id, index + 1)) ?? null,
-          holders: others.filter((reached) => reached >= index + 1).length,
+          ...holdersOf(others, index + 1),
         })),
       };
     });
@@ -231,3 +231,16 @@ export class AchievementsService {
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** An account goes by its highest level character that isn't banned, as in the Hall of Fame. */
+function shownAs(account: AccountStatsRow): string {
+  const [top] = account.characters
+    .filter(({ row }) => !row.banned)
+    .sort((a, b) => b.row.level - a.row.level || a.row.name.localeCompare(b.row.name));
+  return top?.row.name ?? '';
+}
+
+function holdersOf(accounts: { name: string; reached: number }[], level: number): { holders: number; holderNames: string[] } {
+  const names = accounts.filter((account) => account.reached >= level).map((account) => account.name);
+  return { holders: names.length, holderNames: names.filter(Boolean).sort((a, b) => a.localeCompare(b)) };
+}
