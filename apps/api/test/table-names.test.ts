@@ -34,5 +34,6 @@ it('builds bracketed three-part table names from the configured databases', () =
     characterStats: '[TGAME_GSP_TEST].dbo.TCHARSTATTABLE',
     characterCounters: '[TGAME_GSP_TEST].dbo.TCHARCOUNTERTABLE',
     upgradeLog: '[TGAME_GSP_TEST].dbo.TITEMUPGRADELOGTABLE',
+    soulLotteryLog: '[TGAME_GSP_TEST].dbo.TSOULLOTTERYLOGTABLE',
     mailProcedure: '[TGAME_GSP_TEST].dbo.TPortalGmPost',
   }));

@@ -61,7 +61,7 @@ const baseRows = (): StatRows => ({
   social: [],
   combat: [],
   spending: [],
-  soulLottery: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
+  soulLottery: [], lotteryStreaks: [], upgradeAttempts: [], upgradeLosses: [], upgradeFailures: [],
   optionRules: [],
   accounts: [
     { userId: MOOSE, username: 'moose' },
@@ -441,6 +441,25 @@ describe('player stats routes', () => {
         { charId: 5, won: 0, lost: 0, copperWon: 0, copperConsolation: 0 },
         { charId: 6, won: 99, lost: 99, copperWon: 999_000_000, copperConsolation: 999_000 },
       ];
+      repo.rows.lotteryStreaks = [
+        { charId: 1, longestLoseStreak: 12, currentLoseStreak: 3 },
+        { charId: 2, longestLoseStreak: 5, currentLoseStreak: 5 },
+        { charId: 4, longestLoseStreak: 12, currentLoseStreak: 0 },
+        { charId: 6, longestLoseStreak: 1_500, currentLoseStreak: 0 },
+      ];
+    });
+
+    it('ranks soul lottery lose streaks by the longest run, with ties sharing a place', async () => {
+      expect(places(board(await load(player), 'loseStreak').entries)).toEqual([
+        [1, 'Kaelith', '12 in a row'],
+        [1, 'Rival', '12 in a row'],
+        [3, 'Alt', '5 in a row'],
+      ]);
+    });
+
+    it('says how each lose streak stands now', async () => {
+      const details = board(await load(player), 'loseStreak').entries.map((entry) => entry.detail);
+      expect(details).toEqual(['Now 3 in a row', 'Ended by a win', 'Still going']);
     });
 
     it('ranks the soul lottery by gold from wins and consolation prizes together', async () => {
@@ -501,12 +520,14 @@ describe('player stats routes', () => {
       repo.rows.combat = [];
       repo.rows.spending = [];
       repo.rows.soulLottery = [];
+      repo.rows.lotteryStreaks = [];
       const body = await load(player);
       expect(body.categories.map((c) => [c.id, c.entries])).toEqual([
         ['damage', []],
         ['kills', []],
         ['gold', []],
         ['lottery', []],
+        ['loseStreak', []],
       ]);
     });
 

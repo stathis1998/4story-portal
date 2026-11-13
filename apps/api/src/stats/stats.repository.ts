@@ -9,6 +9,7 @@ import {
   type OptionRuleRow,
   type SessionRow,
   type SocialRow,
+  type LotteryStreakRow,
   type SoulLotteryRow,
   type SpendingRow,
   type StatRows,
@@ -121,6 +122,7 @@ export class SqlStatsRepository implements StatsRepository {
       combat,
       spending,
       soulLottery,
+      lotteryStreaks,
       upgradeAttempts,
       upgradeLosses,
       upgradeFailures,
@@ -137,6 +139,7 @@ export class SqlStatsRepository implements StatsRepository {
       this.combat(),
       this.spending(),
       this.soulLottery(),
+      this.lotteryStreaks(),
       this.upgradeAttempts(),
       this.upgradeLosses(),
       this.upgradeFailures(),
@@ -154,6 +157,7 @@ export class SqlStatsRepository implements StatsRepository {
       combat,
       spending,
       soulLottery,
+      lotteryStreaks,
       upgradeAttempts,
       upgradeLosses,
       upgradeFailures,
@@ -197,6 +201,32 @@ export class SqlStatsRepository implements StatsRepository {
     );
     // The driver returns bigint as text.
     return result.recordset.map((row) => ({ charId: row.charId, failed: Number(row.failed) }));
+  }
+
+  // Gaps and islands: numbering each draw by the wins before it puts every run of losses in its own
+  // group. The current run is the group after the character's last win. dwID is the order the map
+  // server wrote the draws in.
+  private async lotteryStreaks(): Promise<LotteryStreakRow[]> {
+    const { characters, soulLotteryLog } = this.db.tables;
+    const result = await this.db.pool.request().query<LotteryStreakRow>(
+      `WITH draws AS (
+         SELECT l.dwCharID, l.bWon,
+                SUM(CAST(l.bWon AS int)) OVER (PARTITION BY l.dwCharID ORDER BY l.dwID ROWS UNBOUNDED PRECEDING) AS winsSoFar,
+                SUM(CAST(l.bWon AS int)) OVER (PARTITION BY l.dwCharID) AS wins
+         FROM ${soulLotteryLog} l
+       ), runs AS (
+         SELECT dwCharID, winsSoFar, MAX(wins) AS wins, COUNT(*) AS losses
+         FROM draws
+         WHERE bWon = 0
+         GROUP BY dwCharID, winsSoFar
+       )
+       SELECT r.dwCharID AS charId, MAX(r.losses) AS longestLoseStreak,
+              ISNULL(MAX(CASE WHEN r.winsSoFar = r.wins THEN r.losses END), 0) AS currentLoseStreak
+       FROM runs r
+       JOIN ${characters} c ON c.dwCharID = r.dwCharID AND c.bDelete = 0
+       GROUP BY r.dwCharID`,
+    );
+    return result.recordset;
   }
 
   private async soulLottery(): Promise<SoulLotteryRow[]> {
