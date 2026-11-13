@@ -10,19 +10,39 @@ build on each other, a reward for reaching them, and the rest of the server hear
 
 ## What it does
 
-- **Achievements have levels.** About 42 achievements, each a number worked out from an account's
+- **Achievements have levels.** About 42 achievements, each a number worked out from the game's
   stats and up to five thresholds. `Slayer` is monsters defeated at 1,000 / 10,000 / 50,000 / 250,000 /
-  1,000,000. They are per account, so alts can't repeat the early levels.
+  1,000,000.
+- **Two kinds** (changed on the day it was built, at the owner's request):
+  - *Character achievements* (32) are what a character does: level, kills, upgrades, gold, lottery,
+    titles and so on. Every character earns them on its own, and they are the ones that pay.
+  - *Account achievements* (10) are about the player: playtime, characters at level 50, classes
+    played, mounts and pets. They are earned once, pay nothing and send no letter.
 - **One block per achievement.** The block shows `Level 2/5`, a bar toward the next level and what
   the next level asks for and pays. Opening it lists every level.
-- **Each level can pay a reward:** gold, silver, copper and up to three items, set by a GM on
-  `/gm/achievements`. None are set in code.
-- **Reaching a level sends a letter** from `Achievements` titled `Achievement: Slayer III`, with the
-  reward attached when there is one. It goes to the account's online character, or the one played last.
+- **Each character achievement level can pay a reward:** gold, silver, copper and up to three
+  items, set by a GM on `/gm/achievements`. None are set in code.
+- **Reaching a level sends the character a letter** from `Achievements` titled `Achievement: Slayer
+  III`, with the reward attached when there is one.
 - **It is announced in game** as an Operator line in world chat: `Mounara completed Slayer III: Defeat
   50,000 monsters`.
 - **The same line is the portal's news.** `/characters` opens with the latest eight.
 - **A level, once awarded, stays.** It still shows as done when the number behind it drops.
+
+## Why two kinds: rebirth
+
+A character should be able to reach level 90, finish its achievements and be paid for them, then be
+reborn and do it all again. So rewards belong to the character, and what a rebirth must not reset
+(how long someone has played, what the account owns) is kept apart and pays nothing.
+
+Rebirth itself is not built. What is ready for it: every character award is stored with a rebirth
+number, 0 for everyone today. Raising a character's number makes each level earnable and payable
+again, and keeps the earlier awards as history. The rebirth feature still has to make progress
+count from the rebirth onward (reset the counters, or store a baseline), or a reborn character
+with a million kills would be handed everything back at once.
+
+Consequences to know: six characters on an account are paid the early levels six times, and a
+character that is deleted and made again can earn the easy levels again.
 
 ## The Go live switch
 
@@ -67,8 +87,8 @@ progress: the procedure refuses the next award.
 | What | Where |
 |---|---|
 | Achievements and thresholds | `apps/api/src/achievements/achievement-rules.ts` |
-| Awards (also the news feed) | `TGAME_GSP.dbo.TPORTALACHIEVEMENTTABLE`, emptied by the season reset |
-| Rewards | `TGAME_GSP.dbo.TPORTALACHIEVEMENTREWARD`, kept through the season reset |
+| Awards (also the news feed) | `TGAME_GSP.dbo.TPORTALACHIEVEMENTTABLE`, one row per character, rebirth and level (character 0 for an account achievement), emptied by the season reset |
+| Rewards (character achievements only) | `TGAME_GSP.dbo.TPORTALACHIEVEMENTREWARD`, kept through the season reset |
 | The switch | `TGAME_GSP.dbo.TPORTALSETTING`, key `achievements_live`, kept through the season reset |
 | Award procedure | `apps/api/sql/TPortalAchievementAward.sql` |
 | Types shared with the web | `packages/shared/src/achievements.ts` |
