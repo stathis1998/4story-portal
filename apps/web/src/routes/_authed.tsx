@@ -12,7 +12,7 @@ export const Route = createFileRoute('/_authed')({
   component: AuthedLayout,
 })
 
-// Six entries instead of eleven: the rankings and the planning tools each get a group.
+// Five entries instead of ten: the rankings and the planning tools each get a group.
 const GROUPS: { label: string; links: NavLink[] }[] = [
   {
     label: 'Rankings',
@@ -85,9 +85,7 @@ function AuthedLayout() {
                   onClose={() => setOpen(null)}
                 />
               ))}
-              <Link to="/shop" {...TOP_LINK}>
-                Shop
-              </Link>
+
             </nav>
           </div>
           <div className="flex items-center gap-4">
