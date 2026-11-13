@@ -2,7 +2,7 @@ import { inflateSync } from 'node:zlib';
 import type { UvKey } from '@4story-portal/shared';
 import { PNG } from 'pngjs';
 import { ArchiveReader } from './game-places-import.js';
-import { ITEM_VISUAL_LAYOUT, readLayout } from './game-icons-import.js';
+import { ITEM_LAYOUT, ITEM_VISUAL_LAYOUT, readLayout } from './game-icons-import.js';
 import { decodeDds } from './game-sprites.js';
 
 // Turns the game client's mount models into GLB files. Layouts follow the client source:
@@ -10,6 +10,7 @@ import { decodeDds } from './game-sprites.js';
 // import-mount-models.ts does that.
 
 export type MountPet = { petId: number; monsterId: number };
+export type CompanionRune = { itemId: number; monsterId: number };
 export type Monster = { objectId: number; items: number[] };
 export type ResourceEntry = { file: string; pos: number };
 /** `objectId` is the item's own object; 0 means a mesh of the character's object. */
@@ -26,6 +27,9 @@ const WEIGHT_AND_BONE_BYTES = 16;
 const SECOND_UV_BYTES = 8;
 const MATRIX_BYTES = 64;
 const MIN_ALPHA_CUTOFF = 40;
+const ITEM_TYPE_FIELD = 1;
+const ITEM_DURA_MAX_FIELD = 12;
+const COMPANION_RUNE_TYPE = 22;
 
 /** Mounts InitTPET adds in code, on top of TMount.tcd. */
 const CODED_PETS: MountPet[] = [
@@ -56,6 +60,23 @@ export function parseMountChart(file: Buffer): MountPet[] {
   }
   reader.assertFinished();
   return [...pets, ...CODED_PETS, ...SERVER_ONLY_PETS];
+}
+
+/**
+ * The pet each companion rune summons, from the client's TItem.tcd. Runes are item type 22; the pet is the item's
+ * max durability (CTMapSvrModule::OnCS_CREATECOMPANION_REQ). A rune with none picks its pet some other way.
+ */
+export function parseCompanionRunes(file: Buffer): CompanionRune[] {
+  const reader = new ArchiveReader(file);
+  const runes: CompanionRune[] = [];
+  for (let count = reader.u16(); count > 0; count--) {
+    const fields = readLayout(reader, ITEM_LAYOUT);
+    if (fields[ITEM_TYPE_FIELD] === COMPANION_RUNE_TYPE && fields[ITEM_DURA_MAX_FIELD] !== 0) {
+      runes.push({ itemId: fields[0], monsterId: fields[ITEM_DURA_MAX_FIELD] });
+    }
+  }
+  reader.assertFinished();
+  return runes;
 }
 
 export function parseMonsters(file: Buffer): Map<number, Monster> {

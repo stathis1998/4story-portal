@@ -42,7 +42,8 @@ describe('header menu', () => {
       'Upgrade Simulator',
       'Soul Lottery',
       'Effects',
-      'Mounts & Chakras',
+      'Mounts & Pets',
+      'Chakras & Auras',
     ])
 
     await user.click(screen.getByRole('button', { name: 'Rankings' }))

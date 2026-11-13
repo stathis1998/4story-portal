@@ -13,11 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AuthedChakrasAurasRouteImport } from './routes/_authed/chakras-auras'
 import { Route as AuthedCharactersRouteImport } from './routes/_authed/characters'
 import { Route as AuthedEffectsRouteImport } from './routes/_authed/effects'
 import { Route as AuthedHallOfFameRouteImport } from './routes/_authed/hall-of-fame'
 import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderboard'
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
+import { Route as AuthedMountsPetsRouteImport } from './routes/_authed/mounts-pets'
 import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
 import { Route as AuthedShopRouteImport } from './routes/_authed/shop'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
@@ -50,6 +52,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedChakrasAurasRoute = AuthedChakrasAurasRouteImport.update({
+  id: '/chakras-auras',
+  path: '/chakras-auras',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersRoute = AuthedCharactersRouteImport.update({
   id: '/characters',
   path: '/characters',
@@ -73,6 +80,11 @@ const AuthedLeaderboardRoute = AuthedLeaderboardRouteImport.update({
 const AuthedMountsChakrasRoute = AuthedMountsChakrasRouteImport.update({
   id: '/mounts-chakras',
   path: '/mounts-chakras',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedMountsPetsRoute = AuthedMountsPetsRouteImport.update({
+  id: '/mounts-pets',
+  path: '/mounts-pets',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedOnlineRoute = AuthedOnlineRouteImport.update({
@@ -140,11 +152,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/chakras-auras': typeof AuthedChakrasAurasRoute
   '/characters': typeof AuthedCharactersRoute
   '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
@@ -162,11 +176,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/chakras-auras': typeof AuthedChakrasAurasRoute
   '/characters': typeof AuthedCharactersRoute
   '/effects': typeof AuthedEffectsRoute
   '/hall-of-fame': typeof AuthedHallOfFameRoute
   '/leaderboard': typeof AuthedLeaderboardRoute
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/shop': typeof AuthedShopRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
@@ -186,11 +202,13 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_authed/chakras-auras': typeof AuthedChakrasAurasRoute
   '/_authed/characters': typeof AuthedCharactersRoute
   '/_authed/effects': typeof AuthedEffectsRoute
   '/_authed/hall-of-fame': typeof AuthedHallOfFameRoute
   '/_authed/leaderboard': typeof AuthedLeaderboardRoute
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
+  '/_authed/mounts-pets': typeof AuthedMountsPetsRoute
   '/_authed/online': typeof AuthedOnlineRoute
   '/_authed/shop': typeof AuthedShopRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
@@ -210,11 +228,13 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/chakras-auras'
     | '/characters'
     | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
+    | '/mounts-pets'
     | '/online'
     | '/shop'
     | '/soul-lottery'
@@ -232,11 +252,13 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/chakras-auras'
     | '/characters'
     | '/effects'
     | '/hall-of-fame'
     | '/leaderboard'
     | '/mounts-chakras'
+    | '/mounts-pets'
     | '/online'
     | '/shop'
     | '/soul-lottery'
@@ -255,11 +277,13 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/login'
     | '/register'
+    | '/_authed/chakras-auras'
     | '/_authed/characters'
     | '/_authed/effects'
     | '/_authed/hall-of-fame'
     | '/_authed/leaderboard'
     | '/_authed/mounts-chakras'
+    | '/_authed/mounts-pets'
     | '/_authed/online'
     | '/_authed/shop'
     | '/_authed/soul-lottery'
@@ -311,6 +335,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/chakras-auras': {
+      id: '/_authed/chakras-auras'
+      path: '/chakras-auras'
+      fullPath: '/chakras-auras'
+      preLoaderRoute: typeof AuthedChakrasAurasRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters': {
       id: '/_authed/characters'
       path: '/characters'
@@ -344,6 +375,13 @@ declare module '@tanstack/react-router' {
       path: '/mounts-chakras'
       fullPath: '/mounts-chakras'
       preLoaderRoute: typeof AuthedMountsChakrasRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/mounts-pets': {
+      id: '/_authed/mounts-pets'
+      path: '/mounts-pets'
+      fullPath: '/mounts-pets'
+      preLoaderRoute: typeof AuthedMountsPetsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/online': {
@@ -434,11 +472,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedRouteChildren {
+  AuthedChakrasAurasRoute: typeof AuthedChakrasAurasRoute
   AuthedCharactersRoute: typeof AuthedCharactersRoute
   AuthedEffectsRoute: typeof AuthedEffectsRoute
   AuthedHallOfFameRoute: typeof AuthedHallOfFameRoute
   AuthedLeaderboardRoute: typeof AuthedLeaderboardRoute
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
+  AuthedMountsPetsRoute: typeof AuthedMountsPetsRoute
   AuthedOnlineRoute: typeof AuthedOnlineRoute
   AuthedShopRoute: typeof AuthedShopRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
@@ -454,11 +494,13 @@ interface AuthedRouteChildren {
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedChakrasAurasRoute: AuthedChakrasAurasRoute,
   AuthedCharactersRoute: AuthedCharactersRoute,
   AuthedEffectsRoute: AuthedEffectsRoute,
   AuthedHallOfFameRoute: AuthedHallOfFameRoute,
   AuthedLeaderboardRoute: AuthedLeaderboardRoute,
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,
+  AuthedMountsPetsRoute: AuthedMountsPetsRoute,
   AuthedOnlineRoute: AuthedOnlineRoute,
   AuthedShopRoute: AuthedShopRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,

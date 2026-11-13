@@ -5,6 +5,7 @@ import {
   buildGlb,
   buildMountModel,
   extractTexture,
+  parseCompanionRunes,
   parseMesh,
   parseMonsters,
   parseMountChart,
@@ -14,7 +15,7 @@ import {
   type GameMesh,
   type ModelSources,
 } from '../src/gm/mount-models-import.js';
-import { ITEM_VISUAL_LAYOUT } from '../src/gm/game-icons-import.js';
+import { ITEM_LAYOUT, ITEM_VISUAL_LAYOUT } from '../src/gm/game-icons-import.js';
 import { ArchiveWriter } from './archive-writer.js';
 import { ddsFile, meshFile, objectFile, pngOf, readGlb, textureBlock, zeros } from './client-fixtures.js';
 
@@ -64,6 +65,37 @@ describe('parseMountChart', () => {
     expect(pets).toContainEqual({ petId: 50, monsterId: 31250 });
     expect(pets).toContainEqual({ petId: 45, monsterId: 31168 });
     expect(pets).toHaveLength(11);
+  });
+});
+
+describe('parseCompanionRunes', () => {
+  const itemChart = (rows: Record<number, number>[]) => {
+    const w = new ArchiveWriter().u16(rows.length);
+    for (const set of rows) {
+      [...ITEM_LAYOUT].forEach((kind, i) => {
+        const value = set[i] ?? 0;
+        if (kind === 'b') w.u8(value);
+        else if (kind === 'w') w.u16(value);
+        else if (kind === 'd') w.u32(value);
+        else if (kind === 'f') w.f32(value);
+        else w.str('Rune');
+      });
+    }
+    return w.toBuffer();
+  };
+
+  it('reads the pet each companion rune summons, skipping other items and runes with no fixed pet', () => {
+    const file = itemChart([
+      { 0: 19019, 1: 22, 12: 31125 },
+      { 0: 7000, 1: 12, 12: 31125 },
+      { 0: 17013, 1: 22, 12: 0 },
+      { 0: 19047, 1: 22, 12: 31141 },
+    ]);
+
+    expect(parseCompanionRunes(file)).toEqual([
+      { itemId: 19019, monsterId: 31125 },
+      { itemId: 19047, monsterId: 31141 },
+    ]);
   });
 });
 
