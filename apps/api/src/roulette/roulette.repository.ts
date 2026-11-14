@@ -2,20 +2,9 @@ import { ROULETTE_DEFAULT_LIMITS, ROULETTE_MAX_LIMIT, type RouletteLimits, type 
 import { Injectable } from '@nestjs/common';
 import sql from 'mssql';
 import { DbService } from '../db/db.service.js';
-import { BET_OK, type BetCode, walletBetSql, walletCharactersSql } from '../games/wallet-bet.js';
+import { BET_OK, type BetCode, type BetOutcome, settingIsOn, walletBetSql } from '../games/wallet-bet.js';
 
 export type RouletteSettings = RouletteLimits & { live: boolean };
-
-export type WalletCharacterRow = {
-  charId: number;
-  name: string;
-  level: number;
-  classCode: number;
-  gold: number;
-  silver: number;
-  copper: number;
-  online: boolean;
-};
 
 /** Money in Silver. */
 export type RouletteSpinRow = { id: number; userId: number; character: string; spunAt: Date; pocket: number; stake: number; payout: number };
@@ -23,15 +12,12 @@ export type RouletteSpinRow = { id: number; userId: number; character: string; s
 /** Money in Silver; the repository multiplies by 1000 for the database. */
 export type BetInput = { userId: number; charId: number; pocket: number; stake: number; payout: number; bets: string; numberHit: boolean };
 
-export type BetOutcome = { code: typeof BET_OK; id: number; wallet: Wallet } | { code: Exclude<BetCode, typeof BET_OK>; name: string | null };
-
 export type RouletteTotalsRow = { spins: number; staked: number; paid: number };
 
 export interface RouletteRepository {
   /** Closed with the starting limits when rows are missing or unreadable. */
   settings(): Promise<RouletteSettings>;
   saveSettings(settings: RouletteSettings, changedBy: string): Promise<void>;
-  characters(userId: number): Promise<WalletCharacterRow[]>;
   /** Takes the stake and pays the payout in the character's wallet and records the spin, together, or refuses. */
   bet(input: BetInput): Promise<BetOutcome>;
   /** Newest first. */
@@ -94,9 +80,8 @@ export class SqlRouletteRepository implements RouletteRepository {
     };
     // Limits that cannot all hold at once are not a table anyone can play; start over from the defaults.
     const usable = limits.minBet <= limits.maxNumber && limits.minBet <= limits.maxOutside;
-    // Read the switch as the bet's SQL does (case-insensitive collation, trailing spaces ignored), so a
-    // hand-edited row means the same on the pages as on a POST.
-    const live = values.get(ROULETTE_LIVE_KEY)?.trimEnd().toLowerCase() === 'true';
+    // Read the switch as the bet's SQL does, so a hand-edited row means the same on the pages as on a POST.
+    const live = settingIsOn(values.get(ROULETTE_LIVE_KEY));
     return { live, ...(usable ? limits : ROULETTE_DEFAULT_LIMITS) };
   }
 
@@ -119,11 +104,6 @@ export class SqlRouletteRepository implements RouletteRepository {
          WHEN MATCHED THEN UPDATE SET szValue = source.szValue, szUpdatedBy = @by, dUpdated = GETDATE()
          WHEN NOT MATCHED THEN INSERT (szKey, szValue, szUpdatedBy) VALUES (source.szKey, source.szValue, @by);`,
       );
-  }
-
-  async characters(userId: number): Promise<WalletCharacterRow[]> {
-    const result = await this.request().input('userId', sql.Int, userId).query<WalletCharacterRow>(walletCharactersSql(this.db.tables));
-    return result.recordset;
   }
 
   async bet(input: BetInput): Promise<BetOutcome> {

@@ -6,13 +6,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/config.js';
 import type { DbService } from '../../src/db/db.service.js';
 import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR, walletBetSql } from '../../src/games/wallet-bet.js';
+import { SqlWalletsRepository } from '../../src/games/wallets.repository.js';
 import { type BetInput, ROULETTE_LIVE_KEY, SqlRouletteRepository } from '../../src/roulette/roulette.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
 const setupSql = ['TPORTALSETTING.sql', 'TPORTALROULETTESPIN.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
 
 type Character = { charId: number; userId: number; name: string };
-type Ctx = { repo: SqlRouletteRepository; tx: sql.Transaction; character: Character };
+type Ctx = { repo: SqlRouletteRepository; wallets: SqlWalletsRepository; tx: sql.Transaction; character: Character };
 
 type SpinTableRow = {
   dwUserID: number;
@@ -59,7 +60,7 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
         .query(`DELETE FROM ${db.tables.currentUsers} WHERE dwUserID = @userId OR dwCharID = @charId`);
       await setWallet(tx, character.charId, START);
 
-      await fn({ repo: new SqlRouletteRepository(db).withTransaction(tx), tx, character });
+      await fn({ repo: new SqlRouletteRepository(db).withTransaction(tx), wallets: new SqlWalletsRepository(db).withTransaction(tx), tx, character });
     });
   }
 
@@ -162,8 +163,9 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
       expect(await repo.settings()).toEqual({ live: true, ...ROULETTE_DEFAULT_LIMITS });
     }));
 
+  // The list moved to the shared wallets repository; the test still runs here, against the same setup.
   it("lists the account's characters with wallet and online flag, and nobody else's", () =>
-    withRepo(async ({ repo, tx, character }) => {
+    withRepo(async ({ wallets: repo, tx, character }) => {
       await goOnline(tx, character.userId, character.charId);
       const expected = await new sql.Request(tx)
         .input('userId', sql.Int, character.userId)

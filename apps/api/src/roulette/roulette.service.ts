@@ -20,18 +20,16 @@ import {
   type RouletteTotals,
   type SessionUser,
   settleBets,
-  type WalletCharacter,
 } from '@4story-portal/shared';
-import { className } from '../characters/character-codes.js';
 import { GM_REPOSITORY, type GmRepository } from '../gm/gm.repository.js';
 import { BET_CLOSED, BET_NOT_YOURS, BET_ONLINE, BET_POOR } from '../games/wallet-bet.js';
+import { WALLETS_REPOSITORY, type WalletCharacterRow, walletCharacterView, type WalletsRepository } from '../games/wallets.repository.js';
 import {
   ROULETTE_REPOSITORY,
   type RouletteRepository,
   type RouletteSettings,
   type RouletteSpinRow,
   type RouletteTotalsRow,
-  type WalletCharacterRow,
 } from './roulette.repository.js';
 
 type Actor = { username: string; ip: string };
@@ -53,6 +51,7 @@ export class RouletteService {
 
   constructor(
     @Inject(ROULETTE_REPOSITORY) private readonly repo: RouletteRepository,
+    @Inject(WALLETS_REPOSITORY) private readonly wallets: WalletsRepository,
     @Inject(GM_REPOSITORY) private readonly gm: GmRepository,
   ) {}
 
@@ -61,14 +60,14 @@ export class RouletteService {
     // say): it shows a closed table with the starting limits and nothing on it.
     const [settings, characters, mine, bigWins] = await Promise.all([
       this.readOr('settings', () => this.repo.settings(), CLOSED),
-      this.readOr<WalletCharacterRow[]>("account's characters", () => this.repo.characters(user.userId), []),
+      this.readOr<WalletCharacterRow[]>("account's characters", () => this.wallets.characters(user.userId), []),
       this.readOr<RouletteSpinRow[]>("account's spins", () => this.repo.spinsOf(user.userId, MINE), []),
       this.readOr<RouletteSpinRow[]>('big wins', () => this.repo.bigWins(BIG_WINS), []),
     ]);
     return {
       live: settings.live,
       limits: limitsOf(settings),
-      characters: characters.map(characterView),
+      characters: characters.map(walletCharacterView),
       mine: mine.map(spinView),
       bigWins: bigWins.map(spinView),
     };
@@ -182,13 +181,4 @@ const spinView = (row: RouletteSpinRow): RouletteSpinView => ({
   pocket: row.pocket,
   stake: row.stake,
   payout: row.payout,
-});
-
-const characterView = (row: WalletCharacterRow): WalletCharacter => ({
-  id: row.charId,
-  name: row.name,
-  level: row.level,
-  className: className(row.classCode),
-  online: row.online,
-  wallet: { gold: row.gold, silver: row.silver, copper: row.copper },
 });
