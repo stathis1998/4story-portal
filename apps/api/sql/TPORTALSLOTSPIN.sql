@@ -1,6 +1,7 @@
 -- Every spin of the portal's slot machines, written by the bet batch in the same transaction that takes the
 -- stake and pays the win from the character's wallet, so money never moves without its row.
 --   Money is in Bronze (1 Silver = 1000 Bronze).
+--   llAdded and llJackpot are the jackpot's part of a spin: what a lost round put in the pot, what a win took out.
 --   The character's name is copied here, so a rename or delete later does not change history.
 IF OBJECT_ID('dbo.TPORTALSLOTSPIN', 'U') IS NULL
 BEGIN
@@ -17,7 +18,15 @@ BEGIN
 		llStake			BIGINT			NOT NULL,	-- Bronze
 		llPayout		BIGINT			NOT NULL,	-- Bronze, the stake included
 		llWallet		BIGINT			NOT NULL,	-- Bronze, the wallet afterwards
-		wMultiple		SMALLINT		NOT NULL	-- the prize as a multiple of the stake, 0 for none
+		wMultiple		SMALLINT		NOT NULL,	-- the prize as a multiple of the stake, 0 for none
+		llAdded			BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llAdded DEFAULT 0,		-- Bronze this spin added to the jackpot
+		llJackpot		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llJackpot DEFAULT 0	-- Bronze it was paid from the jackpot
 	);
 	CREATE INDEX IX_TPORTALSLOTSPIN_USER ON dbo.TPORTALSLOTSPIN (dwUserID, dwID);
 END
+
+-- A table made before the jackpot gets its two columns here.
+IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'llAdded') IS NULL
+	ALTER TABLE dbo.TPORTALSLOTSPIN ADD llAdded BIGINT NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llAdded DEFAULT 0;
+IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'llJackpot') IS NULL
+	ALTER TABLE dbo.TPORTALSLOTSPIN ADD llJackpot BIGINT NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llJackpot DEFAULT 0;

@@ -357,6 +357,63 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
       expect(await walletOf(tx, character.charId)).toEqual(START);
     }));
 
+  // A later game's own step: run once every check has passed, and it may set @extra for the wallet.
+  // The batch's own answer is its last result set; the `record` SELECT 1 comes first.
+  const runBatch = async (tx: sql.Transaction, character: Character, stake: number, before: string) => {
+    const result = await new sql.Request(tx)
+      .input('userId', sql.Int, character.userId)
+      .input('charId', sql.Int, character.charId)
+      .input('stake', sql.BigInt, stake)
+      .input('payout', sql.BigInt, 0)
+      .query<Record<string, unknown>>(walletBetSql(db.tables, ROULETTE_LIVE_KEY, 'SELECT 1', before));
+    return (result.recordsets as sql.IRecordSet<Record<string, unknown>>[]).at(-1)![0];
+  };
+
+  it("pays what a game's own step sets as extra, with the payout", () =>
+    withLiveRepo(async ({ tx, character }) => {
+      const result = await runBatch(tx, character, 50_000, 'SET @extra = 1500');
+
+      expect(result).toMatchObject({ code: BET_OK, gold: 5, silver: 202, copper: 499 });
+      expect(Number(result.extra)).toBe(1500);
+      expect(await walletOf(tx, character.charId)).toEqual({ gold: 5, silver: 202, copper: 499 });
+    }));
+
+  it("does not run a game's own step on a refusal", () =>
+    withRepo(async ({ tx, character }) => {
+      const result = await runBatch(tx, character, 1000, "THROW 50001, 'ran', 1");
+
+      expect(result).toMatchObject({ code: BET_CLOSED });
+      expect(await walletOf(tx, character.charId)).toEqual(START);
+    }));
+
+  // The THROW comes after XACT_ABORT, so it rolls back the caller's transaction too; the wallet is read again
+  // through the pool, outside it.
+  it('refuses a negative extra and writes nothing', async () => {
+    const walletThroughPool = async (charId: number): Promise<Wallet> =>
+      (
+        await db.pool
+          .request()
+          .input('charId', sql.Int, charId)
+          .query<Wallet>(`SELECT dwGold AS gold, dwSilver AS silver, dwCooper AS copper FROM ${db.tables.characters} WHERE dwCharID = @charId`)
+      ).recordset[0];
+    const picked = await db.pool.request().query<{ charId: number }>(`SELECT TOP 1 dwCharID AS charId FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`);
+    const before = await walletThroughPool(picked.recordset[0].charId);
+
+    // The helper then fails to roll back a transaction that is already gone; that is the proof it was rolled back.
+    // The flag shows the checks inside ran, since that failure would otherwise hide one of theirs.
+    let refused = false;
+    await expect(
+      withLiveRepo(async ({ tx, character }) => {
+        expect(character.charId).toBe(picked.recordset[0].charId);
+        await expect(runBatch(tx, character, 50_000, 'SET @extra = -1')).rejects.toThrow('Extra cannot be negative');
+        refused = true;
+      }),
+    ).rejects.toThrow('Transaction has been aborted');
+    expect(refused).toBe(true);
+
+    expect(await walletThroughPool(picked.recordset[0].charId)).toEqual(before);
+  });
+
   it('lists big wins only when a number bet won, newest first', () =>
     withLiveRepo(async ({ repo, character }) => {
       const ids: number[] = [];

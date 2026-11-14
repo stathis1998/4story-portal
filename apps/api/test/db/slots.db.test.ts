@@ -28,6 +28,8 @@ type SpinTableRow = {
   llPayout: string;
   llWallet: string;
   wMultiple: number;
+  llAdded: string;
+  llJackpot: string;
 };
 
 const START: Wallet = { gold: 5, silver: 250, copper: 999 };
@@ -211,7 +213,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       const rows = await spinRows(tx);
       expect(rows).toHaveLength(1);
       const row = rows[0];
-      expect({ ...row, llStake: Number(row.llStake), llPayout: Number(row.llPayout), llWallet: Number(row.llWallet) }).toEqual({
+      expect({ ...row, llStake: Number(row.llStake), llPayout: Number(row.llPayout), llWallet: Number(row.llWallet), llAdded: Number(row.llAdded), llJackpot: Number(row.llJackpot) }).toEqual({
         dwID: id,
         dwUserID: character.userId,
         dwCharID: character.charId,
@@ -225,6 +227,8 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         llPayout: 2_500_000,
         llWallet: 7_700_999,
         wMultiple: 50,
+        llAdded: 0,
+        llJackpot: 0,
       });
 
       expect(await repo.spinsOf(character.userId, 10)).toEqual([

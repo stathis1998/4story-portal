@@ -22,9 +22,12 @@ export type BetTables = { portalSettings: string; currentUsers: string; characte
  * Inputs the caller binds: @userId INT, @charId INT, @stake BIGINT, @payout BIGINT, plus whatever `record` uses.
  * `record` is the game's own INSERT; it may use @name (the character's name) and @wallet (Bronze afterwards).
  * `liveKey` is a constant from code, never user input.
- * Returns one row: { code, id, name, gold, silver, copper }. Throws on a negative or NULL @stake or @payout; a zero stake is allowed.
+ * `before` is the game's own SQL, run once every check has passed and before the wallet is written. It may set
+ * @extra (BIGINT Bronze, 0 until then), which is paid into the wallet with @payout. `record` may use @extra.
+ * Returns one row: { code, id, name, gold, silver, copper, extra }. `extra` is a BIGINT, so a string from the driver.
+ * Throws on a negative or NULL @stake or @payout, and on a negative or NULL @extra; a zero stake is allowed.
  */
-export function walletBetSql(tables: BetTables, liveKey: string, record: string): string {
+export function walletBetSql(tables: BetTables, liveKey: string, record: string, before = ''): string {
   // The online list is locked before the wallet. TLogin inserts the account's row and TEnterServer sets its
   // dwCharID, both by dwUserID, so the range lock makes them wait for the COMMIT: the character cannot enter
   // the game between the check and the UPDATE, and the map server loads the wallet only after it. The lock
@@ -35,7 +38,7 @@ export function walletBetSql(tables: BetTables, liveKey: string, record: string)
   return `SET NOCOUNT ON;
 IF @stake IS NULL OR @payout IS NULL OR @stake < 0 OR @payout < 0 THROW 50000, 'Stake and payout cannot be negative', 1;
 SET XACT_ABORT ON;
-DECLARE @code INT = 0, @id INT = 0, @wallet BIGINT, @name VARCHAR(50), @online INT;
+DECLARE @code INT = 0, @id INT = 0, @wallet BIGINT, @name VARCHAR(50), @online INT, @extra BIGINT = 0;
 BEGIN TRAN;
 IF NOT EXISTS (SELECT 1 FROM ${tables.portalSettings} WHERE szKey = '${liveKey}' AND szValue = 'true') SET @code = ${BET_CLOSED};
 IF @code = 0
@@ -53,14 +56,17 @@ BEGIN
 END
 IF @code = 0
 BEGIN
-  SET @wallet = @wallet - @stake + @payout;
+  ${before};
+  -- A game's own step is code, so a negative or NULL extra is a bug there; THROW rolls everything back.
+  IF @extra IS NULL OR @extra < 0 THROW 50000, 'Extra cannot be negative', 1;
+  SET @wallet = @wallet - @stake + @payout + @extra;
   UPDATE ${tables.characters} SET dwGold = @wallet / 1000000, dwSilver = (@wallet / 1000) % 1000, dwCooper = @wallet % 1000 WHERE dwCharID = @charId;
   ${record};
   SET @id = SCOPE_IDENTITY();
 END
 COMMIT;
 SELECT @code AS code, @id AS id, @name AS name,
-       CAST(@wallet / 1000000 AS INT) AS gold, CAST((@wallet / 1000) % 1000 AS INT) AS silver, CAST(@wallet % 1000 AS INT) AS copper;`;
+       CAST(@wallet / 1000000 AS INT) AS gold, CAST((@wallet / 1000) % 1000 AS INT) AS silver, CAST(@wallet % 1000 AS INT) AS copper, @extra AS extra;`;
 }
 
 /** The account's characters with wallet and whether each is in the game. Binds @userId. Columns: charId, name, level, classCode, gold, silver, copper, online (bit). Ordered by bSlot. */
