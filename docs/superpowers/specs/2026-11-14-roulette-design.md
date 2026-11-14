@@ -189,8 +189,9 @@ at least 44 px to tap.
 - **The result.** The number is shown large in its colour, the winning spots on the table light up,
   and a line says "You won 3 Gold 600 Silver" or "No win this time". "Won" is everything paid back,
   stake included, and the amount staked is shown beside it, so a spin that paid back less than it
-  cost does not read as a profit. The wallet figure changes only
-  now, so it does not give the result away. The table is then cleared; "Same bets again" puts the
+  cost does not read as a profit. The stake leaves the wallet figure the moment Spin is pressed, and
+  whatever was won is added only now, so the figure never gives the result away. A refused spin puts
+  the stake straight back. The table is then cleared; "Same bets again" puts the
   last layout back if the wallet and limits allow it.
 - **Last numbers.** The player's own last 15 results as coloured numbers, as on a real table's
   board.

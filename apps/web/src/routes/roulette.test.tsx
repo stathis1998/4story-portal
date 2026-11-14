@@ -339,7 +339,8 @@ describe('roulette', () => {
     expect(status()).toHaveTextContent('Good luck...')
     expect(spinButton()).toHaveTextContent('Spinning...')
     expect(spinButton()).toBeDisabled()
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    // The 600 Silver staked has left the wallet; whatever was won only arrives when the wheel stops.
+    expect(wallet()).toBe('4 Gold 650 Silver')
     expect(lastNumbers()).toHaveLength(0)
     expect(spot('17')).not.toHaveAttribute('data-won')
     // The chips stay on the felt while the ball runs.
@@ -347,7 +348,7 @@ describe('roulette', () => {
     // A poll that brings the new wallet in mid-spin does not give the result away.
     await poll(queryClient)
     expect(fetchMock.mock.calls.filter(([input, init]) => String(input) === '/api/roulette' && !init?.method)).toHaveLength(2)
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(wallet()).toBe('4 Gold 650 Silver')
     expect(lastNumbers()).toHaveLength(0)
 
     // Halfway through the ball is still on its track.
@@ -391,7 +392,8 @@ describe('roulette', () => {
     await screen.findByRole('button', { name: 'Spinning...' })
     await poll(queryClient)
 
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    // Only the stake is gone: the win the poll brought is not shown.
+    expect(wallet()).toBe('4 Gold 650 Silver')
     expect(lastNumbers()).toHaveLength(0)
     expect(within(screen.getByRole('region', { name: 'Your last spins' })).queryAllByRole('listitem')).toHaveLength(0)
     expect(status()).toHaveTextContent('Good luck...')
@@ -616,6 +618,28 @@ describe('roulette', () => {
     await user.click(screen.getByRole('button', { name: 'Same bets again' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Not enough money in that wallet')
     expect(onTable()).toBe('0 Silver')
+  })
+
+  it('takes the stake from the wallet at the press, and puts it back when the spin is refused', async () => {
+    let answer: (response: Response) => void = () => {}
+    const { user } = open(state(), {
+      'POST /roulette/spin': () => new Promise<Response>((resolve) => (answer = resolve)),
+    })
+    await loaded()
+    await placeBets(user)
+    expect(wallet()).toBe('5 Gold 250 Silver')
+
+    await user.click(spinButton())
+
+    // Before the server has answered at all.
+    await screen.findByRole('button', { name: 'Spinning...' })
+    expect(wallet()).toBe('4 Gold 650 Silver')
+
+    await act(async () => answer(json(409, { statusCode: 409, message: 'Log out of Mounara in the game first' })))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Log out of Mounara in the game first')
+    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(onTable()).toBe('600 Silver')
   })
 
   it('shows a refusal and reloads the table', async () => {
