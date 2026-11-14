@@ -89,8 +89,11 @@ included.
    - checks the table is switched on;
    - locks the account's rows in the game's online list (`TCURRENTUSER`) so a login for that account
      waits until the bet is finished. The lock is a range lock on the account's ID (`UPDLOCK,
-     HOLDLOCK`; the table has an index on `dwUserID`, and `TEnterServer` updates by `dwUserID`), so
-     it also covers an account with no online row yet and holds up no other account;
+     HOLDLOCK, FORCESEEK`; the table has an index on `dwUserID`, and `TEnterServer` updates by
+     `dwUserID`), so it also covers an account with no online row yet. It holds up that account, and
+     at most the accounts next to it in the online list, for the milliseconds the bet takes.
+     `FORCESEEK` keeps the lock on that index: read by a scan, it would cover the whole list and every
+     login would wait. A database with no index to seek on refuses the bet and writes nothing;
    - checks the character belongs to the account, is not deleted, and is not in the online list;
    - checks the wallet holds at least the total stake;
    - sets the wallet to what it was, less the stake, plus the payout;
@@ -104,8 +107,19 @@ page then reloads the limits).
 
 **Why an offline wallet is safe to change.** The map server marks a character online before it loads
 the wallet (`TEnterServer` runs ahead of the character load) and removes the mark only after the
-final save (the save is queued ahead of the logout). So while a character is not in the online list,
-the wallet in the database is the real one and nothing in the game will overwrite it. An account
+final save (the save is queued ahead of the logout). There are two narrow exceptions:
+
+- When the game kicks a session out (`OnCS_KICKOUT_REQ` in TMapSvr's `CSHandler.cpp`), the handler
+  starts closing the session and, in the same step, queues the clearing of the online mark. The
+  final save is not part of that step; it comes once the session has closed, so the mark is gone
+  before the save is queued.
+- A character switch that lands on a different map server process is ordered across two queues,
+  one per process, so nothing makes the old process's final save come before the online mark goes.
+
+In both, a bet made inside that short window is overwritten by the game's own save: a lost stake
+comes back and a win is lost, so no money is created, but the spin stays in the history. Outside
+those windows, while a character is not in the online list, the wallet in the database is the real
+one and nothing in the game will overwrite it. An account
 that is only at the character list has an online row with no character in it; betting is allowed
 then, and the lock in step 4 makes entering the game wait for the bet. A stale online row left by a
 crashed server blocks betting until a GM clears it with the existing Logins tool.
