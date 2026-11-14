@@ -17,6 +17,7 @@ import { DbService } from '../src/db/db.service.js';
 import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
 import { PortalStore } from '../src/store/portal-store.js';
 import { ANNOUNCER_TIMING } from '../src/wheel/wheel-announcer.js';
+import { ROULETTE_REPOSITORY } from '../src/roulette/roulette.repository.js';
 import { WHEEL_REPOSITORY } from '../src/wheel/wheel.repository.js';
 import { MemoryModelCache, type ModelCache, WEAPON_CLIENT_SOURCE, WEAPON_MODEL_CACHE, type WeaponClientSource, WeaponsUnavailableError } from '../src/weapons/weapon-catalog.js';
 import {
@@ -28,6 +29,7 @@ import {
   FakeMailRepository,
   FakeStatsRepository,
   FakeVendorsRepository,
+  FakeRouletteRepository,
   FakeWheelRepository,
 } from './fakes.js';
 import { validEnv } from './fixtures.js';
@@ -45,6 +47,7 @@ export type TestAppOverrides = {
   store?: PortalStore;
   weapons?: { source: WeaponClientSource; cache?: ModelCache };
   wheel?: FakeWheelRepository;
+  roulette?: FakeRouletteRepository;
 };
 
 // Tests never read a real game client unless they hand one in.
@@ -84,6 +87,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue({ intervalMs: 0, maxPerTick: 20, announceGapMs: 0 })
     .overrideProvider(WHEEL_REPOSITORY)
     .useValue(overrides.wheel ?? new FakeWheelRepository())
+    .overrideProvider(ROULETTE_REPOSITORY)
+    .useValue(overrides.roulette ?? new FakeRouletteRepository())
     // No timer in tests: they call the announcer's tick() themselves.
     .overrideProvider(ANNOUNCER_TIMING)
     .useValue({ intervalMs: 0, delaySeconds: 15, maxAgeSeconds: 600 })
