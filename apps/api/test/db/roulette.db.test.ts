@@ -5,7 +5,7 @@ import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/config.js';
 import type { DbService } from '../../src/db/db.service.js';
-import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR } from '../../src/games/wallet-bet.js';
+import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR, walletBetSql } from '../../src/games/wallet-bet.js';
 import { type BetInput, ROULETTE_LIVE_KEY, SqlRouletteRepository } from '../../src/roulette/roulette.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
@@ -146,6 +146,15 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
       expect(await repo.settings()).toEqual({ live: true, minBet: ROULETTE_DEFAULT_LIMITS.minBet, maxNumber: 3000, maxOutside: 30_000 });
     }));
 
+  it('reads a hand-edited switch the way the bet does', () =>
+    withRepo(async ({ repo, tx, character }) => {
+      await repo.saveSettings({ live: true, ...ROULETTE_DEFAULT_LIMITS }, 'moose');
+      await setRawSetting(tx, ROULETTE_LIVE_KEY, 'TRUE ');
+
+      expect(await repo.settings()).toMatchObject({ live: true });
+      expect(await repo.bet(bet(character))).toMatchObject({ code: BET_OK });
+    }));
+
   it('falls back to all starting limits when the smallest bet is above a largest', () =>
     withRepo(async ({ repo }) => {
       await repo.saveSettings({ live: true, minBet: 5000, maxNumber: 1000, maxOutside: 30_000 }, 'moose');
@@ -273,26 +282,39 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
       expect(await spinRows(tx)).toHaveLength(1);
     }));
 
+  /** What TLogin does, from another connection, in a transaction of its own that is rolled back. */
+  const loginElsewhere = (userId: number) =>
+    inRolledBackTransaction(db, (other) =>
+      new sql.Request(other)
+        .input('userId', sql.Int, userId)
+        .query(
+          `SET LOCK_TIMEOUT 1000;
+           INSERT INTO ${db.tables.currentUsers} (dwUserID, dwCharID, bGroupID, bChannel, wPort, bLocked, szLoginIP)
+           VALUES (@userId, 0, 1, 1, 0, 0, '127.0.0.1')`,
+        )
+        .then(() => undefined),
+    );
+
   it("holds the account's place in the online list, so a login waits for the bet", () =>
     withLiveRepo(async ({ repo, character }) => {
-      // What TLogin does, from another connection, in a transaction of its own that is rolled back.
-      const login = () =>
-        inRolledBackTransaction(db, (other) =>
-          new sql.Request(other)
-            .input('userId', sql.Int, character.userId)
-            .query(
-              `SET LOCK_TIMEOUT 1000;
-               INSERT INTO ${db.tables.currentUsers} (dwUserID, dwCharID, bGroupID, bChannel, wPort, bLocked, szLoginIP)
-               VALUES (@userId, 0, 1, 1, 0, 0, '127.0.0.1')`,
-            )
-            .then(() => undefined),
-        );
-      await expect(login()).resolves.toBeUndefined();
+      await expect(loginElsewhere(character.userId)).resolves.toBeUndefined();
 
       // The test's own transaction is still open, so the lock the bet took is still held.
       expect(await repo.bet(bet(character))).toMatchObject({ code: BET_OK });
 
-      await expect(login()).rejects.toThrow(/Lock request time out/);
+      await expect(loginElsewhere(character.userId)).rejects.toThrow(/Lock request time out/);
+    }));
+
+  it('holds up no account away from it in the online list', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // Accounts just below and just above are online, so the range lock has neighbouring keys to stop at.
+      await goOnline(tx, character.userId - 1, 0);
+      await goOnline(tx, character.userId + 1, 0);
+
+      expect(await repo.bet(bet(character))).toMatchObject({ code: BET_OK });
+
+      await expect(loginElsewhere(character.userId + 1_000_000)).resolves.toBeUndefined();
+      await expect(loginElsewhere(character.userId)).rejects.toThrow(/Lock request time out/);
     }));
 
   it('refuses a stake one Silver above the wallet, and takes one that empties it', () =>
@@ -313,6 +335,24 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
 
       expect(await walletOf(tx, character.charId)).toEqual(START);
       expect(await spinRows(tx)).toEqual([]);
+    }));
+
+  // The repository cannot send NULL (it multiplies by 1000, and the driver throws on NaN), so the batch is run
+  // directly, as a later game reusing it might.
+  it.each([
+    ['stake', null, 0],
+    ['payout', 100_000, null],
+  ])('rejects a NULL %s before touching anything', (_, stake, payout) =>
+    withLiveRepo(async ({ tx, character }) => {
+      const run = new sql.Request(tx)
+        .input('userId', sql.Int, character.userId)
+        .input('charId', sql.Int, character.charId)
+        .input('stake', sql.BigInt, stake)
+        .input('payout', sql.BigInt, payout)
+        .query(walletBetSql(db.tables, ROULETTE_LIVE_KEY, 'SELECT 1'));
+
+      await expect(run).rejects.toThrow('Stake and payout cannot be negative');
+      expect(await walletOf(tx, character.charId)).toEqual(START);
     }));
 
   it('lists big wins only when a number bet won, newest first', () =>

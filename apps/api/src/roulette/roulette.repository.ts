@@ -94,7 +94,10 @@ export class SqlRouletteRepository implements RouletteRepository {
     };
     // Limits that cannot all hold at once are not a table anyone can play; start over from the defaults.
     const usable = limits.minBet <= limits.maxNumber && limits.minBet <= limits.maxOutside;
-    return { live: values.get(ROULETTE_LIVE_KEY) === 'true', ...(usable ? limits : ROULETTE_DEFAULT_LIMITS) };
+    // Read the switch as the bet's SQL does (case-insensitive collation, trailing spaces ignored), so a
+    // hand-edited row means the same on the pages as on a POST.
+    const live = values.get(ROULETTE_LIVE_KEY)?.trimEnd().toLowerCase() === 'true';
+    return { live, ...(usable ? limits : ROULETTE_DEFAULT_LIMITS) };
   }
 
   async saveSettings(settings: RouletteSettings, changedBy: string): Promise<void> {
