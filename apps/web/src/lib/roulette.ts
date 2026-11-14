@@ -40,6 +40,17 @@ export function useSaveRouletteSettings() {
 export const rouletteErrorMessage = (err: unknown) =>
   err instanceof ApiError && (err.status < 500 || err.status === 503) ? err.message : 'Something went wrong. Please try again.'
 
+/**
+ * Fill, text and ring colour of a number badge (Last numbers, the result, the GM's spin list), for a badge that
+ * sets only the ring's width. A black pocket is a lighter near-black than the card, ringed with the card's line
+ * colour, so it reads as a disc and not as an empty ring.
+ */
+export const POCKET_BADGE = {
+  red: 'bg-accent text-accent-fg border-white/25',
+  black: 'bg-[#3a3131] text-fg border-line',
+  green: 'bg-[#1f7a4a] text-white border-white/25',
+} as const
+
 // The wheel's motion. Angles are in degrees, clockwise from the top; depth 0 is the ball track, 1 the pocket.
 
 export const ROULETTE_SPIN_SECONDS = 8

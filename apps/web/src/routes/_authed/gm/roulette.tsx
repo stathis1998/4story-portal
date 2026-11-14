@@ -5,7 +5,7 @@ import { type FormEvent, useId, useState } from 'react'
 import { Button } from '../../../components/Button'
 import { FormMessage } from '../../../components/FormMessage'
 import { GmNav } from '../../../components/gm/GmNav'
-import { gmRouletteQueryOptions, rouletteErrorMessage, useSaveRouletteSettings } from '../../../lib/roulette'
+import { gmRouletteQueryOptions, POCKET_BADGE, rouletteErrorMessage, useSaveRouletteSettings } from '../../../lib/roulette'
 import { meQueryOptions } from '../../../lib/session'
 import { formatSpinTime } from '../../../lib/wheel'
 
@@ -18,7 +18,6 @@ export const Route = createFileRoute('/_authed/gm/roulette')({
 })
 
 const labelText = 'text-xs font-bold tracking-wider text-muted uppercase'
-const BADGE = { red: 'bg-accent text-accent-fg', black: 'bg-[#1b1616] text-fg', green: 'bg-[#1f7a4a] text-white' }
 
 const FIELDS = [
   { key: 'minBet', label: 'Smallest bet' },
@@ -253,7 +252,7 @@ function LatestSpins({ spins }: { spins: GmRoulette['latest'] }) {
                     <td className="px-3 py-2 font-bold">{spin.character}</td>
                     <td className="px-3 py-2">
                       <span
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/25 font-bold tabular-nums ${BADGE[colour]}`}
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full border font-bold tabular-nums ${POCKET_BADGE[colour]}`}
                       >
                         {spin.pocket}
                         <span className="sr-only"> {colour}</span>

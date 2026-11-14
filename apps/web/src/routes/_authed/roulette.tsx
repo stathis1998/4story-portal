@@ -2,14 +2,14 @@ import { checkBets, rouletteChips, rouletteColour, silverText, walletSilver } fr
 import type { RouletteBet, RouletteSpinResult, RouletteSpinView, RouletteSpot, RouletteState } from '@4story-portal/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
 import { FormMessage } from '../../components/FormMessage'
 import { WalletCharacterPicker, WalletCoins } from '../../components/games/WalletCharacterPicker'
 import { BettingTable } from '../../components/roulette/BettingTable'
 import { ChipRack } from '../../components/roulette/ChipRack'
 import { RouletteWheel } from '../../components/roulette/RouletteWheel'
-import { rouletteErrorMessage, rouletteQueryOptions, spinRoulette } from '../../lib/roulette'
+import { POCKET_BADGE, rouletteErrorMessage, rouletteQueryOptions, spinRoulette } from '../../lib/roulette'
 import { formatSpinTime } from '../../lib/wheel'
 
 export const Route = createFileRoute('/_authed/roulette')({
@@ -64,6 +64,8 @@ const resultLine = (spin: RouletteSpinView) =>
     ? `${pocketName(spin.pocket)}. You won ${silverText(spin.payout)} on a stake of ${silverText(spin.stake)}.`
     : `${pocketName(spin.pocket)}. No win this time. You staked ${silverText(spin.stake)}.`
 
+const resultClass = (spin: RouletteSpinView) => (spin.payout > 0 ? 'font-bold text-accent-text' : '')
+
 /** A spin the wheel is still turning toward, with what the page showed before it, so nothing gives the result away. */
 type Turning = { result: RouletteSpinResult; before: RouletteState; chips: Chip[]; characterId: number }
 
@@ -103,6 +105,7 @@ function RoulettePage() {
   const [problem, setProblem] = useState<string | null>(null)
   const pickerId = useId()
   const lastNumbersId = useId()
+  const wheelBox = useRef<HTMLDivElement>(null)
 
   if (!data) {
     return (
@@ -125,9 +128,11 @@ function RoulettePage() {
   const free = view.characters.filter((entry) => !entry.online)
   const character = view.characters.find((entry) => entry.id === chosen)
   // The first time someone can play, the remembered character if it is free, otherwise the first free one. A
-  // chosen character that is gone from the list (deleted, say) is picked again the same way.
+  // chosen character that is gone from the list (deleted, say) is picked again the same way, and its chips go:
+  // they were put down against a wallet the player picked, not this one.
   if (!character && free.length > 0) {
     setChosen((free.find((entry) => entry.id === remembered) ?? free[0]).id)
+    if (chips.length > 0) setChips([])
   }
   const inGame = character?.online === true
   const money = character && !inGame ? walletSilver(character.wallet) : 0
@@ -194,11 +199,25 @@ function RoulettePage() {
     await queryClient.cancelQueries({ queryKey: rouletteQueryOptions.queryKey })
     setSending(false)
     setTurning({ result, before: view, chips, characterId: character.id })
-    setAnimate(!reducedMotion())
+    const motion = !reducedMotion()
+    setAnimate(motion)
     setWheelSpin({ pocket: result.spin.pocket, key: result.spin.id })
+    // On a phone Spin sits in the bar below a tall felt, so the wheel would turn out of sight.
+    wheelBox.current?.scrollIntoView?.({ block: 'center', behavior: motion ? 'smooth' : 'auto' })
   }
 
   const allOnline = view.characters.length > 0 && free.length === 0
+  // Why the table cannot be played now. A result is shown beside it, never instead: that spin moved money.
+  const note = !view.live
+    ? 'The table is not open yet. Have a look around: betting starts soon.'
+    : view.characters.length === 0
+      ? 'You have no characters yet.'
+      : allOnline
+        ? 'Log out of the game to play: your characters are all in it.'
+        : character && inGame
+          ? `Log out of ${character.name} in the game to keep playing, or pick another character.`
+          : null
+  const lastSpin = shown && !busy ? shown.spin : null
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 md:py-10">
@@ -236,7 +255,9 @@ function RoulettePage() {
 
         <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]">
           <div className="flex flex-col gap-4">
-            <RouletteWheel spin={wheelSpin} animate={animate} onStopped={reveal} />
+            <div ref={wheelBox}>
+              <RouletteWheel spin={wheelSpin} animate={animate} onStopped={reveal} />
+            </div>
             <div className="flex flex-col gap-1.5">
               <span id={lastNumbersId} className={labelText}>
                 Last numbers
@@ -274,8 +295,17 @@ function RoulettePage() {
               )}
             </div>
 
-            {/* On a phone the stake, the reason for a refused chip and Spin stay in view below the tall felt. */}
-            <div className="sticky bottom-0 z-30 -mx-4 flex flex-col gap-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur-sm sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+            {/* On a phone the stake, the reason for a refused chip, the last result and Spin stay in view below the tall felt. */}
+            <div
+              data-testid="roulette-bar"
+              className="sticky bottom-0 z-30 -mx-4 flex flex-col gap-2 border-t border-line bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
+            >
+              {/* A copy for the eye only: the status below reads the result out once. From lg the status is in view. */}
+              {lastSpin && (
+                <p aria-hidden="true" className={`text-center lg:hidden ${resultClass(lastSpin)}`}>
+                  {resultLine(lastSpin)}
+                </p>
+              )}
               <FormMessage message={problem} />
               <div className="flex items-center justify-between gap-4">
                 <dl className="flex flex-col gap-0.5">
@@ -294,24 +324,20 @@ function RoulettePage() {
           </div>
         </div>
 
-        <div role="status" className="text-center">
+        <div role="status" className="flex flex-col items-center gap-2 text-center">
           {busy ? (
             <p className="text-muted">Good luck...</p>
-          ) : !view.live ? (
-            <p className="text-muted">The table is not open yet. Have a look around: betting starts soon.</p>
-          ) : view.characters.length === 0 ? (
-            <p className="text-muted">You have no characters yet.</p>
-          ) : allOnline ? (
-            <p className="text-muted">Log out of the game to play: your characters are all in it.</p>
-          ) : character && inGame ? (
-            <p className="text-muted">Log out of {character.name} in the game to keep playing, or pick another character.</p>
-          ) : shown ? (
-            <div className="flex flex-col items-center gap-2">
-              <PocketBadge pocket={shown.spin.pocket} large />
-              <p className={shown.spin.payout > 0 ? 'text-lg font-bold text-accent-text' : 'text-lg'}>{resultLine(shown.spin)}</p>
-            </div>
           ) : (
-            <p className="text-muted">Pick a chip, then tap the felt to put it down.</p>
+            <>
+              {lastSpin && (
+                <>
+                  <PocketBadge pocket={lastSpin.pocket} large />
+                  <p className={`text-lg ${resultClass(lastSpin)}`}>{resultLine(lastSpin)}</p>
+                </>
+              )}
+              {note && <p className="text-muted">{note}</p>}
+              {!lastSpin && !note && <p className="text-muted">Pick a chip, then tap the felt to put it down.</p>}
+            </>
           )}
         </div>
       </section>
@@ -337,8 +363,6 @@ function RoulettePage() {
   )
 }
 
-const BADGE = { red: 'bg-accent text-accent-fg', black: 'bg-[#1b1616] text-fg', green: 'bg-[#1f7a4a] text-white' }
-
 /** A number in its colour, as on a real table's board. The colour is written out for screen readers. */
 function PocketBadge({ pocket, large = false }: { pocket: number; large?: boolean }) {
   const colour = rouletteColour(pocket)
@@ -346,14 +370,14 @@ function PocketBadge({ pocket, large = false }: { pocket: number; large?: boolea
     return (
       <span
         aria-hidden="true"
-        className={`inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-white/60 font-display text-3xl font-bold ${BADGE[colour]}`}
+        className={`inline-flex h-16 w-16 items-center justify-center rounded-full border-2 font-display text-3xl font-bold ${POCKET_BADGE[colour]}`}
       >
         {pocket}
       </span>
     )
   }
   return (
-    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/25 text-sm font-bold tabular-nums ${BADGE[colour]}`}>
+    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full border text-sm font-bold tabular-nums ${POCKET_BADGE[colour]}`}>
       {pocket}
       <span className="sr-only"> {colour}</span>
     </span>

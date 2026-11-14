@@ -94,6 +94,7 @@ function spoken(element: Element): string {
   walk(element)
   return parts.join('').replace(/\s+/g, ' ').trim()
 }
+const bar = () => screen.getByTestId('roulette-bar')
 const wallet = () => spoken(within(table()).getByText('Wallet').nextElementSibling!)
 const onTable = () => spoken(within(table()).getByText('On the table').nextElementSibling!)
 
@@ -114,6 +115,13 @@ function animate() {
   vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
 }
 
+/** jsdom has no scrollIntoView; a stub on every element records the calls, and the element each was made on. */
+function stubScrollIntoView() {
+  const scrolled = vi.fn()
+  Object.defineProperty(Element.prototype, 'scrollIntoView', { value: scrolled, configurable: true, writable: true })
+  return scrolled
+}
+
 async function placeBets(user: ReturnType<typeof open>['user']) {
   await user.click(chip('100 Silver'))
   await user.click(spot('17'))
@@ -129,6 +137,7 @@ describe('roulette', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
   })
 
   it('shows the table, the house share and the payouts', async () => {
@@ -415,6 +424,86 @@ describe('roulette', () => {
     await waitFor(() => expect(status()).toHaveTextContent('17 black. You won 3 Gold 600 Silver on a stake of 600 Silver.'))
     expect(spot('17')).toBeEnabled()
     expect(within(screen.getByRole('region', { name: 'Big wins' })).getByRole('listitem')).toHaveTextContent('Kael hit 17 and won 36 Gold')
+  })
+
+  it('brings the wheel into view when a spin starts, and shows the result in the bar once it stops', async () => {
+    const scrolled = stubScrollIntoView()
+    const { user } = open(state(), server(won))
+    await loaded()
+    await placeBets(user)
+    animate()
+
+    await user.click(spinButton())
+
+    const wheel = await screen.findByRole('img', { name: 'Roulette wheel, spinning' })
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(scrolled.mock.contexts[0]).toContainElement(wheel)
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    expect(bar()).not.toHaveTextContent('17 black')
+
+    act(() => vi.advanceTimersByTime(ROULETTE_SPIN_SECONDS * 1000 + 100))
+
+    expect(bar()).toHaveTextContent('17 black. You won 3 Gold 600 Silver on a stake of 600 Silver.')
+    // A screen reader hears the result once, from the status.
+    expect(spoken(bar())).not.toContain('You won')
+    expect(status()).toHaveTextContent('17 black. You won 3 Gold 600 Silver on a stake of 600 Silver.')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('brings the wheel into view without a smooth scroll where motion is reduced', async () => {
+    const scrolled = stubScrollIntoView()
+    const { user } = open(state(), server(won))
+    await loaded()
+    await user.click(spot('17'))
+
+    await user.click(spinButton())
+
+    await screen.findByRole('img', { name: 'Roulette wheel, ball on 17 black' })
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' })
+  })
+
+  it('shows the result of a spin when the table was closed meanwhile, with the closed note', async () => {
+    const closed: RouletteSpinResult = { ...won, state: { ...won.state, live: false } }
+    let spun = false
+    const { user } = open(state(), {
+      'GET /roulette': () => json(200, spun ? closed.state : state()),
+      'POST /roulette/spin': () => {
+        spun = true
+        return json(200, closed)
+      },
+    })
+    await loaded()
+    await placeBets(user)
+
+    await user.click(spinButton())
+
+    await screen.findByRole('img', { name: 'Roulette wheel, ball on 17 black' })
+    const line = '17 black. You won 3 Gold 600 Silver on a stake of 600 Silver.'
+    const note = 'The table is not open yet. Have a look around: betting starts soon.'
+    expect(status()).toHaveTextContent(line)
+    expect(status()).toHaveTextContent(note)
+    expect(status().textContent!.indexOf(line)).toBeLessThan(status().textContent!.indexOf(note))
+    expect(spinButton()).toBeDisabled()
+  })
+
+  it('clears the chips when it has to pick another character', async () => {
+    let current = state({ characters: [mounara, moosey] })
+    const { user, queryClient } = open(current, { 'GET /roulette': () => json(200, current) })
+    await loaded()
+    expect(picker()).toHaveValue('7')
+    await user.click(spot('17'))
+    expect(onTable()).toBe('10 Silver')
+
+    // Mounara was deleted in the game.
+    current = state({ characters: [moosey] })
+    await poll(queryClient)
+
+    expect(picker()).toHaveValue('5')
+    expect(wallet()).toBe('900 Silver')
+    expect(onTable()).toBe('0 Silver')
+    expect(spot('17')).toHaveAccessibleName('Bet on 17')
+    expect(spinButton()).toBeDisabled()
   })
 
   it('keeps the chosen character when the remembered one logs out later', async () => {
