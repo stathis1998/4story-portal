@@ -1,6 +1,7 @@
 import { SLOT_REEL_STOPS, slotWindow } from '@4story-portal/shared'
 import type { SlotMachine, SlotMachineKey, SlotStops } from '@4story-portal/shared'
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
+import { blurStepsAt, REEL_BLURS } from '../../lib/reel-blur'
 import { planReels, reelsAt, SLOT_SPIN_SECONDS } from '../../lib/slots'
 
 type ReelsProps = {
@@ -20,7 +21,6 @@ type ReelsProps = {
 /** Tiles in a strip: one loop of the reel and the first few again, so the three rows are always full. */
 const TILES = SLOT_REEL_STOPS + 4
 const LETTERS = 'ABCDEF'
-const FRAME = 1 / 60
 
 /** Each machine's cabinet: its frame, the inside behind the reels, and the colour of the win line and lit symbols. */
 const CABINETS: Record<SlotMachineKey, { frame: string; inside: string; line: string }> = {
@@ -45,23 +45,12 @@ const stripOffset = (position: number) => (((position % SLOT_REEL_STOPS) + SLOT_
 /** The tile on the win line for a reel resting on `stop`. */
 const lineTile = (stop: number) => 1 - stripOffset(restingAt(stop))
 
-/**
- * How much to blur a reel moving `speed` stops a second. At full speed a reel runs past more than a symbol a frame,
- * which drawn sharp would flicker, so it is smeared until it slows into its stop. A few fixed steps, so the filter
- * changes a handful of times a spin rather than every frame.
- */
-function blurFor(speed: number): string {
-  if (speed > 30) return 'blur(5px)'
-  if (speed > 12) return 'blur(2.5px)'
-  if (speed > 4) return 'blur(1px)'
-  return ''
-}
-
-function draw(strips: (HTMLDivElement | null)[], positions: number[], speeds: number[]) {
+/** Moves each strip to its position, blurred along its run by `blurs` (a step from blurStep, 0 for sharp). */
+function draw(strips: (HTMLDivElement | null)[], positions: number[], blurs: number[]) {
   strips.forEach((strip, i) => {
     if (!strip) return
     strip.style.transform = `translateY(${(stripOffset(positions[i]) / TILES) * 100}%)`
-    strip.style.filter = blurFor(speeds[i])
+    strip.style.filter = blurs[i] > 0 ? `url(#${REEL_BLURS[blurs[i] - 1].id})` : ''
   })
 }
 
@@ -107,9 +96,7 @@ export function Reels({ machine, rest, spin, animate, won, onStopped }: ReelsPro
       start ??= now
       const seconds = (now - start) / 1000
       if (seconds < SLOT_SPIN_SECONDS) {
-        const positions = reelsAt(plan, seconds)
-        const before = reelsAt(plan, seconds - FRAME)
-        draw(strips.current, positions, positions.map((p, i) => (p - before[i]) / FRAME))
+        draw(strips.current, reelsAt(plan, seconds), blurStepsAt(plan, seconds))
         request = requestAnimationFrame(step)
         return
       }
@@ -135,6 +122,16 @@ export function Reels({ machine, rest, spin, animate, won, onStopped }: ReelsPro
       className="mx-auto w-fit rounded-md border border-black/60 p-2.5 shadow-[0_6px_20px_rgb(0_0_0/0.5)] min-[400px]:p-3.5"
       style={{ background: cabinet.frame }}
     >
+      {/* The blurs for a moving reel: along the reel only, never sideways. Only one Reels is on a page, so the ids are unique. */}
+      <svg aria-hidden="true" width="0" height="0" className="absolute">
+        <defs>
+          {REEL_BLURS.map((blur) => (
+            <filter key={blur.id} id={blur.id} x="0" y="-10%" width="100%" height="120%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur stdDeviation={`0 ${blur.deviation}`} />
+            </filter>
+          ))}
+        </defs>
+      </svg>
       <div
         className="rounded-sm border border-black/70 px-3 py-1.5 shadow-[inset_0_2px_10px_rgb(0_0_0/0.8)] min-[400px]:px-4"
         style={{ backgroundColor: cabinet.inside }}

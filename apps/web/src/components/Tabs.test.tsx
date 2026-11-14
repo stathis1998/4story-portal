@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Tabs } from './Tabs'
@@ -37,6 +37,17 @@ describe('Tabs', () => {
 
     expect(onChange).toHaveBeenCalledWith('coords')
     expect(screen.getByRole('tab', { name: 'Coordinates' })).toHaveFocus()
+  })
+
+  it('ignores arrow keys while the tabs are turned off', () => {
+    const onChange = vi.fn()
+    render(<Tabs tabs={tabs} active="coords" onChange={onChange} disabled />)
+
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Coordinates' }), { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Coordinates' }), { key: 'ArrowLeft' })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: 'Character' })).toBeDisabled()
   })
 
   it('wraps around from the first tab on ArrowLeft', async () => {

@@ -106,13 +106,15 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const [animate, setAnimate] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const pickerId = useId()
-  const cabinetBox = useRef<HTMLDivElement>(null)
+  const playArea = useRef<HTMLDivElement>(null)
 
   const machine = slotMachine(machineKey ?? '') ?? SLOT_MACHINES[0]
   const settings = settingsOf(view, machine)
   const picked = stakes[machine.key]
-  // A stake that is not offered (any more) falls back to the machine's lowest.
+  // A stake that is not offered (any more) falls back to the machine's lowest, and for good: if a later refresh
+  // offers it again it must not come back by itself.
   const stake = picked !== undefined && settings.stakes.includes(picked) ? picked : settings.stakes[0]
+  if (picked !== stake) setStakes((current) => ({ ...current, [machine.key]: stake }))
   const money = character ? walletSilver(character.wallet) : null
   const inGame = character?.online === true
   const canSpin = view.live && settings.live && characterFree && money !== null && money >= stake && !busy
@@ -134,8 +136,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     const motion = !reducedMotion()
     setAnimate(motion)
     setSpins((current) => ({ ...current, [key]: { stops: result.spin.stops, key: result.spin.id } }))
-    // On a phone the cabinet may be partly out of sight once the page has been scrolled.
-    cabinetBox.current?.scrollIntoView?.({ block: 'center', behavior: motion ? 'smooth' : 'auto' })
+    // On a phone the reels, Spin and the result line would otherwise turn partly out of sight. All of it fits on a
+    // 360 x 640 screen; 'nearest' does not move a page that already shows it.
+    playArea.current?.scrollIntoView?.({ block: 'nearest', behavior: motion ? 'smooth' : 'auto' })
   }
 
   const onKey = useEffectEvent((event: KeyboardEvent) => {
@@ -156,6 +159,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   }, [])
 
   function pickMachine(key: string) {
+    // Another machine would take the turning reels off the page before they could show the result.
+    if (busy) return
     setMachineKey(key)
     remember(MACHINE_KEY, key)
     setProblem(null)
@@ -163,9 +168,11 @@ function SlotsFloor({ data }: { data: SlotsState }) {
 
   function pickStake(value: number) {
     setStakes((current) => ({ ...current, [machine.key]: value }))
-    remember(stakeKey(machine.key), String(value))
     setProblem(null)
   }
+
+  // The stake in play is the one remembered, including a fallback to the lowest.
+  useEffect(() => remember(stakeKey(machine.key), String(stake)), [machine.key, stake])
 
   const allOnline = view.characters.length > 0 && view.characters.every((entry) => entry.online)
   // Why the machine cannot be played now. A result is shown beside it, never instead: that spin moved money.
@@ -188,10 +195,10 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     })
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 md:py-10">
-      <h1 className="text-4xl">Slots</h1>
+    <main className="mx-auto max-w-2xl px-4 py-4 sm:py-6 md:py-10">
+      <h1 className="text-3xl sm:text-4xl">Slots</h1>
       <p className="mt-1 text-muted">Three machines, one pull at a time.</p>
-      <p className="mt-1 mb-6 text-sm text-muted">This is real gambling with your character's money. Each machine shows what it pays back.</p>
+      <p className="mt-1 mb-4 text-sm text-muted sm:mb-6">This is real gambling with your character's money. Each machine shows what it pays back.</p>
 
       <Tabs
         label="Machine"
@@ -199,11 +206,13 @@ function SlotsFloor({ data }: { data: SlotsState }) {
         active={machine.key}
         onChange={pickMachine}
         disabled={busy}
+        oneRow
       />
 
       <section role="tabpanel" id={`panel-${machine.key}`} aria-labelledby={`tab-${machine.key}`} className={`mt-4 flex flex-col gap-4 ${card}`}>
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div className="w-full sm:w-72">
+        {/* The wallet beside the picker even on a phone, so the reels and Spin sit higher on the screen. */}
+        <div className="flex items-end justify-between gap-3 sm:gap-6">
+          <div className="min-w-0 flex-1 sm:max-w-72">
             <WalletCharacterPicker
               id={pickerId}
               label="Playing with"
@@ -217,7 +226,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
             />
           </div>
           {character && (
-            <dl className="flex flex-col gap-1.5">
+            <dl className="flex max-w-[45%] flex-col gap-1.5 sm:max-w-none">
               <dt className={labelText}>Wallet</dt>
               <dd className="flex min-h-11 items-center">
                 <WalletCoins wallet={character.wallet} />
@@ -226,7 +235,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           )}
         </div>
 
-        <div ref={cabinetBox} className="py-1">
+        {/* What has to be in view while the reels turn: brought into view when a spin starts. */}
+        <div ref={playArea} className="flex flex-col gap-3 sm:gap-4">
           <Reels
             key={machine.key}
             machine={machine}
@@ -236,30 +246,31 @@ function SlotsFloor({ data }: { data: SlotsState }) {
             won={reelSpin ? slotPrize(machine, reelSpin.stops).count : 0}
             onStopped={() => held.reveal()}
           />
-        </div>
 
-        <StakePicker stakes={settings.stakes} value={stake} money={money} disabled={busy} onChange={pickStake} />
+          <StakePicker stakes={settings.stakes} value={stake} money={money} disabled={busy} onChange={pickStake} />
 
-        <Button
-          onClick={() => void onSpin()}
-          disabled={!canSpin}
-          className="mx-auto min-h-12 w-full max-w-xs text-base tracking-widest uppercase"
-        >
-          {busy ? 'Spinning...' : 'Spin'}
-        </Button>
+          <Button
+            onClick={() => void onSpin()}
+            disabled={!canSpin}
+            className="mx-auto min-h-12 w-full max-w-xs text-base tracking-widest uppercase"
+          >
+            {busy ? 'Spinning...' : 'Spin'}
+          </Button>
 
-        <FormMessage message={problem} />
+          <FormMessage message={problem} />
 
-        <div role="status" className="flex min-h-14 flex-col items-center justify-center gap-1 text-center">
-          {busy ? (
-            <p className="text-muted">Good luck...</p>
-          ) : (
-            <>
-              {lastSpin && <p className={`text-lg ${lastSpin.payout > 0 ? 'font-bold text-accent-text' : ''}`}>{resultLine(machine, lastSpin)}</p>}
-              {note && <p className="text-muted">{note}</p>}
-              {!lastSpin && !note && <p className="text-muted">Pick a stake, then press Spin.</p>}
-            </>
-          )}
+          {/* Room for a two-line result on a phone, so the area does not grow past the screen when the reels stop. */}
+          <div role="status" className="flex min-h-20 flex-col items-center justify-center gap-1 text-center sm:min-h-14">
+            {busy ? (
+              <p className="text-muted">Good luck...</p>
+            ) : (
+              <>
+                {lastSpin && <p className={`text-lg ${lastSpin.payout > 0 ? 'font-bold text-accent-text' : ''}`}>{resultLine(machine, lastSpin)}</p>}
+                {note && <p className="text-muted">{note}</p>}
+                {!lastSpin && !note && <p className="text-muted">Pick a stake, then press Spin.</p>}
+              </>
+            )}
+          </div>
         </div>
       </section>
 

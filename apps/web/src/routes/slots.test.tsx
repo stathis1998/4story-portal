@@ -2,6 +2,7 @@ import { SLOT_MACHINES } from '@4story-portal/shared'
 import type { SlotMachineState, SlotSpinResult, SlotSpinView, SlotStakes, SlotsState, Wallet, WalletCharacter } from '@4story-portal/shared'
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { REEL_BLURS } from '../lib/reel-blur'
 import { SLOT_REEL_SECONDS, SLOT_SPIN_SECONDS } from '../lib/slots'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
@@ -131,6 +132,9 @@ function rowSymbols(row: number, machine = SLOT_MACHINES[0]): string[] {
     return machine.symbols.find((symbol) => src === `/game-icons/${symbol.sprite}.png`)!.name
   })
 }
+
+/** The filter on a reel at full speed: the strongest of the page's vertical blurs. */
+const STRONGEST = `#${REEL_BLURS[REEL_BLURS.length - 1].id}`
 
 const litOnLine = () => [0, 1, 2].map((reel) => tileAt(reel, 1).dataset.won === 'true')
 const allLit = () => screen.queryAllByTestId(/^reel-/).flatMap((reel) => [...reel.children].filter((tile) => (tile as HTMLElement).dataset.won))
@@ -308,19 +312,19 @@ describe('slots', () => {
     expect(wallet()).toBe('5 Gold 250 Silver')
     expect(within(screen.getByRole('region', { name: 'Your last spins' })).queryAllByRole('listitem')).toHaveLength(0)
 
-    // At full speed the reels are blurred.
+    // At full speed the reels are smeared along their run with the strongest blur, which is vertical only.
     act(() => vi.advanceTimersByTime(600))
-    expect([0, 1, 2].map((reel) => strip(reel).element.style.filter)).toEqual([
-      expect.stringContaining('blur'),
-      expect.stringContaining('blur'),
-      expect.stringContaining('blur'),
-    ])
+    expect([0, 1, 2].map((reel) => strip(reel).element.style.filter)).toEqual(Array(3).fill(expect.stringContaining(`url(`)))
+    expect([0, 1, 2].map((reel) => strip(reel).element.style.filter)).toEqual(Array(3).fill(expect.stringContaining(STRONGEST)))
+    const blur = document.querySelector(`${STRONGEST} feGaussianBlur`)
+    expect(blur?.getAttribute('stdDeviation')).toMatch(/^0 [1-9]\d*$/)
+    expect(document.querySelectorAll(STRONGEST)).toHaveLength(1)
 
     // The first reel has stopped, sharp and on its stop; the others still turn and nothing is told yet.
     act(() => vi.advanceTimersByTime((SLOT_REEL_SECONDS[0] + 0.05) * 1000 - 600))
     expect(strip(0).element.style.filter).toBe('')
     expect(tileAt(0, 1).querySelector('img')).toHaveAttribute('src', '/game-icons/8598.png')
-    expect(strip(2).element.style.filter).toContain('blur')
+    expect(strip(2).element.style.filter).toContain('slot-reel-blur')
     expect(reels()).toHaveAccessibleName('Reels, spinning')
     expect(status()).toHaveTextContent('Good luck...')
     expect(allLit()).toEqual([])
@@ -585,12 +589,61 @@ describe('slots', () => {
 
     const spinning = await screen.findByRole('img', { name: 'Reels, spinning' })
     expect(scrolled).toHaveBeenCalledTimes(1)
-    expect(scrolled.mock.contexts[0]).toContainElement(spinning)
-    expect(scrolled).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    // The cabinet down to the status line, so on a phone Spin and the result are in view with the reels.
+    const shown = scrolled.mock.contexts[0] as Element
+    expect(shown).toContainElement(spinning)
+    expect(shown).toContainElement(screen.getByRole('radiogroup', { name: 'Stake' }))
+    expect(shown).toContainElement(spinButton())
+    expect(shown).toContainElement(status())
+    expect(scrolled).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
 
     act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000 + 100))
     expect(reels()).toHaveAccessibleName(/^Reels: /)
     expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the machine while the reels turn, even for an arrow key on its tab', async () => {
+    const { user } = open(state(), server(jackpot))
+    await loaded()
+    await user.click(stake('50 Silver'))
+    animate()
+    await user.click(spinButton())
+    await screen.findByRole('img', { name: 'Reels, spinning' })
+
+    // Straight on the tab, as if it had kept the focus when it was turned off.
+    fireEvent.keyDown(tab("Tranus's Shelf"), { key: 'ArrowRight' })
+    fireEvent.keyDown(tab("Tranus's Shelf"), { key: 'ArrowLeft' })
+    expect(tab("Tranus's Shelf")).toHaveAttribute('aria-selected', 'true')
+    expect(panel()).toHaveAccessibleName("Tranus's Shelf")
+    expect(localStorage.getItem('slots.machine')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000 + 100))
+    expect(reels()).toHaveAccessibleName('Reels: Experience Potion, Experience Potion, Experience Potion on the win line')
+    expect(status()).toHaveTextContent('Three Experience Potions. You won 5 Gold on a stake of 50 Silver.')
+    expect(spinButton()).toHaveTextContent('Spin')
+  })
+
+  it('does not bring back a stake the machine dropped once it is offered again', async () => {
+    let current = state()
+    const { user, queryClient } = open(current, { 'GET /slots': () => json(200, current) })
+    await loaded()
+    await user.click(stake('25 Silver'))
+
+    current = state({ machines: machines({ shelf: { stakes: [10, 50, 100] } }) })
+    await poll(queryClient)
+    expect(stake('10 Silver')).toBeChecked()
+
+    current = state()
+    await poll(queryClient)
+    expect(stakeNames()).toEqual(['10 Silver', '25 Silver', '50 Silver'])
+    expect(stake('10 Silver')).toBeChecked()
+    expect(stake('25 Silver')).not.toBeChecked()
+
+    // Nor on the next visit.
+    cleanup()
+    open(state())
+    await loaded()
+    expect(stake('10 Silver')).toBeChecked()
   })
 
   it('stops quietly when the page is left mid-spin', async () => {
