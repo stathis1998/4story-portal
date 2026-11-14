@@ -47,7 +47,7 @@ describe('header menu', () => {
 
     const list = screen.getByRole('list', { name: 'Try Your Luck' })
     expect(list).toHaveAttribute('id', 'nav-try-your-luck')
-    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Roulette', 'Wheel of Fortune'])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Roulette', 'Slots', 'Wheel of Fortune'])
   })
 
   it('closes a group when you click elsewhere or open the other one', async () => {
@@ -118,6 +118,7 @@ describe('phone menu', () => {
       'Online',
       'Achievements',
       'Roulette',
+      'Slots',
       'Wheel of Fortune',
       'Hall of Fame',
       'Leaderboard',
@@ -128,7 +129,7 @@ describe('phone menu', () => {
       'Mounts & Pets',
       'Chakras & Auras',
     ])
-    expect(within(within(menu()).getByRole('list', { name: 'Try Your Luck' })).getAllByRole('link')).toHaveLength(2)
+    expect(within(within(menu()).getByRole('list', { name: 'Try Your Luck' })).getAllByRole('link')).toHaveLength(3)
     expect(within(within(menu()).getByRole('list', { name: 'Rankings' })).getAllByRole('link')).toHaveLength(3)
     expect(within(within(menu()).getByRole('list', { name: 'Tools' })).getAllByRole('link')).toHaveLength(5)
   })
