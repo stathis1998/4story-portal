@@ -25,7 +25,7 @@ function CharacterPage() {
   const { data, error, isPending, refetch, isFetching } = useQuery(profileQueryOptions(id))
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <div className="mb-6">{back}</div>
       {isPending ? (
         <div role="status" aria-label="Loading character" className="h-52 animate-pulse rounded-xs border border-line bg-surface" />

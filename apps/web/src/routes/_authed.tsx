@@ -2,6 +2,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, Outlet, redirect } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../components/Button'
+import { MobileMenu } from '../components/MobileMenu'
 import { NavGroup, type NavLink } from '../components/NavGroup'
 import { meQueryOptions, useLogout } from '../lib/session'
 
@@ -34,22 +35,34 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
   },
 ]
 
-const TOP_LINK = { className: 'hover:underline', activeProps: { className: 'text-fg' }, inactiveProps: { className: 'text-muted' } }
+// The pages that sit in the header on their own, ahead of the groups.
+const LINKS: NavLink[] = [
+  { to: '/characters', label: 'Characters' },
+  { to: '/online', label: 'Online' },
+  { to: '/achievements', label: 'Achievements' },
+  { to: '/wheel', label: 'Wheel' },
+]
+
+const TOP_LINK = { className: 'hover:underline pointer-coarse:py-2', activeProps: { className: 'text-fg' }, inactiveProps: { className: 'text-muted' } }
+const MENU_ID = 'phone-menu'
 
 function AuthedLayout() {
   const { data: me } = useSuspenseQuery(meQueryOptions)
   const logout = useLogout()
   const [open, setOpen] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const nav = useRef<HTMLElement>(null)
 
-  // An open group closes on Escape or on a click anywhere outside the menu.
+  // An open group closes on Escape or on a click anywhere outside the menu. Escape also closes the phone menu.
   useEffect(() => {
-    if (!open) return
+    if (!open && !menuOpen) return
     const onPointerDown = (event: PointerEvent) => {
       if (!nav.current?.contains(event.target as Node)) setOpen(null)
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(null)
+      if (event.key !== 'Escape') return
+      setOpen(null)
+      setMenuOpen(false)
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
@@ -57,27 +70,21 @@ function AuthedLayout() {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [open, menuOpen])
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+      {/* On a phone the header is one fixed-height row that stays on screen, with the pages behind a Menu button. */}
+      <header className="sticky top-0 z-40 border-b border-line bg-surface md:static">
+        <div className="mx-auto flex h-12 max-w-5xl items-center justify-between gap-x-4 gap-y-2 px-4 md:h-auto md:flex-wrap md:py-3">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <span className="font-display text-sm tracking-[0.35em] text-accent-text uppercase">4Story</span>
-            <nav ref={nav} aria-label="Main" className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm font-bold">
-              <Link to="/characters" {...TOP_LINK}>
-                Characters
-              </Link>
-              <Link to="/online" {...TOP_LINK}>
-                Online
-              </Link>
-              <Link to="/achievements" {...TOP_LINK}>
-                Achievements
-              </Link>
-              <Link to="/wheel" {...TOP_LINK}>
-                Wheel
-              </Link>
+            <nav ref={nav} aria-label="Main" className="hidden flex-wrap items-center gap-x-5 gap-y-1 text-sm font-bold md:flex">
+              {LINKS.map((link) => (
+                <Link key={link.to} to={link.to} {...TOP_LINK}>
+                  {link.label}
+                </Link>
+              ))}
               {GROUPS.map((group) => (
                 <NavGroup
                   key={group.label}
@@ -88,10 +95,9 @@ function AuthedLayout() {
                   onClose={() => setOpen(null)}
                 />
               ))}
-
             </nav>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-4 md:flex">
             {me?.isGm && (
               <Link to="/gm/teleport" className="text-sm font-bold text-accent-text hover:underline">
                 GM
@@ -104,7 +110,31 @@ function AuthedLayout() {
               Log out
             </Button>
           </div>
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls={MENU_ID}
+            onClick={() => setMenuOpen((value) => !value)}
+            className="-mr-2 flex h-11 items-center gap-2 px-2 text-sm font-bold text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent-text md:hidden"
+          >
+            <svg aria-hidden viewBox="0 0 16 12" className="h-3 w-4">
+              <path d={menuOpen ? 'M2 0l12 12M14 0L2 12' : 'M0 1h16M0 6h16M0 11h16'} fill="none" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            Menu
+          </button>
         </div>
+        {menuOpen && (
+          <MobileMenu
+            id={MENU_ID}
+            links={LINKS}
+            groups={GROUPS}
+            username={me?.username}
+            isGm={Boolean(me?.isGm)}
+            loggingOut={logout.isPending}
+            onLogout={() => logout.mutate()}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
       </header>
       <Outlet />
     </div>

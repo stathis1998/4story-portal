@@ -94,6 +94,22 @@
     font-variant-numeric: lining-nums tabular-nums;
   }
 
+  /* On a touch screen every control is at least a fingertip tall, and a field's text is large
+     enough that iOS doesn't zoom the page when it takes focus. A utility class still overrides both. */
+  @media (pointer: coarse) {
+    button,
+    select,
+    input:not([type="checkbox"], [type="radio"], [type="range"]) {
+      min-height: 2.75rem;
+    }
+
+    input,
+    select,
+    textarea {
+      font-size: 1rem;
+    }
+  }
+
   h1,
   h2,
   h3 {

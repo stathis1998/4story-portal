@@ -51,10 +51,10 @@ export function StaticCard(summary: CardProps) {
   )
 }
 
-/** The preview panel, sticky beside the list on wide screens. */
+/** The preview panel. It stays on screen while the list scrolls: beside it on wide screens, pinned under the header on narrow ones. */
 export function PreviewPanel({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <aside aria-label={label} className="rounded-xs border border-line bg-surface p-3 lg:sticky lg:top-4 lg:order-2 lg:w-96 lg:shrink-0">
+    <aside aria-label={label} className="sticky top-12 z-20 rounded-xs border border-line bg-surface p-3 max-lg:shadow-lg md:top-2 lg:top-4 lg:order-2 lg:w-96 lg:shrink-0">
       {children}
     </aside>
   )

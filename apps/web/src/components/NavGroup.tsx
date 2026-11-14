@@ -41,7 +41,7 @@ export function NavGroup({ label, links, open, onToggle, onClose }: Props) {
               <Link
                 to={link.to}
                 onClick={onClose}
-                className="block px-3 py-1.5 hover:bg-surface"
+                className="block px-3 py-1.5 hover:bg-surface pointer-coarse:py-2.5"
                 activeProps={{ className: 'text-fg' }}
                 inactiveProps={{ className: 'text-muted' }}
               >

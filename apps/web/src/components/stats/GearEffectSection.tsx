@@ -80,7 +80,7 @@ function EffectForm({ characterId, gear }: { characterId: string; gear: GearEffe
               type="button"
               aria-pressed={pressed}
               onClick={() => setSelected(effect.id)}
-              className={`flex flex-col items-start rounded-xs border px-2 py-1 text-left text-sm transition ${pressed ? 'border-accent bg-accent/15 text-fg' : 'border-line text-muted hover:text-fg'}`}
+              className={`flex flex-col items-start justify-center rounded-xs border px-2 py-1 text-left text-sm transition ${pressed ? 'border-accent bg-accent/15 text-fg' : 'border-line text-muted hover:text-fg'}`}
             >
               <span className="font-bold">{effect.name}</span>
               {effect.note && <span className="text-[11px] leading-tight">{effect.note}</span>}

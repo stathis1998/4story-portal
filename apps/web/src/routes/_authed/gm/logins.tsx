@@ -51,7 +51,7 @@ function LoginsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <GmNav />
       <div className="flex items-center gap-4">
         <h1 className="text-4xl">Logins</h1>

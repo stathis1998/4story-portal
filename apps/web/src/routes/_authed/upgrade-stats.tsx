@@ -54,7 +54,7 @@ function UpgradeStatsPage() {
   const shown = isPlaceholderData ? undefined : data?.character
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Upgrade Stats</h1>
       <p className="mt-1 mb-6 text-muted">
         Every upgrade scroll and gemstone roll{shown ? ` by ${shown.name}` : ' on the server'}
@@ -322,35 +322,40 @@ function Misfortune({ losses }: { losses: UpgradeLoss[] }) {
   )
 }
 
+// Eight columns don't fit a phone, so there the table scrolls sideways: the columns get room between them, the headings
+// stay on one line, and the level column stays put so a row never loses its label.
+const LEVEL_CELL = 'max-sm:pl-4 max-sm:whitespace-nowrap'
+const LEVEL_FIRST = 'py-1 text-left max-sm:sticky max-sm:left-0 max-sm:bg-surface max-sm:pr-2'
+
 function LevelTable({ stats, kind }: { stats: UpgradeKindStats; kind: Kind }) {
   return (
-    <details className="rounded-xs border border-line bg-surface p-5">
+    <details className="rounded-xs border border-line bg-surface p-4 sm:p-5">
       <summary className="cursor-pointer font-bold">Every level as a table</summary>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-right text-sm tabular-nums">
           <thead className="text-muted">
             <tr>
-              <th className="py-1 text-left font-normal">Level</th>
-              <th className="font-normal">Attempts</th>
+              <th className={`font-normal ${LEVEL_FIRST}`}>Level</th>
+              <th className={`font-normal ${LEVEL_CELL}`}>Attempts</th>
               {OUTCOME_ORDER.map((part) => (
-                <th key={part} className="font-normal">
+                <th key={part} className={`font-normal ${LEVEL_CELL}`}>
                   {OUTCOME_LABELS[part]}
                 </th>
               ))}
-              <th className="font-normal">Won</th>
-              <th className="font-normal">Odds</th>
+              <th className={`font-normal ${LEVEL_CELL}`}>Won</th>
+              <th className={`font-normal ${LEVEL_CELL}`}>Odds</th>
             </tr>
           </thead>
           <tbody>
             {stats.levels.map((level) => (
               <tr key={level.level} className="border-t border-line">
-                <td className="py-1 text-left">{levelLabel(kind, level.level)}</td>
-                <td>{count(attemptsOf(level))}</td>
+                <td className={LEVEL_FIRST}>{levelLabel(kind, level.level)}</td>
+                <td className={LEVEL_CELL}>{count(attemptsOf(level))}</td>
                 {OUTCOME_ORDER.map((part) => (
-                  <td key={part}>{count(level[part])}</td>
+                  <td key={part} className={LEVEL_CELL}>{count(level[part])}</td>
                 ))}
-                <td>{percent(level.success, attemptsOf(level))}</td>
-                <td>{Math.round(level.expectedRate * 100)}%</td>
+                <td className={LEVEL_CELL}>{percent(level.success, attemptsOf(level))}</td>
+                <td className={LEVEL_CELL}>{Math.round(level.expectedRate * 100)}%</td>
               </tr>
             ))}
           </tbody>

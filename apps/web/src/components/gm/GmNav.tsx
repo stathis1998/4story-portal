@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-const link = 'text-sm font-bold hover:underline'
+const link = 'text-sm font-bold hover:underline pointer-coarse:py-2'
 
 export function GmNav() {
   return (

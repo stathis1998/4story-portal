@@ -79,7 +79,7 @@ function EffectsPage() {
   const layer: GradeLayer | null = weapon.data && skin !== null ? (effects.data?.layers[layerKey(weapon.data.kind, skin)] ?? null) : null
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Effects</h1>
       <p className="mt-1 mb-6 text-muted">
         See any weapon or armour piece the way the game draws it at each upgrade level. The model, the glow, its colours and how it
@@ -100,15 +100,15 @@ function EffectsPage() {
         </section>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-[1fr_22rem]">
-          <section aria-label="Preview" className="rounded-xs border border-line bg-surface p-5">
-            <h2 className="text-2xl">{weapon.data?.name ?? 'Loading...'}</h2>
+          <section aria-label="Preview" className="sticky top-12 z-20 rounded-xs border border-line bg-surface p-3 max-lg:shadow-lg md:top-2 lg:static lg:p-5">
+            <h2 className="text-xl lg:text-2xl">{weapon.data?.name ?? 'Loading...'}</h2>
             {weapon.data && (
               <p className="text-sm text-muted">
                 {kindName(weapon.data.kind)}, level {weapon.data.level}
               </p>
             )}
             {weapon.data && (
-              <Suspense fallback={<div className="h-96" />}>
+              <Suspense fallback={<div className="h-[32svh] max-h-96 min-h-44 lg:h-96" />}>
                 <WeaponViewer itemId={search.item} skinId={search.skin ?? null} layer={layer} name={weapon.data.name} />
               </Suspense>
             )}
@@ -268,7 +268,7 @@ function EffectPicker({ selected, swatch, onChange }: { selected: number; swatch
     <div>
       <p className="text-xs font-bold tracking-wider text-muted uppercase">Effect</p>
       <p className="mt-1 text-lg font-bold">{current?.name}</p>
-      <div role="group" aria-label="Effects" className="mt-2 grid max-h-96 grid-cols-2 gap-1.5 overflow-y-auto pr-1">
+      <div role="group" aria-label="Effects" className="mt-2 grid grid-cols-2 gap-1.5 lg:max-h-96 lg:overflow-y-auto lg:pr-1">
         {GRADE_EFFECTS.map((effect) => {
           const color = swatch(effect.id)
           const pressed = effect.id === selected
@@ -278,7 +278,7 @@ function EffectPicker({ selected, swatch, onChange }: { selected: number; swatch
               type="button"
               aria-pressed={pressed}
               onClick={() => onChange(effect.id)}
-              className={`flex flex-col items-start rounded-xs border px-2 py-1 text-left text-sm transition ${pressed ? 'border-accent bg-accent/15 text-fg' : 'border-line text-muted hover:text-fg'}`}
+              className={`flex flex-col items-start justify-center rounded-xs border px-2 py-1 text-left text-sm transition ${pressed ? 'border-accent bg-accent/15 text-fg' : 'border-line text-muted hover:text-fg'}`}
             >
               <span className="flex items-center gap-1.5 font-bold">
                 <span

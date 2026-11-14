@@ -19,7 +19,7 @@ function CharactersPage() {
   const { data: overview, isError: statsFailed } = useQuery(overviewQueryOptions)
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <EventBanner />
       <NewsPanel />
       <h1 className="text-4xl">Your characters</h1>

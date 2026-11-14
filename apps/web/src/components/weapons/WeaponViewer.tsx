@@ -78,6 +78,8 @@ function createStage(host: HTMLElement): Stage {
   controls.addEventListener('start', () => {
     controls.autoRotate = false
   })
+  // OrbitControls takes every touch. Leave vertical swipes to the page, so a finger on the model can still scroll.
+  renderer.domElement.style.touchAction = 'pan-y'
 
   const resize = new ResizeObserver(() => {
     renderer.setSize(host.clientWidth, host.clientHeight)
@@ -237,7 +239,7 @@ export default function WeaponViewer({ itemId, skinId, layer, name }: Props) {
 
   return (
     <div className="relative">
-      <div ref={host} role="img" aria-label={`3D model of ${name}`} className="h-96 w-full cursor-grab active:cursor-grabbing" />
+      <div ref={host} role="img" aria-label={`3D model of ${name}`} className="h-[32svh] max-h-96 min-h-44 w-full cursor-grab active:cursor-grabbing lg:h-96" />
       {message && <p className="absolute inset-0 flex items-center justify-center text-sm text-muted">{message}</p>}
     </div>
   )

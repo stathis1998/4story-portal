@@ -181,7 +181,7 @@ export function ChakraPreview({ effect, tint, name }: { effect: ChakraEffect; ti
       height={HEIGHT}
       role="img"
       aria-label={`Preview of ${name}`}
-      className="mx-auto block h-80 w-80 max-w-full rounded-xs bg-[#0b0d14]"
+      className="mx-auto block h-[28svh] max-h-56 min-h-36 w-auto max-w-full rounded-xs bg-[#0b0d14] lg:h-80 lg:max-h-none"
     />
   )
 }

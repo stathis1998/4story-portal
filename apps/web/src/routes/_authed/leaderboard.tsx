@@ -13,7 +13,7 @@ function LeaderboardPage() {
   const { data, isPending, isError, refetch, isFetching } = useQuery(leaderboardQueryOptions)
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Leaderboard</h1>
       <p className="mt-1 mb-6 text-muted">
         Totals per character. Every party member near a kill gets credit for it. Damage is the HP actually removed, and pets and

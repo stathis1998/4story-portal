@@ -10,9 +10,10 @@ export const Route = createFileRoute('/_authed/chakras-auras')({
 
 function ChakrasAurasPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Chakras & Auras</h1>
       <p className="mt-1 mb-6 text-muted">Every chakra and aura in the game.</p>
+      <p className="-mt-4 mb-6 text-sm text-muted lg:hidden">Pick one to see a rough preview of it. In game it moves differently.</p>
 
       <Effects title="Chakras" preview="Chakra preview" items={CHAKRAS} />
       <Effects title="Auras" preview="Aura preview" items={AURAS} />
@@ -29,9 +30,9 @@ function Effects({ title, preview, items }: { title: string; preview: string; it
       <SectionTitle title={title} count={items.length} />
       <PreviewLayout>
         <PreviewPanel label={preview}>
-          <h3 className="mb-2 text-lg font-bold">{selected.name}</h3>
+          <h3 className="mb-1 text-lg font-bold lg:mb-2">{selected.name}</h3>
           <ChakraPreview effect={selected.effect} tint={selected.tint} name={selected.name} />
-          <p className="mt-2 text-sm text-muted">A rough preview made from the game's own sprites and colours. In game it moves differently.</p>
+          <p className="mt-2 text-sm text-muted max-lg:hidden">A rough preview made from the game's own sprites and colours. In game it moves differently.</p>
         </PreviewPanel>
 
         <CardList label={title}>

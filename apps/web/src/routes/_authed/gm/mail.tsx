@@ -154,7 +154,7 @@ function MailPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
+    <main className="mx-auto max-w-3xl px-4 py-6 md:py-10">
       <GmNav />
       <h1 className="text-4xl">Mail</h1>
       <p className="mt-2 text-sm text-muted">
