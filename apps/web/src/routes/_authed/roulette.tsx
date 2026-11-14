@@ -1,6 +1,6 @@
 import { checkBets, rouletteChips, rouletteColour, silverText, walletSilver } from '@4story-portal/shared'
 import type { RouletteBet, RouletteSpinResult, RouletteSpinView, RouletteSpot, RouletteState } from '@4story-portal/shared'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useId, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
@@ -10,6 +10,7 @@ import { BettingTable } from '../../components/roulette/BettingTable'
 import { ChipRack } from '../../components/roulette/ChipRack'
 import { RouletteWheel } from '../../components/roulette/RouletteWheel'
 import { POCKET_BADGE, rouletteErrorMessage, rouletteQueryOptions, spinRoulette } from '../../lib/roulette'
+import { reducedMotion, useChosenCharacter, useHeldSpin } from '../../lib/wallet-game'
 import { formatSpinTime } from '../../lib/wheel'
 
 export const Route = createFileRoute('/_authed/roulette')({
@@ -22,27 +23,6 @@ const card = 'rounded-xs border border-line bg-surface p-4 sm:p-5'
 const NOT_ENOUGH = 'Not enough money in that wallet'
 const LAST_NUMBERS = 15
 const LAST_SPINS = 10
-
-/** The character picked last time, if the browser lets us remember. */
-function rememberedCharacter(): number | null {
-  try {
-    const id = Number(localStorage.getItem(CHARACTER_KEY))
-    return Number.isInteger(id) && id > 0 ? id : null
-  } catch {
-    return null
-  }
-}
-
-function rememberCharacter(id: number) {
-  try {
-    localStorage.setItem(CHARACTER_KEY, String(id))
-  } catch {
-    // Storage is blocked: the choice still holds for this visit.
-  }
-}
-
-/** No animation where the browser asks for none, or cannot say. */
-const reducedMotion = () => typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** One chip put down, in the order they went on, so Undo can take back the last. */
 type Chip = { spot: RouletteSpot; amount: number }
@@ -66,48 +46,23 @@ const resultLine = (spin: RouletteSpinView) =>
 
 const resultClass = (spin: RouletteSpinView) => (spin.payout > 0 ? 'font-bold text-accent-text' : '')
 
-/** A spin the wheel is still turning toward, with what the page showed before it, so nothing gives the result away. */
-type Turning = { result: RouletteSpinResult; before: RouletteState; chips: Chip[]; characterId: number }
-
-/**
- * The state to show once the wheel stops. If the API could not read the characters back after a good spin,
- * the list from before stays, with the wallet the spin left.
- */
-function afterSpin({ result, before, characterId }: Turning, current: RouletteState | undefined): RouletteState {
-  const base = current ?? before
-  const characters = result.state.characters.length > 0 ? result.state.characters : base.characters
-  const mine = result.state.mine.some((entry) => entry.id === result.spin.id) ? result.state.mine : [result.spin, ...base.mine]
-  return {
-    ...result.state,
-    mine,
-    characters: characters.map((character) => (character.id === characterId ? { ...character, wallet: result.wallet } : character)),
-  }
-}
-
 function RoulettePage() {
-  const queryClient = useQueryClient()
   const { data, isError } = useQuery(rouletteQueryOptions)
-  // The character whose money is at stake. Once set it stays, even if a poll shows it in the game: money only
-  // comes out of a wallet the player picked or saw picked.
-  const [chosen, setChosen] = useState<number | null>(null)
-  const [remembered] = useState(rememberedCharacter)
+  // What the page showed when Spin was pressed stays on screen until the wheel stops.
+  const { view, busy, shown, send, reveal: revealSpin } = useHeldSpin<RouletteState, RouletteSpinResult>(rouletteQueryOptions.queryKey, data)
+  // The character whose money is at stake.
+  const { character, playable: characterFree, choose, changedByPage } = useChosenCharacter(view?.characters, CHARACTER_KEY)
   const [chip, setChip] = useState<number | null>(null)
   const [chips, setChips] = useState<Chip[]>([])
   const [lastChips, setLastChips] = useState<Chip[] | null>(null)
-  const [sending, setSending] = useState(false)
-  // What the page showed when Spin was pressed. It stays on screen until the wheel stops, so a poll answered
-  // after the bet went through cannot give the result away.
-  const [frozen, setFrozen] = useState<RouletteState | null>(null)
-  const [turning, setTurning] = useState<Turning | null>(null)
   const [wheelSpin, setWheelSpin] = useState<{ pocket: number; key: number } | null>(null)
   const [animate, setAnimate] = useState(false)
-  const [shown, setShown] = useState<RouletteSpinResult | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const pickerId = useId()
   const lastNumbersId = useId()
   const wheelBox = useRef<HTMLDivElement>(null)
 
-  if (!data) {
+  if (!view) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-6 md:py-10">
         <h1 className="text-4xl">Roulette</h1>
@@ -124,20 +79,12 @@ function RoulettePage() {
     )
   }
 
-  const view = frozen ?? data
-  const free = view.characters.filter((entry) => !entry.online)
-  const character = view.characters.find((entry) => entry.id === chosen)
-  // The first time someone can play, the remembered character if it is free, otherwise the first free one. A
-  // chosen character that is gone from the list (deleted, say) is picked again the same way, and its chips go:
-  // they were put down against a wallet the player picked, not this one.
-  if (!character && free.length > 0) {
-    setChosen((free.find((entry) => entry.id === remembered) ?? free[0]).id)
-    if (chips.length > 0) setChips([])
-  }
+  // When the page had to pick another character, the chips go: they were put down against a wallet the player
+  // picked, not this one.
+  if (changedByPage && chips.length > 0) setChips([])
   const inGame = character?.online === true
   const money = character && !inGame ? walletSilver(character.wallet) : 0
-  const busy = sending || turning !== null
-  const playable = view.live && character !== undefined && !inGame && !busy
+  const playable = view.live && characterFree && !busy
   const rack = rouletteChips(view.limits)
   const chipValue = chip !== null && rack.includes(chip) ? chip : rack[0]
   const bets = betsOf(chips)
@@ -162,17 +109,10 @@ function RoulettePage() {
   }
 
   function reveal() {
-    if (!turning) return
-    const { result } = turning
-    setTurning(null)
-    setFrozen(null)
-    setShown(result)
-    setLastChips(turning.chips)
+    if (!revealSpin()) return
+    // Nothing can change the chips while the wheel turns, so these are the ones that were spun.
+    setLastChips(chips)
     setChips([])
-    queryClient.setQueryData<RouletteState>(rouletteQueryOptions.queryKey, (current) => afterSpin(turning, current))
-    // A part of the state the API could not read after the bet comes back as a fallback (a closed table, no big
-    // wins, no characters), so the page always reads it again.
-    void queryClient.invalidateQueries({ queryKey: rouletteQueryOptions.queryKey })
   }
 
   async function onSpin() {
@@ -181,24 +121,13 @@ function RoulettePage() {
     const refusal = refusalFor(chips, bets)
     if (refusal) return setProblem(refusal)
     setProblem(null)
-    setShown(null)
-    setFrozen(view)
-    setSending(true)
     let result: RouletteSpinResult
     try {
-      result = await spinRoulette(character.id, bets)
+      result = await send(character.id, () => spinRoulette(character.id, bets))
     } catch (err) {
-      setSending(false)
-      setFrozen(null)
       setProblem(rouletteErrorMessage(err))
-      // A refusal usually means the page was out of date: new limits, a new wallet, a character now in the game.
-      void queryClient.invalidateQueries({ queryKey: rouletteQueryOptions.queryKey })
       return
     }
-    // A poll that left before the spin would land after it with the old wallet; one that starts now is up to date.
-    await queryClient.cancelQueries({ queryKey: rouletteQueryOptions.queryKey })
-    setSending(false)
-    setTurning({ result, before: view, chips, characterId: character.id })
     const motion = !reducedMotion()
     setAnimate(motion)
     setWheelSpin({ pocket: result.spin.pocket, key: result.spin.id })
@@ -206,7 +135,7 @@ function RoulettePage() {
     wheelBox.current?.scrollIntoView?.({ block: 'center', behavior: motion ? 'smooth' : 'auto' })
   }
 
-  const allOnline = view.characters.length > 0 && free.length === 0
+  const allOnline = view.characters.length > 0 && view.characters.every((entry) => entry.online)
   // Why the table cannot be played now. A result is shown beside it, never instead: that spin moved money.
   const note = !view.live
     ? 'The table is not open yet. Have a look around: betting starts soon.'
@@ -237,8 +166,7 @@ function RoulettePage() {
               value={character?.id ?? null}
               disabled={busy}
               onChange={(id) => {
-                setChosen(id)
-                rememberCharacter(id)
+                choose(id)
                 setProblem(null)
               }}
             />

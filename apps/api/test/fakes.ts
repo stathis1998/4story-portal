@@ -42,17 +42,17 @@ import {
   type WheelItemRow,
   type WheelRepository,
 } from '../src/wheel/wheel.repository.js';
-import { ROULETTE_DEFAULT_LIMITS } from '@4story-portal/shared';
+import { ROULETTE_DEFAULT_LIMITS, SLOT_BIG_WIN, SLOT_MACHINES, type SlotMachineKey, type Wallet } from '@4story-portal/shared';
+import type { SlotBetInput, SlotSettings, SlotSpinRow, SlotsRepository, SlotTotalsRow } from '../src/slots/slots.repository.js';
 import {
   type BetInput,
-  type BetOutcome,
   type RouletteRepository,
   type RouletteSettings,
   type RouletteSpinRow,
   type RouletteTotalsRow,
-  type WalletCharacterRow,
 } from '../src/roulette/roulette.repository.js';
-import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR } from '../src/games/wallet-bet.js';
+import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR, type BetCode, type BetOutcome } from '../src/games/wallet-bet.js';
+import type { WalletCharacterRow, WalletsRepository } from '../src/games/wallets.repository.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -642,21 +642,75 @@ export class FakeWheelRepository implements WheelRepository {
   }
 }
 
-// In-memory stand-in for the roulette's settings, wallets and spin table.
+/** What a game's bet hands the wallet batch: whole Silver. */
+export type FakeWalletMove = { userId: number; charId: number; stake: number; payout: number };
+export type FakeWalletMoved =
+  | { code: typeof BET_OK; name: string; wallet: Wallet }
+  | { code: Exclude<BetCode, typeof BET_OK>; name: string | null };
+
+// In-memory stand-in for the accounts' wallets, and for what the shared bet batch does to them, so every
+// game's fake pays from and to the same rows.
+export class FakeWalletsRepository implements WalletsRepository {
+  rows: (WalletCharacterRow & { userId: number })[] = [];
+  /** characters() rejects. */
+  failing = false;
+
+  async characters(userId: number): Promise<WalletCharacterRow[]> {
+    if (this.failing) throw new Error('Invalid object name TCHARTABLE');
+    return this.rows.filter((row) => row.userId === userId).map(({ userId: _owner, ...row }) => row);
+  }
+
+  /** The batch's checks and arithmetic, in the same order; `live` is the game's switch. */
+  move(input: FakeWalletMove, live: boolean): FakeWalletMoved {
+    // The real batch refuses the same way, before it reads anything.
+    if (input.stake < 0 || input.payout < 0) throw new Error('Stake and payout cannot be negative');
+    if (!live) return { code: BET_CLOSED, name: null };
+    const row = this.rows.find((c) => c.charId === input.charId && c.userId === input.userId);
+    if (!row) return { code: BET_NOT_YOURS, name: null };
+    if (row.online) return { code: BET_ONLINE, name: row.name };
+    // Bronze, like the database.
+    const before = row.gold * 1_000_000 + row.silver * 1000 + row.copper;
+    if (before < input.stake * 1000) return { code: BET_POOR, name: row.name };
+    const after = before - input.stake * 1000 + input.payout * 1000;
+    row.gold = Math.floor(after / 1_000_000);
+    row.silver = Math.floor(after / 1000) % 1000;
+    row.copper = after % 1000;
+    return { code: BET_OK, name: row.name, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
+  }
+}
+
+// In-memory stand-in for the roulette's settings and spin table; it pays from and to `wallets`.
 export class FakeRouletteRepository implements RouletteRepository {
   settingsRow: RouletteSettings = { live: false, ...ROULETTE_DEFAULT_LIMITS };
-  characterRows: (WalletCharacterRow & { userId: number })[] = [];
   spinRows: (RouletteSpinRow & { numberHit: boolean; bets: string })[] = [];
   /** The database's clock: stamps new spins and decides today. */
   now: () => Date = () => new Date();
-  /** Every call rejects, as when the table is not in the database. */
-  failing = false;
   /** Every bet() call, including the ones that changed nothing. */
   readonly betCalls: BetInput[] = [];
   private nextId = 1;
+  private down = false;
+
+  constructor(readonly wallets: FakeWalletsRepository = new FakeWalletsRepository()) {}
+
+  /** The wallets' rows, which the bet pays from and to. */
+  get characterRows(): (WalletCharacterRow & { userId: number })[] {
+    return this.wallets.rows;
+  }
+  set characterRows(rows: (WalletCharacterRow & { userId: number })[]) {
+    this.wallets.rows = rows;
+  }
+
+  /** Every call rejects, the wallets' list too, as when the page can read nothing at all. */
+  get failing(): boolean {
+    return this.down;
+  }
+  set failing(value: boolean) {
+    this.down = value;
+    this.wallets.failing = value;
+  }
 
   private check(): void {
-    if (this.failing) throw new Error('Invalid object name TPortalRouletteSpin');
+    if (this.down) throw new Error('Invalid object name TPortalRouletteSpin');
   }
 
   private plain(row: RouletteSpinRow & { numberHit?: boolean; bets?: string }): RouletteSpinRow {
@@ -674,32 +728,16 @@ export class FakeRouletteRepository implements RouletteRepository {
     this.settingsRow = { ...settings };
   }
 
-  async characters(userId: number): Promise<WalletCharacterRow[]> {
-    this.check();
-    return this.characterRows.filter((row) => row.userId === userId).map(({ userId: _owner, ...row }) => row);
-  }
-
   async bet(input: BetInput): Promise<BetOutcome> {
     this.check();
     this.betCalls.push(input);
-    // The real batch refuses the same way, before it reads anything.
-    if (input.stake < 0 || input.payout < 0) throw new Error('Stake and payout cannot be negative');
-    if (!this.settingsRow.live) return { code: BET_CLOSED, name: null };
-    const row = this.characterRows.find((c) => c.charId === input.charId && c.userId === input.userId);
-    if (!row) return { code: BET_NOT_YOURS, name: null };
-    if (row.online) return { code: BET_ONLINE, name: row.name };
-    // Bronze, like the database.
-    const before = row.gold * 1_000_000 + row.silver * 1000 + row.copper;
-    if (before < input.stake * 1000) return { code: BET_POOR, name: row.name };
-    const after = before - input.stake * 1000 + input.payout * 1000;
-    row.gold = Math.floor(after / 1_000_000);
-    row.silver = Math.floor(after / 1000) % 1000;
-    row.copper = after % 1000;
+    const moved = this.wallets.move(input, this.settingsRow.live);
+    if (moved.code !== BET_OK) return moved;
     const id = this.nextId++;
     this.spinRows.push({
       id,
       userId: input.userId,
-      character: row.name,
+      character: moved.name,
       spunAt: this.now(),
       pocket: input.pocket,
       stake: input.stake,
@@ -707,7 +745,7 @@ export class FakeRouletteRepository implements RouletteRepository {
       numberHit: input.numberHit,
       bets: input.bets,
     });
-    return { code: BET_OK, id, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
+    return { code: BET_OK, id, wallet: moved.wallet };
   }
 
   private newest(rows: typeof this.spinRows, limit: number): RouletteSpinRow[] {
@@ -738,5 +776,112 @@ export class FakeRouletteRepository implements RouletteRepository {
     });
     const day = this.now().toISOString().slice(0, 10);
     return { today: sum(this.spinRows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(this.spinRows) };
+  }
+}
+
+// In-memory stand-in for the slots' settings and spin table; it pays from and to `wallets`.
+export class FakeSlotsRepository implements SlotsRepository {
+  settingsRow: SlotSettings = {
+    live: false,
+    machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
+  };
+  /** machine is a string so a test can plant a spin for a machine the code no longer has. */
+  spinRows: (SlotSpinRow & { multiple: number })[] = [];
+  /** The database's clock: stamps new spins and decides today. */
+  now: () => Date = () => new Date();
+  /** Every bet() call, including the ones that changed nothing. */
+  readonly betCalls: SlotBetInput[] = [];
+  /** The slots' own tables reject. The wallets' list is another table and has its own flag (`wallets.failing`). */
+  failing = false;
+  private nextId = 1;
+
+  constructor(readonly wallets: FakeWalletsRepository = new FakeWalletsRepository()) {}
+
+  /** The wallets' rows, which the bet pays from and to. */
+  get characterRows(): (WalletCharacterRow & { userId: number })[] {
+    return this.wallets.rows;
+  }
+  set characterRows(rows: (WalletCharacterRow & { userId: number })[]) {
+    this.wallets.rows = rows;
+  }
+
+  private check(): void {
+    if (this.failing) throw new Error('Invalid object name TPortalSlotSpin');
+  }
+
+  private plain({ multiple: _multiple, ...row }: SlotSpinRow & { multiple?: number }): SlotSpinRow {
+    return row;
+  }
+
+  async settings(): Promise<SlotSettings> {
+    this.check();
+    return structuredClone(this.settingsRow);
+  }
+
+  async saveFloor(live: boolean): Promise<void> {
+    this.check();
+    this.settingsRow.live = live;
+  }
+
+  async saveMachine(key: SlotMachineKey, settings: { live: boolean; stakes: [number, number, number] }): Promise<void> {
+    this.check();
+    this.settingsRow.machines[key] = { live: settings.live, stakes: [...settings.stakes] };
+  }
+
+  /** Like the real batch, only the floor switch is checked here; the rest is the service's job. */
+  async bet(input: SlotBetInput): Promise<BetOutcome> {
+    this.check();
+    this.betCalls.push(input);
+    const moved = this.wallets.move(input, this.settingsRow.live);
+    if (moved.code !== BET_OK) return moved;
+    const id = this.nextId++;
+    this.spinRows.push({
+      id,
+      userId: input.userId,
+      character: moved.name,
+      spunAt: this.now(),
+      machine: input.machine,
+      stops: input.stops,
+      stake: input.stake,
+      payout: input.payout,
+      multiple: input.multiple,
+    });
+    return { code: BET_OK, id, wallet: moved.wallet };
+  }
+
+  private newest(rows: typeof this.spinRows, limit: number): SlotSpinRow[] {
+    return [...rows].sort((a, b) => b.id - a.id).slice(0, limit).map((row) => this.plain(row));
+  }
+
+  async spinsOf(userId: number, limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.userId === userId), limit);
+  }
+
+  async bigWins(limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.multiple >= SLOT_BIG_WIN), limit);
+  }
+
+  async latest(limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows, limit);
+  }
+
+  async totals(): Promise<Record<string, { today: SlotTotalsRow; allTime: SlotTotalsRow }>> {
+    this.check();
+    const sum = (rows: typeof this.spinRows): SlotTotalsRow => ({
+      spins: rows.length,
+      staked: rows.reduce((total, row) => total + row.stake, 0),
+      paid: rows.reduce((total, row) => total + row.payout, 0),
+    });
+    const day = this.now().toISOString().slice(0, 10);
+    const machines = [...new Set(this.spinRows.map((row) => row.machine))];
+    return Object.fromEntries(
+      machines.map((machine) => {
+        const rows = this.spinRows.filter((row) => row.machine === machine);
+        return [machine, { today: sum(rows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(rows) }];
+      }),
+    );
   }
 }

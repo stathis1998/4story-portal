@@ -34,7 +34,7 @@ describe('/api/roulette', () => {
       { ...base, charId: 9, userId: playerId + 50, name: 'Stranger', gold: 5, silver: 0 },
     ];
     gm = new FakeGmRepository();
-    app = await createTestApp({ accounts, gm, roulette });
+    app = await createTestApp({ accounts, gm, roulette, wallets: roulette.wallets });
     player = request.agent(app.getHttpServer());
     await player.post('/api/auth/login').send({ username: 'newuser', password: 'secret1' }).expect(200);
     moose = request.agent(app.getHttpServer());

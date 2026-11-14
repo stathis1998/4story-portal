@@ -23,6 +23,7 @@ import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts
 import { Route as AuthedMountsPetsRouteImport } from './routes/_authed/mounts-pets'
 import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
 import { Route as AuthedRouletteRouteImport } from './routes/_authed/roulette'
+import { Route as AuthedSlotsRouteImport } from './routes/_authed/slots'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
@@ -33,6 +34,7 @@ import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
 import { Route as AuthedGmRouletteRouteImport } from './routes/_authed/gm/roulette'
+import { Route as AuthedGmSlotsRouteImport } from './routes/_authed/gm/slots'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
 import { Route as AuthedGmWheelRouteImport } from './routes/_authed/gm/wheel'
@@ -107,6 +109,11 @@ const AuthedRouletteRoute = AuthedRouletteRouteImport.update({
   path: '/roulette',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedSlotsRoute = AuthedSlotsRouteImport.update({
+  id: '/slots',
+  path: '/slots',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
   id: '/soul-lottery',
   path: '/soul-lottery',
@@ -157,6 +164,11 @@ const AuthedGmRouletteRoute = AuthedGmRouletteRouteImport.update({
   path: '/gm/roulette',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmSlotsRoute = AuthedGmSlotsRouteImport.update({
+  id: '/gm/slots',
+  path: '/gm/slots',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmTeleportRoute = AuthedGmTeleportRouteImport.update({
   id: '/gm/teleport',
   path: '/gm/teleport',
@@ -192,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/roulette': typeof AuthedRouletteRoute
+  '/slots': typeof AuthedSlotsRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -202,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
   '/gm/roulette': typeof AuthedGmRouletteRoute
+  '/gm/slots': typeof AuthedGmSlotsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/gm/wheel': typeof AuthedGmWheelRoute
@@ -221,6 +235,7 @@ export interface FileRoutesByTo {
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/roulette': typeof AuthedRouletteRoute
+  '/slots': typeof AuthedSlotsRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -231,6 +246,7 @@ export interface FileRoutesByTo {
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
   '/gm/roulette': typeof AuthedGmRouletteRoute
+  '/gm/slots': typeof AuthedGmSlotsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/gm/wheel': typeof AuthedGmWheelRoute
@@ -252,6 +268,7 @@ export interface FileRoutesById {
   '/_authed/mounts-pets': typeof AuthedMountsPetsRoute
   '/_authed/online': typeof AuthedOnlineRoute
   '/_authed/roulette': typeof AuthedRouletteRoute
+  '/_authed/slots': typeof AuthedSlotsRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -262,6 +279,7 @@ export interface FileRoutesById {
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/mail': typeof AuthedGmMailRoute
   '/_authed/gm/roulette': typeof AuthedGmRouletteRoute
+  '/_authed/gm/slots': typeof AuthedGmSlotsRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
   '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
   '/_authed/gm/wheel': typeof AuthedGmWheelRoute
@@ -283,6 +301,7 @@ export interface FileRouteTypes {
     | '/mounts-pets'
     | '/online'
     | '/roulette'
+    | '/slots'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -293,6 +312,7 @@ export interface FileRouteTypes {
     | '/gm/logins'
     | '/gm/mail'
     | '/gm/roulette'
+    | '/gm/slots'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/gm/wheel'
@@ -312,6 +332,7 @@ export interface FileRouteTypes {
     | '/mounts-pets'
     | '/online'
     | '/roulette'
+    | '/slots'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -322,6 +343,7 @@ export interface FileRouteTypes {
     | '/gm/logins'
     | '/gm/mail'
     | '/gm/roulette'
+    | '/gm/slots'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/gm/wheel'
@@ -342,6 +364,7 @@ export interface FileRouteTypes {
     | '/_authed/mounts-pets'
     | '/_authed/online'
     | '/_authed/roulette'
+    | '/_authed/slots'
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
@@ -352,6 +375,7 @@ export interface FileRouteTypes {
     | '/_authed/gm/logins'
     | '/_authed/gm/mail'
     | '/_authed/gm/roulette'
+    | '/_authed/gm/slots'
     | '/_authed/gm/teleport'
     | '/_authed/gm/vendors'
     | '/_authed/gm/wheel'
@@ -465,6 +489,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedRouletteRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/slots': {
+      id: '/_authed/slots'
+      path: '/slots'
+      fullPath: '/slots'
+      preLoaderRoute: typeof AuthedSlotsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/soul-lottery': {
       id: '/_authed/soul-lottery'
       path: '/soul-lottery'
@@ -535,6 +566,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmRouletteRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/slots': {
+      id: '/_authed/gm/slots'
+      path: '/gm/slots'
+      fullPath: '/gm/slots'
+      preLoaderRoute: typeof AuthedGmSlotsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/teleport': {
       id: '/_authed/gm/teleport'
       path: '/gm/teleport'
@@ -577,6 +615,7 @@ interface AuthedRouteChildren {
   AuthedMountsPetsRoute: typeof AuthedMountsPetsRoute
   AuthedOnlineRoute: typeof AuthedOnlineRoute
   AuthedRouletteRoute: typeof AuthedRouletteRoute
+  AuthedSlotsRoute: typeof AuthedSlotsRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
@@ -587,6 +626,7 @@ interface AuthedRouteChildren {
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmMailRoute: typeof AuthedGmMailRoute
   AuthedGmRouletteRoute: typeof AuthedGmRouletteRoute
+  AuthedGmSlotsRoute: typeof AuthedGmSlotsRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
   AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
   AuthedGmWheelRoute: typeof AuthedGmWheelRoute
@@ -604,6 +644,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMountsPetsRoute: AuthedMountsPetsRoute,
   AuthedOnlineRoute: AuthedOnlineRoute,
   AuthedRouletteRoute: AuthedRouletteRoute,
+  AuthedSlotsRoute: AuthedSlotsRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
@@ -614,6 +655,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmMailRoute: AuthedGmMailRoute,
   AuthedGmRouletteRoute: AuthedGmRouletteRoute,
+  AuthedGmSlotsRoute: AuthedGmSlotsRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
   AuthedGmVendorsRoute: AuthedGmVendorsRoute,
   AuthedGmWheelRoute: AuthedGmWheelRoute,

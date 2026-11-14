@@ -19,6 +19,7 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
     label: 'Try Your Luck',
     links: [
       { to: '/roulette', label: 'Roulette' },
+      { to: '/slots', label: 'Slots' },
       { to: '/wheel', label: 'Wheel of Fortune' },
     ],
   },

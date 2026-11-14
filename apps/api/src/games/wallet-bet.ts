@@ -1,12 +1,19 @@
 // A bet moves money in TCHARTABLE directly, which is only safe while the game does not hold the character:
 // TMapSvr keeps an online character's money in memory and writes it back when it saves.
 
+import type { Wallet } from '@4story-portal/shared';
+
 export const BET_OK = 0,
   BET_CLOSED = 1,
   BET_NOT_YOURS = 2,
   BET_ONLINE = 3,
   BET_POOR = 4;
 export type BetCode = typeof BET_OK | typeof BET_CLOSED | typeof BET_NOT_YOURS | typeof BET_ONLINE | typeof BET_POOR;
+
+export type BetOutcome = { code: typeof BET_OK; id: number; wallet: Wallet } | { code: Exclude<BetCode, typeof BET_OK>; name: string | null };
+
+/** How a switch row is read, the same way the batch's SQL compares it: 'true' in any case, trailing spaces ignored. */
+export const settingIsOn = (value: string | undefined): boolean => value?.trimEnd().toLowerCase() === 'true';
 
 export type BetTables = { portalSettings: string; currentUsers: string; characters: string };
 
