@@ -14,7 +14,7 @@ type Props = {
 export function NavGroup({ label, links, open, onToggle, onClose }: Props) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const current = links.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))
-  const listId = `nav-${label.toLowerCase()}`
+  const listId = `nav-${label.toLowerCase().replace(/\W+/g, '-')}`
 
   return (
     <div className="relative" data-nav-group>

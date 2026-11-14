@@ -37,7 +37,7 @@ export function MobileMenu({ id, links, groups, username, isGm, loggingOut, onLo
       >
         <ul>{links.map(row)}</ul>
         {groups.map((group) => {
-          const headingId = `${id}-${group.label.toLowerCase()}`
+          const headingId = `${id}-${group.label.toLowerCase().replace(/\W+/g, '-')}`
           return (
             <div key={group.label} className="border-t border-line">
               <p id={headingId} className="px-4 pt-3 pb-1 text-xs font-bold tracking-wider text-muted uppercase">

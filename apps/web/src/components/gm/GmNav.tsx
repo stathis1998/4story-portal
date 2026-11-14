@@ -26,6 +26,9 @@ export function GmNav() {
       <Link to="/gm/wheel" className={link} activeProps={{ className: 'text-accent-text' }} inactiveProps={{ className: 'text-muted' }}>
         Wheel
       </Link>
+      <Link to="/gm/roulette" className={link} activeProps={{ className: 'text-accent-text' }} inactiveProps={{ className: 'text-muted' }}>
+        Roulette
+      </Link>
     </nav>
   )
 }
