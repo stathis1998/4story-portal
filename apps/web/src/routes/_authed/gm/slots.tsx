@@ -313,7 +313,7 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
                     <span className="flex gap-1">
                       {slotWindow(rules, spin.stops).map((column, reel) => {
                         const symbol = rules.symbols[column[1]]
-                        return <GameIcon key={reel} spriteId={symbol.sprite} size={28} alt={symbol.name} className="[image-rendering:pixelated]" />
+                        return <GameIcon key={reel} spriteId={symbol.sprite} size={32} alt={symbol.name} className="[image-rendering:pixelated]" />
                       })}
                     </span>
                   </td>

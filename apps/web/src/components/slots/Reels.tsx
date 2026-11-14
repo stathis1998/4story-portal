@@ -119,7 +119,8 @@ export function Reels({ machine, rest, spin, animate, won, onStopped }: ReelsPro
     <div
       role="img"
       aria-label={label}
-      className="mx-auto w-fit rounded-md border border-black/60 p-2.5 shadow-[0_6px_20px_rgb(0_0_0/0.5)] min-[400px]:p-3.5"
+      // On the narrowest phones the frame is thinner, so Spin is on the first screen.
+      className="mx-auto w-fit rounded-md border border-black/60 p-1.5 shadow-[0_6px_20px_rgb(0_0_0/0.5)] min-[400px]:p-3.5"
       style={{ background: cabinet.frame }}
     >
       {/* The blurs for a moving reel: along the reel only, never sideways. Only one Reels is on a page, so the ids are unique. */}
@@ -133,7 +134,7 @@ export function Reels({ machine, rest, spin, animate, won, onStopped }: ReelsPro
         </defs>
       </svg>
       <div
-        className="rounded-sm border border-black/70 px-3 py-1.5 shadow-[inset_0_2px_10px_rgb(0_0_0/0.8)] min-[400px]:px-4"
+        className="rounded-sm border border-black/70 px-3 py-1 shadow-[inset_0_2px_10px_rgb(0_0_0/0.8)] min-[400px]:px-4 min-[400px]:py-1.5"
         style={{ backgroundColor: cabinet.inside }}
       >
         <div className="relative flex gap-1.5 min-[400px]:gap-2">

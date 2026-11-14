@@ -170,6 +170,10 @@ describe('slots', () => {
     expect(screen.getByRole('heading', { name: 'Slots', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Three machines, one pull at a time.')).toBeInTheDocument()
     expect(screen.getByText("This is real gambling with your character's money. Each machine shows what it pays back.")).toBeInTheDocument()
+    // On a phone the tagline goes, and the sentence is shown under the machine, before everything below it.
+    expect(screen.getByText('Three machines, one pull at a time.')).toHaveClass('hidden', 'sm:block')
+    expect(screen.getByText("This is real gambling with your character's money. Each machine shows what it pays back.")).toHaveClass('order-1')
+    for (const name of ['What it pays', 'Your last spins', 'Big wins']) expect(screen.getByRole('region', { name })).toHaveClass('order-2')
     expect(tabNames()).toEqual(["Tranus's Shelf", 'The Armoury', "Dragon's Hoard"])
     expect(tab("Tranus's Shelf")).toHaveAttribute('aria-selected', 'true')
     expect(panel()).toHaveAccessibleName("Tranus's Shelf")
@@ -177,11 +181,12 @@ describe('slots', () => {
     expect(stake('10 Silver')).toBeChecked()
     expect(spinButton()).toBeEnabled()
 
-    // At rest on [0, 0, 0], with each strip's real neighbours above and below the line.
+    // At rest on slotRest's stops [1, 0, 2]: a line that pays nothing and no row of three alike, with each strip's
+    // real neighbours above and below the line.
     expect(reels()).toHaveAccessibleName('Reels')
-    expect(rowSymbols(0)).toEqual(['Healing Potion', 'Healing Potion', 'Healing Potion'])
-    expect(rowSymbols(1)).toEqual(['Healing Potion', 'Healing Potion', 'Healing Potion'])
-    expect(rowSymbols(2)).toEqual(['Apprentice Formula', 'Apprentice Formula', 'Apprentice Formula'])
+    expect(rowSymbols(0)).toEqual(['Healing Potion', 'Healing Potion', 'Apprentice Formula'])
+    expect(rowSymbols(1)).toEqual(['Apprentice Formula', 'Healing Potion', 'Serendipity'])
+    expect(rowSymbols(2)).toEqual(['Healing Potion', 'Apprentice Formula', 'Healing Potion'])
     expect(allLit()).toEqual([])
 
     const pays = within(screen.getByRole('region', { name: 'What it pays' }))
@@ -232,7 +237,7 @@ describe('slots', () => {
     expect(stakeNames()).toEqual(['25 Silver', '50 Silver', '100 Silver'])
     expect(stake('25 Silver')).toBeChecked()
     expect(reels()).toHaveAccessibleName('Reels')
-    expect(rowSymbols(1, SLOT_MACHINES[1])).toEqual(['Dragon Iron Boots', 'Dragon Iron Boots', 'Diamond Axe'])
+    expect(rowSymbols(1, SLOT_MACHINES[1])).toEqual(['Dragon String Bow', 'Dragon Iron Boots', 'Sword of Judgement'])
     const pays = within(screen.getByRole('region', { name: 'What it pays' }))
     const rows = pays.getAllByRole('row').map((row) => row.textContent)
     expect(rows[0]).toBe('On the linePaysAt 25 Silver')
@@ -481,12 +486,14 @@ describe('slots', () => {
       'POST /slots/spin': () => json(422, { statusCode: 422, message: 'That stake is no longer offered on this machine' }),
     })
     await loaded()
+    await user.click(stake('25 Silver'))
 
     await user.click(spinButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent('That stake is no longer offered on this machine')
     await waitFor(() => expect(stakeNames()).toEqual(['20 Silver', '40 Silver', '80 Silver']))
     expect(stake('20 Silver')).toBeChecked()
+    expect(status()).toHaveTextContent('The stakes on this machine changed. Your stake is now 20 Silver.')
     expect(reels()).toHaveAccessibleName('Reels')
     expect(wallet()).toBe('5 Gold 250 Silver')
     expect(spinButton()).toBeEnabled()
@@ -596,6 +603,8 @@ describe('slots', () => {
     expect(shown).toContainElement(spinButton())
     expect(shown).toContainElement(status())
     expect(scrolled).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
+    // On a phone the sticky header (48 px) would cover the top of the cabinet.
+    expect(shown).toHaveClass('scroll-mt-14', 'md:scroll-mt-0')
 
     act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000 + 100))
     expect(reels()).toHaveAccessibleName(/^Reels: /)
@@ -686,5 +695,125 @@ describe('slots', () => {
     expect(big).toHaveLength(1)
     expect(big[0]).toHaveTextContent('Mounara won 12 Gold 500 Silver on The Armoury')
     expect(big[0]).toHaveTextContent('13 Nov, 23:59')
+  })
+
+  describe('when a GM changes the stakes', () => {
+    const PICK = 'The stakes on this machine changed. Pick a stake to keep playing.'
+
+    it('waits for the player to pick one when every new stake is higher', async () => {
+      let current = state()
+      const { user, queryClient, fetchMock } = open(current, { 'GET /slots': () => json(200, current), 'POST /slots/spin': () => json(200, lost) })
+      await loaded()
+      expect(stake('10 Silver')).toBeChecked()
+
+      current = state({ machines: machines({ shelf: { stakes: [100, 250, 500] } }) })
+      await poll(queryClient)
+
+      expect(stakeNames()).toEqual(['100 Silver', '250 Silver', '500 Silver'])
+      for (const name of stakeNames()) expect(stake(name!)).not.toBeChecked()
+      expect(spinButton()).toBeDisabled()
+      expect(status()).toHaveTextContent(PICK)
+      fireEvent.keyDown(document.body, { key: ' ' })
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([])
+
+      await user.click(stake('100 Silver'))
+      expect(status()).not.toHaveTextContent('The stakes on this machine changed.')
+      expect(spinButton()).toBeEnabled()
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: /^Reels: / })
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 100 }])
+    })
+
+    it('picks the new lowest, and says so, when it is no higher than the stake the player had', async () => {
+      let current = state()
+      const { user, queryClient } = open(current, { 'GET /slots': () => json(200, current) })
+      await loaded()
+      await user.click(stake('25 Silver'))
+
+      current = state({ machines: machines({ shelf: { stakes: [20, 40, 80] } }) })
+      await poll(queryClient)
+
+      expect(stake('20 Silver')).toBeChecked()
+      expect(spinButton()).toBeEnabled()
+      expect(status()).toHaveTextContent('The stakes on this machine changed. Your stake is now 20 Silver.')
+
+      // Switching machine puts the note away.
+      await user.click(tab('The Armoury'))
+      expect(status()).not.toHaveTextContent('The stakes on this machine changed.')
+    })
+
+    it('waits for a pick after a refusal when every new stake is higher', async () => {
+      let loads = 0
+      open(state(), {
+        'GET /slots': () => json(200, ++loads === 1 ? state() : state({ machines: machines({ shelf: { stakes: [100, 250, 500] } }) })),
+        'POST /slots/spin': () => json(422, { statusCode: 422, message: 'That stake is no longer offered on this machine' }),
+      })
+      await loaded()
+
+      fireEvent.click(spinButton())
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('That stake is no longer offered on this machine')
+      await waitFor(() => expect(stakeNames()).toEqual(['100 Silver', '250 Silver', '500 Silver']))
+      expect(stake('100 Silver')).not.toBeChecked()
+      expect(spinButton()).toBeDisabled()
+      expect(status()).toHaveTextContent(PICK)
+    })
+
+    it('waits until the reels stop, and the spin keeps the stake it was sent with', async () => {
+      let current = state()
+      const moved = state({ machines: machines({ shelf: { stakes: [20, 40, 80] } }) })
+      const { user, queryClient, fetchMock } = open(current, {
+        'GET /slots': () => json(200, current),
+        'POST /slots/spin': () => json(200, { ...jackpot, state: { ...jackpot.state, machines: moved.machines } }),
+      })
+      await loaded()
+      await user.click(stake('50 Silver'))
+      animate()
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+
+      current = { ...moved, characters: jackpot.state.characters, mine: jackpot.state.mine }
+      await poll(queryClient)
+      expect(stakeNames()).toEqual(['10 Silver', '25 Silver', '50 Silver'])
+      expect(stake('50 Silver')).toBeChecked()
+      expect(status()).toHaveTextContent('Good luck...')
+
+      act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000 + 100))
+
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 50 }])
+      expect(stake('20 Silver')).toBeChecked()
+      const line = 'Three Experience Potions. You won 5 Gold on a stake of 50 Silver.'
+      const note = 'The stakes on this machine changed. Your stake is now 20 Silver.'
+      expect(status()).toHaveTextContent(line)
+      expect(status()).toHaveTextContent(note)
+      expect(status().textContent!.indexOf(line)).toBeLessThan(status().textContent!.indexOf(note))
+    })
+  })
+
+  it('spins on space right after a stake is clicked', async () => {
+    const { user, fetchMock } = open(state(), server(lost))
+    await loaded()
+    await user.click(stake('25 Silver'))
+    expect(stake('25 Silver')).toHaveFocus()
+
+    await user.keyboard(' ')
+
+    await screen.findByRole('img', { name: /^Reels: / })
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 25 }])
+  })
+
+  it('says why Spin is off when the wallet is short of the stake', async () => {
+    let current = state({ characters: [{ ...mounara, wallet: { gold: 0, silver: 60, copper: 0 } }] })
+    const { user, queryClient } = open(current, { 'GET /slots': () => json(200, current) })
+    await loaded()
+    await user.click(stake('50 Silver'))
+    expect(status()).not.toHaveTextContent('Not enough money')
+
+    current = state({ characters: [{ ...mounara, wallet: { gold: 0, silver: 40, copper: 0 } }] })
+    await poll(queryClient)
+
+    expect(stake('50 Silver')).toBeChecked()
+    expect(spinButton()).toBeDisabled()
+    expect(status()).toHaveTextContent('Not enough money in that wallet for this stake.')
   })
 })

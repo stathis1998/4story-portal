@@ -217,6 +217,11 @@ describe('GM slots page', () => {
       ['Healing Potion', 'Healing Potion', 'Healing Potion'],
       ['Dragon String Bow', 'Diamond Axe', 'Sword of Judgement'],
     ])
+    // At the icons' own 32 px: drawn pixelated, a smaller size drops rows of pixels.
+    for (const img of rows.flatMap((row) => within(row).getAllByRole('img'))) {
+      expect(img).toHaveAttribute('width', '32')
+      expect(img).toHaveAttribute('height', '32')
+    }
   })
 
   it('skips a spin on a machine the page does not know', async () => {
