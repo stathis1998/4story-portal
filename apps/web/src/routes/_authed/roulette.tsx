@@ -85,11 +85,17 @@ function afterSpin({ result, before, characterId }: Turning, current: RouletteSt
 function RoulettePage() {
   const queryClient = useQueryClient()
   const { data, isError } = useQuery(rouletteQueryOptions)
-  const [chosen, setChosen] = useState(rememberedCharacter)
+  // The character whose money is at stake. Once set it stays, even if a poll shows it in the game: money only
+  // comes out of a wallet the player picked or saw picked.
+  const [chosen, setChosen] = useState<number | null>(null)
+  const [remembered] = useState(rememberedCharacter)
   const [chip, setChip] = useState<number | null>(null)
   const [chips, setChips] = useState<Chip[]>([])
   const [lastChips, setLastChips] = useState<Chip[] | null>(null)
   const [sending, setSending] = useState(false)
+  // What the page showed when Spin was pressed. It stays on screen until the wheel stops, so a poll answered
+  // after the bet went through cannot give the result away.
+  const [frozen, setFrozen] = useState<RouletteState | null>(null)
   const [turning, setTurning] = useState<Turning | null>(null)
   const [wheelSpin, setWheelSpin] = useState<{ pocket: number; key: number } | null>(null)
   const [animate, setAnimate] = useState(false)
@@ -115,13 +121,18 @@ function RoulettePage() {
     )
   }
 
-  // While the wheel turns the page keeps showing what it had, even if a poll brings the new state in.
-  const view = turning?.before ?? data
+  const view = frozen ?? data
   const free = view.characters.filter((entry) => !entry.online)
-  const character = free.find((entry) => entry.id === chosen) ?? free[0]
-  const money = character ? walletSilver(character.wallet) : 0
+  const character = view.characters.find((entry) => entry.id === chosen)
+  // The first time someone can play, the remembered character if it is free, otherwise the first free one. A
+  // chosen character that is gone from the list (deleted, say) is picked again the same way.
+  if (!character && free.length > 0) {
+    setChosen((free.find((entry) => entry.id === remembered) ?? free[0]).id)
+  }
+  const inGame = character?.online === true
+  const money = character && !inGame ? walletSilver(character.wallet) : 0
   const busy = sending || turning !== null
-  const playable = view.live && character !== undefined && !busy
+  const playable = view.live && character !== undefined && !inGame && !busy
   const rack = rouletteChips(view.limits)
   const chipValue = chip !== null && rack.includes(chip) ? chip : rack[0]
   const bets = betsOf(chips)
@@ -149,27 +160,31 @@ function RoulettePage() {
     if (!turning) return
     const { result } = turning
     setTurning(null)
+    setFrozen(null)
     setShown(result)
     setLastChips(turning.chips)
     setChips([])
     queryClient.setQueryData<RouletteState>(rouletteQueryOptions.queryKey, (current) => afterSpin(turning, current))
-    // The spin went through but its state could not be read: fetch it properly.
-    if (result.state.characters.length === 0) void queryClient.invalidateQueries({ queryKey: rouletteQueryOptions.queryKey })
+    // A part of the state the API could not read after the bet comes back as a fallback (a closed table, no big
+    // wins, no characters), so the page always reads it again.
+    void queryClient.invalidateQueries({ queryKey: rouletteQueryOptions.queryKey })
   }
 
   async function onSpin() {
     // A second tap finds the button already off: React applies a click's state before the next click.
-    if (!character || busy) return
+    if (!character || !playable) return
     const refusal = refusalFor(chips, bets)
     if (refusal) return setProblem(refusal)
     setProblem(null)
     setShown(null)
+    setFrozen(view)
     setSending(true)
     let result: RouletteSpinResult
     try {
       result = await spinRoulette(character.id, bets)
     } catch (err) {
       setSending(false)
+      setFrozen(null)
       setProblem(rouletteErrorMessage(err))
       // A refusal usually means the page was out of date: new limits, a new wallet, a character now in the game.
       void queryClient.invalidateQueries({ queryKey: rouletteQueryOptions.queryKey })
@@ -288,6 +303,8 @@ function RoulettePage() {
             <p className="text-muted">You have no characters yet.</p>
           ) : allOnline ? (
             <p className="text-muted">Log out of the game to play: your characters are all in it.</p>
+          ) : character && inGame ? (
+            <p className="text-muted">Log out of {character.name} in the game to keep playing, or pick another character.</p>
           ) : shown ? (
             <div className="flex flex-col items-center gap-2">
               <PocketBadge pocket={shown.spin.pocket} large />

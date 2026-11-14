@@ -53,6 +53,26 @@ const open = (current: RouletteState = state(), extra: Parameters<typeof mockApi
   return { fetchMock, ...renderRoute('/roulette', { me }) }
 }
 
+/** A server that answers each spin in turn, and afterwards serves the state that spin left. */
+function server(...results: RouletteSpinResult[]) {
+  let current = state()
+  let spins = 0
+  return {
+    'GET /roulette': () => json(200, current),
+    'POST /roulette/spin': () => {
+      const next = results[Math.min(spins++, results.length - 1)]
+      current = next.state
+      return json(200, next)
+    },
+  }
+}
+
+/** Lets a poll reach the page: React Query tells it a moment after the answer. */
+async function poll(queryClient: ReturnType<typeof open>['queryClient']) {
+  await act(() => queryClient.invalidateQueries({ queryKey: ['roulette'] }))
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+}
+
 const table = () => screen.getByRole('region', { name: 'Table' })
 const status = () => within(table()).getByRole('status')
 const picker = () => screen.getByRole('combobox', { name: 'Playing with' })
@@ -316,9 +336,7 @@ describe('roulette', () => {
     // The chips stay on the felt while the ball runs.
     expect(onTable()).toBe('600 Silver')
     // A poll that brings the new wallet in mid-spin does not give the result away.
-    await act(() => queryClient.invalidateQueries({ queryKey: ['roulette'] }))
-    // React Query tells the page a moment later.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    await poll(queryClient)
     expect(fetchMock.mock.calls.filter(([input, init]) => String(input) === '/api/roulette' && !init?.method)).toHaveLength(2)
     expect(wallet()).toBe('5 Gold 250 Silver')
     expect(lastNumbers()).toHaveLength(0)
@@ -346,6 +364,101 @@ describe('roulette', () => {
     expect(ball.radius).toBeCloseTo(127, 3)
   })
 
+  it('keeps the old table while the spin is on its way', async () => {
+    let answer: (response: Response) => void = () => {}
+    let spun = false
+    const { user, queryClient } = open(state(), {
+      'GET /roulette': () => json(200, spun ? won.state : state()),
+      // The server has bet and committed; its answer is still on the way.
+      'POST /roulette/spin': () => {
+        spun = true
+        return new Promise<Response>((resolve) => (answer = resolve))
+      },
+    })
+    await loaded()
+    await placeBets(user)
+
+    await user.click(spinButton())
+    await screen.findByRole('button', { name: 'Spinning...' })
+    await poll(queryClient)
+
+    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(lastNumbers()).toHaveLength(0)
+    expect(within(screen.getByRole('region', { name: 'Your last spins' })).queryAllByRole('listitem')).toHaveLength(0)
+    expect(status()).toHaveTextContent('Good luck...')
+
+    await act(async () => answer(json(200, won)))
+
+    expect(await screen.findByRole('img', { name: 'Roulette wheel, ball on 17 black' })).toBeInTheDocument()
+    expect(wallet()).toBe('8 Gold 250 Silver')
+    expect(lastNumbers()[0]).toHaveTextContent('17')
+  })
+
+  it('reloads the table after a spin whose state came back in part', async () => {
+    const kael = spinOf({ id: 90, character: 'Kael', pocket: 17, stake: 1000, payout: 36_000 })
+    // The settings and big wins could not be read after the bet: the API fell back to a closed table and no wins.
+    const partial: RouletteSpinResult = { ...won, state: { ...won.state, live: false, bigWins: [] } }
+    let spun = false
+    const { user } = open(state(), {
+      'GET /roulette': () => json(200, spun ? { ...won.state, bigWins: [kael] } : state({ bigWins: [kael] })),
+      'POST /roulette/spin': () => {
+        spun = true
+        return json(200, partial)
+      },
+    })
+    await loaded()
+    await placeBets(user)
+
+    await user.click(spinButton())
+
+    await screen.findByRole('img', { name: 'Roulette wheel, ball on 17 black' })
+    await waitFor(() => expect(status()).toHaveTextContent('17 black. You won 3 Gold 600 Silver on a stake of 600 Silver.'))
+    expect(spot('17')).toBeEnabled()
+    expect(within(screen.getByRole('region', { name: 'Big wins' })).getByRole('listitem')).toHaveTextContent('Kael hit 17 and won 36 Gold')
+  })
+
+  it('keeps the chosen character when the remembered one logs out later', async () => {
+    localStorage.setItem('roulette.character', '8')
+    let current = state()
+    const { user, queryClient } = open(state(), { 'GET /roulette': () => json(200, current) })
+    await loaded()
+    expect(picker()).toHaveValue('7')
+    await user.click(spot('17'))
+
+    current = state({ characters: [mounara, { ...busy, online: false }] })
+    await poll(queryClient)
+
+    expect(screen.getByRole('option', { name: 'Busy (level 30 Knight)' })).toBeEnabled()
+    expect(picker()).toHaveValue('7')
+    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(spinButton()).toBeEnabled()
+  })
+
+  it('keeps a chosen character that went into the game, and says so', async () => {
+    let current = state({ characters: [mounara, busy, moosey] })
+    const { user, queryClient, fetchMock } = open(current, {
+      'GET /roulette': () => json(200, current),
+      'POST /roulette/spin': () => json(200, won),
+    })
+    await loaded()
+    await user.click(spot('17'))
+
+    current = state({ characters: [{ ...mounara, online: true }, busy, moosey] })
+    await poll(queryClient)
+
+    expect(picker()).toHaveValue('7')
+    expect(screen.getByRole('option', { name: 'Mounara (in the game, log out to play)' })).toBeDisabled()
+    expect(spinButton()).toBeDisabled()
+    expect(spot('17')).toBeDisabled()
+    expect(status()).toHaveTextContent('Log out of Mounara in the game to keep playing, or pick another character.')
+    expect(onTable()).toBe('10 Silver')
+
+    await user.selectOptions(picker(), 'Moosey (level 45 Wizard)')
+    expect(wallet()).toBe('900 Silver')
+    expect(spinButton()).toBeEnabled()
+    expect(sentBodies(fetchMock, 'POST /roulette/spin')).toEqual([])
+  })
+
   it('rests the ball in pocket 0 before the first spin', async () => {
     open()
     await loaded()
@@ -357,7 +470,7 @@ describe('roulette', () => {
 
   it('says so when nothing was won', async () => {
     const lost = result(spinOf({ pocket: 4, payout: 0 }), [], { gold: 4, silver: 650, copper: 0 })
-    const { user } = open(state(), { 'POST /roulette/spin': () => json(200, lost) })
+    const { user } = open(state(), server(lost))
     await loaded()
     await placeBets(user)
 
@@ -386,8 +499,7 @@ describe('roulette', () => {
 
   it('puts the same bets back', async () => {
     const poorer = result(spinOf({ id: 32, pocket: 0, payout: 0 }), [], { gold: 0, silver: 300, copper: 0 })
-    let spins = 0
-    const { user, fetchMock } = open(state(), { 'POST /roulette/spin': () => json(200, ++spins === 1 ? won : poorer) })
+    const { user, fetchMock } = open(state(), server(won, poorer))
     await loaded()
     expect(screen.queryByRole('button', { name: 'Same bets again' })).not.toBeInTheDocument()
     await placeBets(user)
