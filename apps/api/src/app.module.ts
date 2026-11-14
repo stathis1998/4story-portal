@@ -11,6 +11,7 @@ import { OnlineModule } from './online/online.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { StoreModule } from './store/store.module.js';
 import { WeaponsModule } from './weapons/weapons.module.js';
+import { WheelModule } from './wheel/wheel.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { WeaponsModule } from './weapons/weapons.module.js';
     StatsModule,
     AchievementsModule,
     WeaponsModule,
+    WheelModule,
     StoreModule,
   ],
 })

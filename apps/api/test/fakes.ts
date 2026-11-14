@@ -27,6 +27,21 @@ import type { ItemRow, PriceColumn, StockRow, VendorRow, VendorsRepository } fro
 import type { StatRows } from '../src/stats/stats-rules.js';
 import type { StatsRepository } from '../src/stats/stats.repository.js';
 import { type ControlClient, ControlUnavailableError } from '../src/control/control-client.js';
+import {
+  ANNOUNCE_SENT as WHEEL_ANNOUNCE_SENT,
+  ANNOUNCE_SKIPPED as WHEEL_ANNOUNCE_SKIPPED,
+  ANNOUNCE_WAITING as WHEEL_ANNOUNCE_WAITING,
+  type PrizeInput,
+  type PrizeRow,
+  SPIN_ALREADY_TODAY,
+  SPIN_BAD_CHARACTER,
+  SPIN_PRIZE_GONE,
+  SPIN_SWITCHED_OFF,
+  type SpinInput,
+  type SpinRow,
+  type WheelItemRow,
+  type WheelRepository,
+} from '../src/wheel/wheel.repository.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -435,6 +450,183 @@ export class FakeAchievementsRepository implements AchievementsRepository {
   }
 
   async findItems(itemIds: number[]): Promise<RewardItemRow[]> {
+    return this.items.filter((item) => itemIds.includes(item.itemId));
+  }
+}
+
+// In-memory stand-in for the wheel's tables and TPortalWheelSpin.
+export class FakeWheelRepository implements WheelRepository {
+  liveFlag = false;
+  prizeRows: PrizeRow[] = [];
+  spinRows: SpinRow[] = [];
+  /** The characters the "database" has, for the checks the procedure makes. */
+  characters: { charId: number; userId: number; name: string; level: number }[] = [];
+  items: WheelItemRow[] = [];
+  /** Everything spin() was asked for, including calls that wrote nothing. */
+  readonly asked: SpinInput[] = [];
+  /** The database's clock: stamps new spins, ages old ones and decides the day. */
+  now = () => new Date();
+  /** Every call fails with this. */
+  failWith?: Error;
+  /** Runs before each spin is checked: a test uses it to change a prize after the pick. */
+  beforeSpin?: (input: SpinInput) => void;
+  /** Plays another portal process that takes every announcement first. */
+  claimedElsewhere = false;
+  private nextPrizeId = 1;
+  private nextSpinId = 1;
+
+  private check(): void {
+    if (this.failWith) throw this.failWith;
+  }
+
+  private day(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private aged(row: SpinRow): SpinRow {
+    return { ...row, ageSeconds: Math.floor((this.now().getTime() - row.spunAt.getTime()) / 1000) };
+  }
+
+  /** Adds a prize the way a test wants it, and returns its row. */
+  addPrize(prize: Partial<PrizeInput> = {}): PrizeRow {
+    const row: PrizeRow = {
+      id: this.nextPrizeId++,
+      name: 'Prize',
+      weight: 1,
+      order: this.prizeRows.length,
+      enabled: true,
+      announce: false,
+      gold: 1,
+      silver: 0,
+      copper: 0,
+      items: [],
+      ...prize,
+    };
+    this.prizeRows.push(row);
+    return row;
+  }
+
+  async live(): Promise<boolean> {
+    this.check();
+    return this.liveFlag;
+  }
+
+  async setLive(live: boolean): Promise<void> {
+    this.check();
+    this.liveFlag = live;
+  }
+
+  async prizes(): Promise<PrizeRow[]> {
+    this.check();
+    return [...this.prizeRows].sort((a, b) => a.order - b.order || a.id - b.id);
+  }
+
+  async createPrize(prize: PrizeInput): Promise<number> {
+    this.check();
+    return this.addPrize(prize).id;
+  }
+
+  async updatePrize(id: number, prize: PrizeInput): Promise<boolean> {
+    this.check();
+    const index = this.prizeRows.findIndex((row) => row.id === id);
+    if (index < 0) return false;
+    this.prizeRows[index] = { id, ...prize };
+    return true;
+  }
+
+  async deletePrize(id: number): Promise<boolean> {
+    this.check();
+    const before = this.prizeRows.length;
+    this.prizeRows = this.prizeRows.filter((row) => row.id !== id);
+    return this.prizeRows.length < before;
+  }
+
+  async spin(input: SpinInput): Promise<number> {
+    this.check();
+    this.asked.push(input);
+    this.beforeSpin?.(input);
+    if (!this.liveFlag) return SPIN_SWITCHED_OFF;
+    const now = this.now();
+    if (this.spinRows.some((row) => row.userId === input.userId && this.day(row.spunAt) === this.day(now))) return SPIN_ALREADY_TODAY;
+    const character = this.characters.find((row) => row.charId === input.charId && row.userId === input.userId && row.level >= input.minLevel);
+    if (!character) return SPIN_BAD_CHARACTER;
+    const prize = this.prizeRows.find((row) => row.id === input.prizeId && row.enabled);
+    if (!prize) return SPIN_PRIZE_GONE;
+    const id = this.nextSpinId++;
+    this.spinRows.push({
+      id,
+      userId: input.userId,
+      charId: character.charId,
+      character: character.name,
+      spunAt: now,
+      ageSeconds: 0,
+      prizeId: prize.id,
+      prize: prize.name,
+      gold: prize.gold,
+      silver: prize.silver,
+      copper: prize.copper,
+      items: prize.items,
+      text: input.text.replace('{prize}', prize.name).replace('{name}', character.name),
+      announce: prize.announce,
+      announced: prize.announce ? WHEEL_ANNOUNCE_WAITING : WHEEL_ANNOUNCE_SKIPPED,
+    });
+    return id;
+  }
+
+  async today(userId: number): Promise<SpinRow | null> {
+    this.check();
+    const row = this.spinRows.find((entry) => entry.userId === userId && this.day(entry.spunAt) === this.day(this.now()));
+    return row ? this.aged(row) : null;
+  }
+
+  async secondsToReset(): Promise<number> {
+    this.check();
+    const now = this.now();
+    return 86_400 - (now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds());
+  }
+
+  private newestFirst(keep: (row: SpinRow) => boolean, limit: number): SpinRow[] {
+    return this.spinRows
+      .filter(keep)
+      .sort((a, b) => b.id - a.id)
+      .slice(0, limit)
+      .map((row) => this.aged(row));
+  }
+
+  async spinsOf(userId: number, limit: number): Promise<SpinRow[]> {
+    this.check();
+    return this.newestFirst((row) => row.userId === userId, limit);
+  }
+
+  async winners(limit: number): Promise<SpinRow[]> {
+    this.check();
+    return this.newestFirst((row) => row.announce, limit);
+  }
+
+  async spinsToday(): Promise<number> {
+    this.check();
+    return this.spinRows.filter((row) => this.day(row.spunAt) === this.day(this.now())).length;
+  }
+
+  async waitingAnnouncements(): Promise<SpinRow[]> {
+    this.check();
+    return this.spinRows.filter((row) => row.announce && row.announced === WHEEL_ANNOUNCE_WAITING).map((row) => this.aged(row));
+  }
+
+  async claimAnnouncement(id: number): Promise<boolean> {
+    const row = this.spinRows.find((entry) => entry.id === id);
+    if (!row || row.announced !== WHEEL_ANNOUNCE_WAITING) return false;
+    row.announced = WHEEL_ANNOUNCE_SENT;
+    return !this.claimedElsewhere;
+  }
+
+  async markAnnounced(id: number, state: number): Promise<void> {
+    const row = this.spinRows.find((entry) => entry.id === id);
+    if (row) row.announced = state;
+  }
+
+  async findItems(itemIds: number[]): Promise<WheelItemRow[]> {
+    this.check();
     return this.items.filter((item) => itemIds.includes(item.itemId));
   }
 }
