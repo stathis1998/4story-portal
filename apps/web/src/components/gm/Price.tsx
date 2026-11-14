@@ -10,11 +10,11 @@ const number = new Intl.NumberFormat('en-US')
 export function Price({ price, shop }: Props) {
   if (price === 0) return <>Free</>
   if (shop === 'pvp') return <span className="whitespace-nowrap tabular-nums">{number.format(price)} points</span>
-  const { rune, luna, cron } = splitMoney(price)
+  const { gold, silver, bronze } = splitMoney(price)
   const parts = [
-    { name: 'Rune', amount: rune, sprite: COIN_SPRITES.rune },
-    { name: 'Luna', amount: luna, sprite: COIN_SPRITES.luna },
-    { name: 'Cron', amount: cron, sprite: COIN_SPRITES.cron },
+    { name: 'Gold', amount: gold, sprite: COIN_SPRITES.gold },
+    { name: 'Silver', amount: silver, sprite: COIN_SPRITES.silver },
+    { name: 'Bronze', amount: bronze, sprite: COIN_SPRITES.bronze },
   ].filter((part) => part.amount !== 0)
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap tabular-nums">

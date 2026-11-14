@@ -47,9 +47,9 @@ export type TooltipText = {
   expired: string;
   wrapFooter: string;
   mogg: string;
-  rune: string;
-  luna: string;
-  cron: string;
+  gold: string;
+  silver: string;
+  bronze: string;
   /** By TITEMGRADEEFFECT_TYPE, ready to append to a title. */
   effects: Record<number, string>;
 };

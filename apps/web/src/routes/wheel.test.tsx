@@ -7,16 +7,16 @@ import { renderRoute } from '../test/render-route'
 
 const me = { userId: 2, username: 'plain', isGm: false }
 
-const rune = { gold: 1, silver: 0, copper: 0, items: [] }
+const gold = { gold: 1, silver: 0, copper: 0, items: [] }
 const potions = { gold: 0, silver: 0, copper: 0, items: [{ itemId: 7600, count: 10, name: 'First-Class Healing Potion', icon: null }] }
 
 const state = (overrides: Partial<WheelState> = {}): WheelState => ({
   live: true,
   minLevel: 20,
   prizes: [
-    { id: 1, name: '1 Rune', chance: 75, reward: rune, announce: false },
+    { id: 1, name: '1 Gold', chance: 75, reward: gold, announce: false },
     { id: 2, name: '10 Healing Potions', chance: 24.6, reward: potions, announce: false },
-    { id: 3, name: 'Jackpot', chance: 0.4, reward: { ...rune, gold: 10 }, announce: true },
+    { id: 3, name: 'Jackpot', chance: 0.4, reward: { ...gold, gold: 10 }, announce: true },
   ],
   today: null,
   secondsToReset: 50_400,
@@ -29,8 +29,8 @@ const spinOf = (overrides: Partial<WheelSpin> = {}): WheelSpin => ({
   id: 9,
   at: '2026-11-14T10:05:00.000Z',
   character: 'Mounara',
-  prize: '1 Rune',
-  reward: rune,
+  prize: '1 Gold',
+  reward: gold,
   ...overrides,
 })
 
@@ -74,7 +74,7 @@ describe('wheel of fortune', () => {
     expect(await screen.findByRole('img', { name: 'Wheel with 3 prizes' })).toBeInTheDocument()
     const prizes = within(screen.getByRole('region', { name: 'Prizes' })).getAllByRole('listitem')
     expect(prizes.map((item) => item.textContent)).toEqual([
-      expect.stringMatching(/^1 Rune.*75%$/),
+      expect.stringMatching(/^1 Gold.*75%$/),
       expect.stringMatching(/^10 Healing Potions.*First-Class Healing Potionx10.*24\.6%$/),
       expect.stringMatching(/^★ Jackpot.*0\.4%$/),
     ])
@@ -101,12 +101,12 @@ describe('wheel of fortune', () => {
 
     await user.click(await spinButton())
 
-    expect(await screen.findByText('You won 1 Rune!')).toBeInTheDocument()
+    expect(await screen.findByText('You won 1 Gold!')).toBeInTheDocument()
     expect(sentBodies(fetchMock, 'POST /wheel/spin')).toEqual([{ characterId: 7 }])
     expect(status()).toHaveTextContent("It is on its way to Mounara's mailbox in the game.")
     expect(status()).toHaveTextContent(/Next free spin in 1[34]:\d\d:\d\d/)
     expect(screen.getByRole('button', { name: 'Come back tomorrow' })).toBeDisabled()
-    expect(within(screen.getByRole('region', { name: 'Your spins' })).getByRole('listitem')).toHaveTextContent('1 Rune for Mounara14 Nov, 10:05')
+    expect(within(screen.getByRole('region', { name: 'Your spins' })).getByRole('listitem')).toHaveTextContent('1 Gold for Mounara14 Nov, 10:05')
   })
 
   it('turns the wheel to the prize it landed on', async () => {
@@ -126,7 +126,7 @@ describe('wheel of fortune', () => {
     await user.selectOptions(picker(), 'Moosey (level 45 Wizard)')
     await user.click(await spinButton())
 
-    await screen.findByText('You won 1 Rune!')
+    await screen.findByText('You won 1 Gold!')
     expect(sentBodies(fetchMock, 'POST /wheel/spin')).toEqual([{ characterId: 5 }])
 
     cleanup()
@@ -173,7 +173,7 @@ describe('wheel of fortune', () => {
 
     const button = await screen.findByRole('button', { name: 'Come back tomorrow' })
     expect(button).toBeDisabled()
-    expect(status()).toHaveTextContent('Today you won 1 Rune for Mounara.')
+    expect(status()).toHaveTextContent('Today you won 1 Gold for Mounara.')
     expect(status()).toHaveTextContent(/Next free spin in 1[34]:\d\d:\d\d/)
   })
 

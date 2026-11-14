@@ -209,14 +209,14 @@ export const vendorCount = (count: number) => `${count} ${count === 1 ? 'vendor'
 
 const number = new Intl.NumberFormat('en-US')
 
-/** A price in words, for notes: `1 Rune 2 Luna 3 Cron`, `75 Cron` or `150 points`. */
+/** A price in words, for notes: `1 Gold 2 Silver 3 Bronze`, `75 Bronze` or `150 points`. */
 export function priceText(price: number, shop: VendorShop) {
   if (shop === 'pvp') return `${number.format(price)} points`
-  const { rune, luna, cron } = splitMoney(price)
+  const { gold, silver, bronze } = splitMoney(price)
   return [
-    [rune, 'Rune'],
-    [luna, 'Luna'],
-    [cron, 'Cron'],
+    [gold, 'Gold'],
+    [silver, 'Silver'],
+    [bronze, 'Bronze'],
   ]
     .filter(([amount]) => amount !== 0)
     .map(([amount, name]) => `${number.format(amount as number)} ${name}`)

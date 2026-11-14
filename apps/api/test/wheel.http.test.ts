@@ -135,7 +135,7 @@ describe('/api/wheel', () => {
   describe('POST /wheel/spin', () => {
     beforeEach(() => {
       wheel.liveFlag = true;
-      wheel.addPrize({ name: '100 Luna', weight: 3, gold: 0, silver: 100 });
+      wheel.addPrize({ name: '100 Silver', weight: 3, gold: 0, silver: 100 });
       wheel.addPrize({ name: 'Jackpot', weight: 1, gold: 10, announce: true });
     });
 
@@ -195,7 +195,7 @@ describe('/api/wheel', () => {
 
       const again = await player.post('/api/wheel/spin').send({ characterId: 7 }).expect(409);
       expect(again.body.message).toBe('You have already spun today');
-      expect((await player.get('/api/wheel')).body.today).toMatchObject({ prize: '100 Luna' });
+      expect((await player.get('/api/wheel')).body.today).toMatchObject({ prize: '100 Silver' });
 
       now = new Date('2026-11-15T00:00:05Z');
       expect((await player.get('/api/wheel')).body.today).toBeNull();
@@ -392,7 +392,7 @@ describe('/api/wheel', () => {
       ['a weight of 0', { weight: 0 }],
       ['a weight that is not whole', { weight: 1.5 }],
       ['four items', { items: [1, 2, 3, 4].map(() => ({ itemId: POTION, count: 1 })) }],
-      ['999 Luna and one more', { silver: 1000 }],
+      ['999 Silver and one more', { silver: 1000 }],
     ])('refuses %s', async (_, overrides) => {
       await moose.post('/api/gm/wheel/prizes').send(prizeBody(overrides)).expect(400);
       expect(wheel.prizeRows).toEqual([]);

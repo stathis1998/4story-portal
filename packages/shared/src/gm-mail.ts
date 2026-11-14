@@ -18,7 +18,7 @@ const mailText = (min: number, max: number) =>
         .regex(/^[\x20-\x7E\n]*$/, 'Use plain letters, digits and punctuation only'),
     );
 
-// Silver and copper (Luna and Cron) roll over at 1000 in game.
+// Silver and copper (Silver and Bronze in game) roll over at 1000.
 const coin = z.number().int().min(0).max(999);
 
 export const moneySchema = z.object({

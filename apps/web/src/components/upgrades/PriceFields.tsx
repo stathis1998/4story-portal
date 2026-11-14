@@ -7,9 +7,9 @@ import type { UpgradeForm } from './StrategyTable'
 type Props = { register: UseFormRegister<UpgradeForm>; onChange: () => void }
 
 const COINS = [
-  { key: 'rune', label: 'Rune', sprite: COIN_SPRITES.rune },
-  { key: 'luna', label: 'Luna', sprite: COIN_SPRITES.luna },
-  { key: 'cron', label: 'Cron', sprite: COIN_SPRITES.cron },
+  { key: 'gold', label: 'Gold', sprite: COIN_SPRITES.gold },
+  { key: 'silver', label: 'Silver', sprite: COIN_SPRITES.silver },
+  { key: 'bronze', label: 'Bronze', sprite: COIN_SPRITES.bronze },
 ] as const
 
 /**

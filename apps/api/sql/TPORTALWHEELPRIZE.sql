@@ -31,13 +31,13 @@ BEGIN
 	INSERT INTO dbo.TPORTALWHEELPRIZE
 		(szName, wWeight, wOrder, bAnnounce, dwGold, dwSilver, dwCooper, wItemID1, bCount1, wItemID2, bCount2, wItemID3, bCount3, szUpdatedBy)
 	VALUES
-		('100 Luna',                        22,  10, 0,  0, 100, 0,    0,  0, 0, 0, 0, 0, 'portal'),
+		('100 Silver',                        22,  10, 0,  0, 100, 0,    0,  0, 0, 0, 0, 0, 'portal'),
 		('Experience Potion',                4,  20, 0,  0,   0, 0, 7714,  1, 0, 0, 0, 0, 'portal'),
 		('5 Apprentice Formulas',           16,  30, 0,  0,   0, 0, 8501,  5, 0, 0, 0, 0, 'portal'),
-		('1 Rune',                           6,  40, 0,  1,   0, 0,    0,  0, 0, 0, 0, 0, 'portal'),
-		('300 Luna',                        15,  50, 0,  0, 300, 0,    0,  0, 0, 0, 0, 0, 'portal'),
+		('1 Gold',                           6,  40, 0,  1,   0, 0,    0,  0, 0, 0, 0, 0, 'portal'),
+		('300 Silver',                        15,  50, 0,  0, 300, 0,    0,  0, 0, 0, 0, 0, 'portal'),
 		('Master''s Formula',               10,  60, 0,  0,   0, 0, 7602,  1, 0, 0, 0, 0, 'portal'),
-		('10 Rune',                          1,  70, 1, 10,   0, 0,    0,  0, 0, 0, 0, 0, 'portal'),
+		('10 Gold',                          1,  70, 1, 10,   0, 0,    0,  0, 0, 0, 0, 0, 'portal'),
 		('2 Serendipity 100%',              10,  80, 0,  0,   0, 0, 7609,  2, 0, 0, 0, 0, 'portal'),
 		('Survival Tincture',                8,  90, 0,  0,   0, 0, 7654,  1, 0, 0, 0, 0, 'portal'),
 		('10 Healing Potions',               8, 100, 0,  0,   0, 0, 7600, 10, 0, 0, 0, 0, 'portal');

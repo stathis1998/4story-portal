@@ -7,7 +7,7 @@ import { renderRoute } from '../test/render-route'
 const gm = { userId: 1, username: 'moose', isGm: true }
 const player = { userId: 2, username: 'plain', isGm: false }
 
-const oneRune: AchievementReward = { gold: 1, silver: 0, copper: 0, items: [] }
+const oneGold: AchievementReward = { gold: 1, silver: 0, copper: 0, items: [] }
 
 const state = (overrides: Partial<GmAchievements> = {}): GmAchievements => ({
   live: false,
@@ -21,7 +21,7 @@ const state = (overrides: Partial<GmAchievements> = {}): GmAchievements => ({
       name: 'Slayer',
       category: 'combat',
       levels: [
-        { level: 1, goal: 'Defeat 100 monsters', reward: oneRune },
+        { level: 1, goal: 'Defeat 100 monsters', reward: oneGold },
         { level: 2, goal: 'Defeat 1,000 monsters', reward: null },
         { level: 3, goal: 'Defeat 10,000 monsters', reward: null },
       ],
@@ -199,7 +199,7 @@ describe('GM achievements page', () => {
 
       await screen.findByRole('tablist')
       expect(rowOf('Slayer I')).toHaveTextContent('Defeat 100 monsters')
-      expect(within(rowOf('Slayer I')).getByRole('img', { name: 'Rune' }).parentElement).toHaveTextContent('1')
+      expect(within(rowOf('Slayer I')).getByRole('img', { name: 'Gold' }).parentElement).toHaveTextContent('1')
       expect(rowOf('Slayer II')).toHaveTextContent('Defeat 1,000 monsters')
       expect(rowOf('Slayer II')).toHaveTextContent('No reward')
     })
@@ -211,11 +211,11 @@ describe('GM achievements page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Edit reward for Slayer II' }))
       const form = within(screen.getByRole('form', { name: 'Reward for Slayer II' }))
-      expect(form.getByLabelText('Rune')).toHaveFocus()
-      await user.clear(form.getByLabelText('Rune'))
-      await user.type(form.getByLabelText('Rune'), '5')
-      await user.clear(form.getByLabelText('Cron'))
-      await user.type(form.getByLabelText('Cron'), '250')
+      expect(form.getByLabelText('Gold')).toHaveFocus()
+      await user.clear(form.getByLabelText('Gold'))
+      await user.type(form.getByLabelText('Gold'), '5')
+      await user.clear(form.getByLabelText('Bronze'))
+      await user.type(form.getByLabelText('Bronze'), '250')
       await user.click(form.getByRole('button', { name: 'Add item' }))
       // Enter in the search box must not save the half-made reward.
       await user.type(form.getByLabelText('Find an item'), 'pot{Enter}')
@@ -245,8 +245,8 @@ describe('GM achievements page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Edit reward for Slayer I' }))
       const form = within(screen.getByRole('form', { name: 'Reward for Slayer I' }))
-      expect(form.getByLabelText('Rune')).toHaveValue(1)
-      await user.clear(form.getByLabelText('Rune'))
+      expect(form.getByLabelText('Gold')).toHaveValue(1)
+      await user.clear(form.getByLabelText('Gold'))
       await user.click(form.getByRole('button', { name: 'Save' }))
 
       await waitFor(() => expect(rowOf('Slayer I')).toHaveTextContent('No reward'))
@@ -263,25 +263,25 @@ describe('GM achievements page', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Edit reward for Slayer II' }))
       const form = within(screen.getByRole('form', { name: 'Reward for Slayer II' }))
-      await user.clear(form.getByLabelText('Rune'))
-      await user.type(form.getByLabelText('Rune'), '5')
+      await user.clear(form.getByLabelText('Gold'))
+      await user.type(form.getByLabelText('Gold'), '5')
       await user.click(form.getByRole('button', { name: 'Save' }))
 
       expect(await form.findByRole('alert')).toHaveTextContent('Item 51 is not in the client')
-      expect(form.getByLabelText('Rune')).toHaveValue(5)
+      expect(form.getByLabelText('Gold')).toHaveValue(5)
     })
 
-    it('refuses more than 999 Luna without asking the API', async () => {
+    it('refuses more than 999 Silver without asking the API', async () => {
       const fetchMock = mockApi(base())
       const { user } = renderRoute('/gm/achievements', { me: gm })
 
       await user.click(await screen.findByRole('button', { name: 'Edit reward for Slayer II' }))
       const form = within(screen.getByRole('form', { name: 'Reward for Slayer II' }))
-      await user.clear(form.getByLabelText('Luna'))
-      await user.type(form.getByLabelText('Luna'), '1000')
+      await user.clear(form.getByLabelText('Silver'))
+      await user.type(form.getByLabelText('Silver'), '1000')
       await user.click(form.getByRole('button', { name: 'Save' }))
 
-      expect(await form.findByRole('alert')).toHaveTextContent(/^Luna: /)
+      expect(await form.findByRole('alert')).toHaveTextContent(/^Silver: /)
       expect(sentBodies(fetchMock, 'PUT /gm/achievements/rewards')).toEqual([])
     })
 

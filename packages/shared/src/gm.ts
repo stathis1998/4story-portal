@@ -128,15 +128,15 @@ export const multiplierForPrice = (base: number, amount: number) => {
 /** What a vendor pays a player who sells an item back: a quarter, rounded down. */
 export const sellBackPrice = (price: number) => Math.floor(price / 4);
 
-/** The game's coin sprites: Rune, Luna and Cron. */
-export const COIN_SPRITES = { rune: 11137, luna: 11138, cron: 11136 } as const;
+/** The game's coin sprites: Gold, Silver and Bronze. */
+export const COIN_SPRITES = { gold: 11137, silver: 11138, bronze: 11136 } as const;
 
-type Money = { rune: number; luna: number; cron: number };
+type Money = { gold: number; silver: number; bronze: number };
 
 export const splitMoney = (price: number): Money => ({
-  rune: Math.floor(price / 1_000_000),
-  luna: Math.floor(price / 1000) % 1000,
-  cron: price % 1000,
+  gold: Math.floor(price / 1_000_000),
+  silver: Math.floor(price / 1000) % 1000,
+  bronze: price % 1000,
 });
 
-export const joinMoney = ({ rune, luna, cron }: Money) => rune * 1_000_000 + luna * 1000 + cron;
+export const joinMoney = ({ gold, silver, bronze }: Money) => gold * 1_000_000 + silver * 1000 + bronze;

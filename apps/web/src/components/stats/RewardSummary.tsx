@@ -3,9 +3,9 @@ import { Coin } from '../gm/Coin'
 import { GameIcon } from '../gm/GameIcon'
 
 const COINS = [
-  ['gold', 'Rune', COIN_SPRITES.rune],
-  ['silver', 'Luna', COIN_SPRITES.luna],
-  ['copper', 'Cron', COIN_SPRITES.cron],
+  ['gold', 'Gold', COIN_SPRITES.gold],
+  ['silver', 'Silver', COIN_SPRITES.silver],
+  ['copper', 'Bronze', COIN_SPRITES.bronze],
 ] as const
 
 type Props = {

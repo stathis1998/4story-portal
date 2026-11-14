@@ -17,5 +17,5 @@ export const UPGRADE_PRICE_ITEMS = {
 
 export type UpgradePriceKey = keyof typeof UPGRADE_PRICE_ITEMS;
 
-/** What a vendor charges for each one, in Cron. 0 for an item the game database does not have. */
+/** What a vendor charges for each one, in Bronze. 0 for an item the game database does not have. */
 export type UpgradePrices = Record<UpgradePriceKey, number>;

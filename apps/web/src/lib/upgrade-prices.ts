@@ -1,5 +1,5 @@
 /**
- * What each upgrade item costs, as game money counted in Cron. The prices start as what the game's vendors charge,
+ * What each upgrade item costs, as game money counted in Bronze. The prices start as what the game's vendors charge,
  * and the ones the user changed are kept in this browser.
  */
 import { joinMoney, splitMoney, type UpgradePriceKey, type UpgradePrices } from '@4story-portal/shared'
@@ -28,7 +28,7 @@ export const PRICE_FIELDS = [
 
 export type PriceKey = UpgradePriceKey
 export type Prices = UpgradePrices
-export type Coins = { rune: number; luna: number; cron: number }
+export type Coins = { gold: number; silver: number; bronze: number }
 /** The prices as the form holds them: three coin fields an item. */
 export type PriceCoins = Record<PriceKey, Coins>
 
@@ -37,7 +37,7 @@ const KEY = 'upgrade-simulator.my-prices'
 /** Anything that is not a number of 0 or more counts as 0, such as an emptied field. Money has no fractions. */
 const whole = (amount: unknown) => (typeof amount === 'number' && Number.isFinite(amount) && amount > 0 ? Math.floor(amount) : 0)
 
-/** A price in Cron for every item. */
+/** A price in Bronze for every item. */
 export function cleanPrices(prices: Partial<Record<PriceKey, unknown>> = {}): Prices {
   const clean = {} as Prices
   for (const { key } of PRICE_FIELDS) {
@@ -54,12 +54,12 @@ export function toCoins(prices: Prices): PriceCoins {
   return coins
 }
 
-/** Joins the coin fields, carrying 1,000 Cron into a Luna and 1,000 Luna into a Rune. */
+/** Joins the coin fields, carrying 1,000 Bronze into a Silver and 1,000 Silver into a Gold. */
 export function fromCoins(coins: PriceCoins): Prices {
   const prices = {} as Prices
   for (const { key } of PRICE_FIELDS) {
-    const { rune, luna, cron } = coins[key]
-    prices[key] = joinMoney({ rune: whole(rune), luna: whole(luna), cron: whole(cron) })
+    const { gold, silver, bronze } = coins[key]
+    prices[key] = joinMoney({ gold: whole(gold), silver: whole(silver), bronze: whole(bronze) })
   }
   return prices
 }

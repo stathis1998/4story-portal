@@ -9,7 +9,7 @@ const player = { userId: 2, username: 'plain', isGm: false }
 
 const prize = (overrides: Partial<GmWheelPrize> = {}): GmWheelPrize => ({
   id: 1,
-  name: '1 Rune',
+  name: '1 Gold',
   weight: 3,
   order: 10,
   enabled: true,
@@ -78,7 +78,7 @@ describe('GM wheel page', () => {
     await status()
 
     expect(rows().map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^#101 Rune1.*Weight 3 \(75%\)EditDelete$/),
+      expect.stringMatching(/^#101 Gold1.*Weight 3 \(75%\)EditDelete$/),
       expect.stringMatching(/^#20★ Jackpot10.*Weight 1 \(25%\)EditDelete$/),
       expect.stringMatching(/^#30Old prize1.*Off the wheelEditDelete$/),
     ])
@@ -133,7 +133,7 @@ describe('GM wheel page', () => {
 
   describe('prizes', () => {
     it('adds a prize after the last one', async () => {
-      const added = prize({ id: 4, name: '500 Luna', weight: 12, order: 40, gold: 0, silver: 500, chance: 75 })
+      const added = prize({ id: 4, name: '500 Silver', weight: 12, order: 40, gold: 0, silver: 500, chance: 75 })
       const fetchMock = mockApi(base({ 'POST /gm/wheel/prizes': () => json(200, state({ prizes: [prize(), jackpot, off, added] })) }))
       const { user } = renderRoute('/gm/wheel', { me: gm })
 
@@ -141,16 +141,16 @@ describe('GM wheel page', () => {
       const form = within(screen.getByRole('form', { name: 'New prize' }))
       expect(form.getByRole('textbox', { name: 'Name' })).toHaveFocus()
       expect(form.getByRole('spinbutton', { name: 'Position' })).toHaveValue(40)
-      await user.type(form.getByRole('textbox', { name: 'Name' }), '500 Luna')
+      await user.type(form.getByRole('textbox', { name: 'Name' }), '500 Silver')
       await user.clear(form.getByRole('spinbutton', { name: 'Weight' }))
       await user.type(form.getByRole('spinbutton', { name: 'Weight' }), '12')
-      await user.clear(form.getByRole('spinbutton', { name: 'Luna' }))
-      await user.type(form.getByRole('spinbutton', { name: 'Luna' }), '500')
+      await user.clear(form.getByRole('spinbutton', { name: 'Silver' }))
+      await user.type(form.getByRole('spinbutton', { name: 'Silver' }), '500')
       await user.click(form.getByRole('button', { name: 'Save' }))
 
       await waitFor(() => expect(rows()).toHaveLength(4))
       expect(sentBodies(fetchMock, 'POST /gm/wheel/prizes')).toEqual([
-        { name: '500 Luna', weight: 12, order: 40, enabled: true, announce: false, gold: 0, silver: 500, copper: 0, items: [] },
+        { name: '500 Silver', weight: 12, order: 40, enabled: true, announce: false, gold: 0, silver: 500, copper: 0, items: [] },
       ])
       expect(screen.queryByRole('form', { name: 'New prize' })).not.toBeInTheDocument()
     })
@@ -186,7 +186,7 @@ describe('GM wheel page', () => {
       await user.click(await screen.findByRole('button', { name: 'Edit prize Jackpot' }))
       const form = within(screen.getByRole('form', { name: 'Prize Jackpot' }))
       expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue('Jackpot')
-      expect(form.getByRole('spinbutton', { name: 'Rune' })).toHaveValue(10)
+      expect(form.getByRole('spinbutton', { name: 'Gold' })).toHaveValue(10)
       expect(form.getByRole('checkbox', { name: 'Announce a win in the game' })).toBeChecked()
       await user.clear(form.getByRole('spinbutton', { name: 'Weight' }))
       await user.type(form.getByRole('spinbutton', { name: 'Weight' }), '2')
@@ -205,8 +205,8 @@ describe('GM wheel page', () => {
       mockApi(base({ 'PUT /gm/wheel/prizes/1': () => json(422, { statusCode: 422, message: 'Unknown items: 31999' }) }))
       const { user } = renderRoute('/gm/wheel', { me: gm })
 
-      await user.click(await screen.findByRole('button', { name: 'Edit prize 1 Rune' }))
-      const form = within(screen.getByRole('form', { name: 'Prize 1 Rune' }))
+      await user.click(await screen.findByRole('button', { name: 'Edit prize 1 Gold' }))
+      const form = within(screen.getByRole('form', { name: 'Prize 1 Gold' }))
       await user.click(form.getByRole('button', { name: 'Save' }))
 
       expect(await form.findByRole('alert')).toHaveTextContent('Unknown items: 31999')
@@ -216,10 +216,10 @@ describe('GM wheel page', () => {
       const fetchMock = mockApi(base())
       const { user } = renderRoute('/gm/wheel', { me: gm })
 
-      await user.click(await screen.findByRole('button', { name: 'Edit prize 1 Rune' }))
-      await user.click(within(screen.getByRole('form', { name: 'Prize 1 Rune' })).getByRole('button', { name: 'Cancel' }))
+      await user.click(await screen.findByRole('button', { name: 'Edit prize 1 Gold' }))
+      await user.click(within(screen.getByRole('form', { name: 'Prize 1 Gold' })).getByRole('button', { name: 'Cancel' }))
 
-      expect(screen.queryByRole('form', { name: 'Prize 1 Rune' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('form', { name: 'Prize 1 Gold' })).not.toBeInTheDocument()
       expect(sentBodies(fetchMock, 'PUT /gm/wheel/prizes/1')).toEqual([])
     })
 

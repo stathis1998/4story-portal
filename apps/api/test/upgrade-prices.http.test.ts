@@ -33,7 +33,7 @@ describe('GET /api/upgrade-prices', () => {
     await request(app.getHttpServer()).get('/api/upgrade-prices').expect(401);
   });
 
-  it('gives a player who is not a GM what a vendor charges for each upgrade item, in Cron', async () => {
+  it('gives a player who is not a GM what a vendor charges for each upgrade item, in Bronze', async () => {
     const agent = request.agent(app.getHttpServer());
     await agent.post('/api/auth/login').send({ username: 'newuser', password: 'secret1' }).expect(200);
 

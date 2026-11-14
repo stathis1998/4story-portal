@@ -28,7 +28,7 @@ const NO_GAME_PRICES = {
 }
 const TRANUS = { ...NO_GAME_PRICES, apprentice: 10_000, master: 100_000, potion300: 10_000_000, greater: 40_000_000 }
 
-/** Opens the simulator with the game charging `gamePrices`, in Cron: nothing unless a test says so. */
+/** Opens the simulator with the game charging `gamePrices`, in Bronze: nothing unless a test says so. */
 const open = async (gamePrices: Partial<typeof NO_GAME_PRICES> | 'fails' = {}) => {
   mockApi({
     'GET /upgrade-prices': () => (gamePrices === 'fails' ? json(500, { statusCode: 500, message: 'Down' }) : json(200, { ...NO_GAME_PRICES, ...gamePrices })),
@@ -150,80 +150,80 @@ describe('upgrade simulator', () => {
       it("start as the game's prices", async () => {
         await open(TRANUS)
 
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
-        expect(price("Master's Formula Luna")).toHaveValue(100)
-        expect(price('Serendipity 300% Rune')).toHaveValue(10)
-        expect(price('Greater Survival Tincture Rune')).toHaveValue(40)
-        expect(price('Survival Tincture Luna')).toHaveValue(0)
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
+        expect(price("Master's Formula Silver")).toHaveValue(100)
+        expect(price('Serendipity 300% Gold')).toHaveValue(10)
+        expect(price('Greater Survival Tincture Gold')).toHaveValue(40)
+        expect(price('Survival Tincture Silver')).toHaveValue(0)
         expect(screen.getByText(/These start as what Tranus charges in the game/)).toBeInTheDocument()
       })
 
       it("cost a run at the game's prices with nothing filled in", async () => {
         const { user } = await open(TRANUS)
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
         await user.selectOptions(select('Upgrade to'), '+13')
         nextRolls(0)
 
         await user.click(screen.getByRole('button', { name: 'Upgrade to target' }))
 
-        // Three Apprentice's Formulas at 10 Luna.
+        // Three Apprentice's Formulas at 10 Silver.
         expect(used('Cost')).toEqual(['30', '30', '30', '30', '30'])
       })
 
       it('keep a price the user changed, while the rest follow the game', async () => {
         const first = await open(TRANUS)
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
-        await first.user.clear(price("Apprentice's Formula Luna"))
-        await first.user.type(price("Apprentice's Formula Luna"), '12')
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
+        await first.user.clear(price("Apprentice's Formula Silver"))
+        await first.user.type(price("Apprentice's Formula Silver"), '12')
         cleanup()
 
         // A GM has since doubled both formulas.
         await open({ ...TRANUS, apprentice: 20_000, master: 200_000 })
 
-        await waitFor(() => expect(price("Master's Formula Luna")).toHaveValue(200))
-        expect(price("Apprentice's Formula Luna")).toHaveValue(12)
+        await waitFor(() => expect(price("Master's Formula Silver")).toHaveValue(200))
+        expect(price("Apprentice's Formula Silver")).toHaveValue(12)
       })
 
       it("follow the game again for a price put back to the game's", async () => {
         const first = await open(TRANUS)
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
-        await first.user.clear(price("Apprentice's Formula Luna"))
-        await first.user.type(price("Apprentice's Formula Luna"), '12')
-        await first.user.clear(price("Apprentice's Formula Luna"))
-        await first.user.type(price("Apprentice's Formula Luna"), '10')
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
+        await first.user.clear(price("Apprentice's Formula Silver"))
+        await first.user.type(price("Apprentice's Formula Silver"), '12')
+        await first.user.clear(price("Apprentice's Formula Silver"))
+        await first.user.type(price("Apprentice's Formula Silver"), '10')
         cleanup()
 
         await open({ ...TRANUS, apprentice: 20_000 })
 
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(20))
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(20))
       })
 
       it("go back to the game's on request, and stay there", async () => {
         const first = await open(TRANUS)
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
-        await first.user.clear(price("Apprentice's Formula Luna"))
-        await first.user.type(price("Apprentice's Formula Luna"), '12')
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
+        await first.user.clear(price("Apprentice's Formula Silver"))
+        await first.user.type(price("Apprentice's Formula Silver"), '12')
 
         await first.user.click(screen.getByRole('button', { name: "Use the game's prices" }))
 
-        expect(price("Apprentice's Formula Luna")).toHaveValue(10)
+        expect(price("Apprentice's Formula Silver")).toHaveValue(10)
         cleanup()
         await open(TRANUS)
-        await waitFor(() => expect(price("Master's Formula Luna")).toHaveValue(100))
-        expect(price("Apprentice's Formula Luna")).toHaveValue(10)
+        await waitFor(() => expect(price("Master's Formula Silver")).toHaveValue(100))
+        expect(price("Apprentice's Formula Silver")).toHaveValue(10)
       })
 
       it("can make an item free that the game charges for", async () => {
         const first = await open(TRANUS)
-        await waitFor(() => expect(price("Apprentice's Formula Luna")).toHaveValue(10))
-        await first.user.clear(price("Apprentice's Formula Luna"))
-        await first.user.type(price("Apprentice's Formula Luna"), '0')
+        await waitFor(() => expect(price("Apprentice's Formula Silver")).toHaveValue(10))
+        await first.user.clear(price("Apprentice's Formula Silver"))
+        await first.user.type(price("Apprentice's Formula Silver"), '0')
         cleanup()
 
         await open(TRANUS)
 
-        await waitFor(() => expect(price("Master's Formula Luna")).toHaveValue(100))
-        expect(price("Apprentice's Formula Luna")).toHaveValue(0)
+        await waitFor(() => expect(price("Master's Formula Silver")).toHaveValue(100))
+        expect(price("Apprentice's Formula Silver")).toHaveValue(0)
       })
 
       it("say so when the game's prices cannot be loaded, and still take the user's", async () => {
@@ -232,8 +232,8 @@ describe('upgrade simulator', () => {
         expect(await screen.findByText(/Could not load the game's prices/)).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: "Use the game's prices" })).not.toBeInTheDocument()
         await user.selectOptions(select('Upgrade to'), '+13')
-        await user.clear(price("Apprentice's Formula Cron"))
-        await user.type(price("Apprentice's Formula Cron"), '7')
+        await user.clear(price("Apprentice's Formula Bronze"))
+        await user.type(price("Apprentice's Formula Bronze"), '7')
         nextRolls(0)
 
         await user.click(screen.getByRole('button', { name: 'Upgrade to target' }))
@@ -267,29 +267,29 @@ describe('upgrade simulator', () => {
         const { user } = await open()
         await user.selectOptions(select('Upgrade to'), '+13')
         await user.selectOptions(select('Serendipity'), '100%')
-        await user.clear(price("Apprentice's Formula Luna"))
-        await user.type(price("Apprentice's Formula Luna"), '10')
-        await user.clear(price('Serendipity 100% Luna'))
-        await user.type(price('Serendipity 100% Luna'), '5')
-        await user.clear(price('Serendipity 100% Cron'))
-        await user.type(price('Serendipity 100% Cron'), '500')
+        await user.clear(price("Apprentice's Formula Silver"))
+        await user.type(price("Apprentice's Formula Silver"), '10')
+        await user.clear(price('Serendipity 100% Silver'))
+        await user.type(price('Serendipity 100% Silver'), '5')
+        await user.clear(price('Serendipity 100% Bronze'))
+        await user.type(price('Serendipity 100% Bronze'), '500')
         nextRolls(0)
 
         await user.click(toTarget())
 
-        // Three attempts, each one scroll and one Serendipity: 3 x 15 Luna 500 Cron is 46 Luna 500 Cron.
+        // Three attempts, each one scroll and one Serendipity: 3 x 15 Silver 500 Bronze is 46 Silver 500 Bronze.
         expect(used('Cost')).toEqual(['46500', '46500', '46500', '46500', '46500'])
         const cost = within(results()).getByRole('row', { name: /^Cost/ })
-        expect(within(cost).getAllByAltText('Luna')).toHaveLength(5)
-        expect(within(cost).getAllByAltText('Cron')).toHaveLength(5)
-        expect(within(cost).queryByAltText('Rune')).not.toBeInTheDocument()
+        expect(within(cost).getAllByAltText('Silver')).toHaveLength(5)
+        expect(within(cost).getAllByAltText('Bronze')).toHaveLength(5)
+        expect(within(cost).queryByAltText('Gold')).not.toBeInTheDocument()
         expect(results()).toHaveTextContent('Cost is at your prices, without the upgrade fee the NPC takes.')
       })
 
       it('has no cost with no prices, or with a price field emptied', async () => {
         const { user } = await open()
         await user.selectOptions(select('Upgrade to'), '+13')
-        await user.clear(price("Apprentice's Formula Cron"))
+        await user.clear(price("Apprentice's Formula Bronze"))
         nextRolls(0)
 
         await user.click(toTarget())
@@ -300,19 +300,19 @@ describe('upgrade simulator', () => {
 
       it('remembers the prices for the next visit', async () => {
         const first = await open()
-        await first.user.clear(price('Greater Survival Tincture Rune'))
-        await first.user.type(price('Greater Survival Tincture Rune'), '3')
-        await first.user.clear(price('Greater Survival Tincture Luna'))
-        await first.user.type(price('Greater Survival Tincture Luna'), '1500')
+        await first.user.clear(price('Greater Survival Tincture Gold'))
+        await first.user.type(price('Greater Survival Tincture Gold'), '3')
+        await first.user.clear(price('Greater Survival Tincture Silver'))
+        await first.user.type(price('Greater Survival Tincture Silver'), '1500')
         cleanup()
 
         await open()
 
-        // 1,500 Luna comes back as 1 Rune and 500 Luna.
-        expect(price('Greater Survival Tincture Rune')).toHaveValue(4)
-        expect(price('Greater Survival Tincture Luna')).toHaveValue(500)
-        expect(price('Greater Survival Tincture Cron')).toHaveValue(0)
-        expect(price('Survival Tincture Rune')).toHaveValue(0)
+        // 1,500 Silver comes back as 1 Gold and 500 Silver.
+        expect(price('Greater Survival Tincture Gold')).toHaveValue(4)
+        expect(price('Greater Survival Tincture Silver')).toHaveValue(500)
+        expect(price('Greater Survival Tincture Bronze')).toHaveValue(0)
+        expect(price('Survival Tincture Gold')).toHaveValue(0)
       })
 
       it('leaves the item and the totals as they were', async () => {

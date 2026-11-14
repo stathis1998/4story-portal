@@ -71,8 +71,8 @@ const OPTION_LEVELS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
 const TATTRLEVEL_SEPERATE = 34;
 const TATTRLEVEL_LOWUNIT = 3;
 const TATTRLEVEL_HIGHUNIT = 2;
-const RUNE_DIVIDER = 1_000_000;
-const LUNA_DIVIDER = 1000;
+const GOLD_DIVIDER = 1_000_000;
+const SILVER_DIVIDER = 1000;
 
 const TITLE_TOKENS = ['/ItemNormal', '/ItemGrade', '/ItemMagic', '/ItemSet', '/ItemRare', '/ItemUnique'] as const;
 type TitleToken = (typeof TITLE_TOKENS)[number];
@@ -213,16 +213,16 @@ function compute(item: ItemInstance, chart: TooltipItem, options: ItemOption[], 
 }
 
 function money(copper: number, charts: TooltipCharts): string {
-  const { rune: runeText, luna: lunaText, cron: cronText } = charts.text;
-  const rune = Math.floor(copper / RUNE_DIVIDER);
-  const rest = copper % RUNE_DIVIDER;
-  const luna = Math.floor(rest / LUNA_DIVIDER);
-  const cron = rest % LUNA_DIVIDER;
+  const { gold: goldText, silver: silverText, bronze: bronzeText } = charts.text;
+  const gold = Math.floor(copper / GOLD_DIVIDER);
+  const rest = copper % GOLD_DIVIDER;
+  const silver = Math.floor(rest / SILVER_DIVIDER);
+  const bronze = rest % SILVER_DIVIDER;
   let text = '';
-  if (rune) text += format(runeText, rune);
-  if (luna) text += (rune ? ' ' : '') + format(lunaText, luna);
+  if (gold) text += format(goldText, gold);
+  if (silver) text += (gold ? ' ' : '') + format(silverText, silver);
   // The client only spaces this after silver, so "1 Gold5 bronze" is what it shows.
-  if (cron || (!rune && !luna)) text += (luna ? ' ' : '') + format(cronText, cron);
+  if (bronze || (!gold && !silver)) text += (silver ? ' ' : '') + format(bronzeText, bronze);
   return text;
 }
 

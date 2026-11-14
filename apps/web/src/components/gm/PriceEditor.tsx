@@ -33,16 +33,16 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
   const id = useId()
   const [values, setValues] = useState<Record<string, string>>((): Record<string, string> => {
     if (shop === 'pvp') return { points: String(item.price) }
-    const { rune, luna, cron } = splitMoney(item.price)
-    return { rune: String(rune), luna: String(luna), cron: String(cron) }
+    const { gold, silver, bronze } = splitMoney(item.price)
+    return { gold: String(gold), silver: String(silver), bronze: String(bronze) }
   })
   const fields =
     shop === 'pvp'
       ? [{ key: 'points', label: 'PvP points', sprite: null }]
       : [
-          { key: 'rune', label: 'Rune', sprite: COIN_SPRITES.rune },
-          { key: 'luna', label: 'Luna', sprite: COIN_SPRITES.luna },
-          { key: 'cron', label: 'Cron', sprite: COIN_SPRITES.cron },
+          { key: 'gold', label: 'Gold', sprite: COIN_SPRITES.gold },
+          { key: 'silver', label: 'Silver', sprite: COIN_SPRITES.silver },
+          { key: 'bronze', label: 'Bronze', sprite: COIN_SPRITES.bronze },
         ]
 
   // A blank field counts as 0, but all of them blank is no price at all.
@@ -53,7 +53,7 @@ export function PriceEditor({ item, shop, saving, error, onSave, onCancel }: Pro
     ? null
     : shop === 'pvp'
       ? parts[0]
-      : joinMoney({ rune: parts[0], luna: parts[1], cron: parts[2] })
+      : joinMoney({ gold: parts[0], silver: parts[1], bronze: parts[2] })
   const usable = amount !== null && amount <= MAX_PRICE
   const charged = usable ? chargedPrice(item.base, multiplierForPrice(item.base, amount)) : null
   // The API checks both, so a typed amount the float rounds down is refused here too.

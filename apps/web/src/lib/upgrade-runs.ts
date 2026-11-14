@@ -86,7 +86,7 @@ function spreadOf(values: Float64Array): Spread {
 export function simulate(start: number, target: number, choicesAt: ChoicesAt, options: Options = {}): Simulation {
   const { runs = RUNS, maxMs = MAX_MS, random = Math.random, prices = NO_PRICES } = options
   const deadline = performance.now() + maxMs
-  // Float64, because a cost in Cron can pass what 32 bits hold.
+  // Float64, because a cost in Bronze can pass what 32 bits hold.
   const used = Object.fromEntries(COUNTS.map((count) => [count, new Float64Array(runs)])) as Record<Count, Float64Array>
   let reached = 0
   let destroyed = 0

@@ -16,25 +16,25 @@ function typeUnreadable(input: HTMLElement) {
 describe('RewardEditor', () => {
   it('saves a blank coin as 0', () => {
     const onSave = open()
-    fireEvent.change(screen.getByLabelText('Luna'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Silver'), { target: { value: '' } })
     fireEvent.submit(screen.getByRole('form', { name: 'Reward for Slayer II' }))
     expect(onSave).toHaveBeenCalledWith({ gold: 100, silver: 0, copper: 0, items: [] })
   })
 
   it('refuses a coin the browser could not read as a number, instead of saving it as 0', () => {
     const onSave = open()
-    typeUnreadable(screen.getByLabelText('Rune'))
+    typeUnreadable(screen.getByLabelText('Gold'))
     fireEvent.submit(screen.getByRole('form', { name: 'Reward for Slayer II' }))
     expect(onSave).not.toHaveBeenCalled()
-    expect(screen.getByText('Rune: Enter a whole number')).toBeInTheDocument()
+    expect(screen.getByText('Gold: Enter a whole number')).toBeInTheDocument()
   })
 
   it('saves again once the coin is a number', () => {
     const onSave = open()
-    const rune = screen.getByLabelText('Rune')
-    typeUnreadable(rune)
-    Object.defineProperty(rune, 'validity', { configurable: true, value: { badInput: false } })
-    fireEvent.change(rune, { target: { value: '250' } })
+    const gold = screen.getByLabelText('Gold')
+    typeUnreadable(gold)
+    Object.defineProperty(gold, 'validity', { configurable: true, value: { badInput: false } })
+    fireEvent.change(gold, { target: { value: '250' } })
     fireEvent.submit(screen.getByRole('form', { name: 'Reward for Slayer II' }))
     expect(onSave).toHaveBeenCalledWith({ gold: 250, silver: 0, copper: 0, items: [] })
   })

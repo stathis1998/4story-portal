@@ -34,9 +34,9 @@ export const STRING_IDS = {
   expired: [1087],
   wrapFooter: [1238],
   mogg: [1982],
-  rune: [233],
-  luna: [236],
-  cron: [237],
+  gold: [233],
+  silver: [236],
+  bronze: [237],
   // TSTR_SEA to TSTR_MAGMA, which are effects 1 to 9.
   effects: [1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006],
 } as const;
@@ -241,9 +241,9 @@ export function buildTooltipCharts(sources: TooltipSources): TooltipCharts {
       expired: one(STRING_IDS.expired),
       wrapFooter: one(STRING_IDS.wrapFooter),
       mogg: one(STRING_IDS.mogg),
-      rune: one(STRING_IDS.rune),
-      luna: one(STRING_IDS.luna),
-      cron: one(STRING_IDS.cron),
+      gold: one(STRING_IDS.gold),
+      silver: one(STRING_IDS.silver),
+      bronze: one(STRING_IDS.bronze),
       effects,
     },
   };

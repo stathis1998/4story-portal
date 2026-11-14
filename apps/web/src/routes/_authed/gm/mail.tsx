@@ -31,9 +31,9 @@ export const Route = createFileRoute('/_authed/gm/mail')({
 type ItemRow = { item: GmItemSearchResult; count: number }
 
 const COINS = [
-  ['gold', 'Rune'],
-  ['silver', 'Luna'],
-  ['copper', 'Cron'],
+  ['gold', 'Gold'],
+  ['silver', 'Silver'],
+  ['copper', 'Bronze'],
 ] as const
 
 const field =

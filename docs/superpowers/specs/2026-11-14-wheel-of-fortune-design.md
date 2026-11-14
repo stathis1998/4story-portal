@@ -21,7 +21,7 @@ items, delivered to a character of their choice, gives them one, and it works fr
 - **Chances are shown.** Under the wheel is the list of prizes with the chance of each, the player's
   own last 10 spins, and the last 10 announced wins by anyone.
 - **Big prizes are announced in game.** A prize marked "announce" by a GM puts an Operator line in
-  world chat: `Mounara won 10 Rune on the Wheel of Fortune`. It is sent about 15 seconds after the
+  world chat: `Mounara won 10 Gold on the Wheel of Fortune`. It is sent about 15 seconds after the
   spin, so chat does not spoil the wheel.
 - **GMs edit everything on `/gm/wheel`:** add, change, disable and delete prizes, set each one's
   name, weight, reward and whether it is announced, and switch the wheel on and off.
@@ -31,7 +31,7 @@ items, delivered to a character of their choice, gives them one, and it works fr
 ## Prizes
 
 A prize has a name (shown on the wheel and in the letter), a weight, and the same reward shape as an
-achievement level: Rune, Luna, Cron and up to three items with counts. Its chance is its weight
+achievement level: Gold, Silver, Bronze and up to three items with counts. Its chance is its weight
 divided by the total weight of the enabled prizes, so the GM page shows the resulting percentage next
 to each weight. A prize with no gold and no items is allowed as a "no luck today" segment; it sends
 no letter.
@@ -48,18 +48,18 @@ Inserted once, when the prize table is first created. Prices are what Tranus cha
 
 | Prize | Weight | Worth |
 |---|---|---|
-| 100 Luna | 22 | 0.1 Rune |
-| 5 Apprentice Formulas (8501) | 16 | 0.05 Rune |
-| 300 Luna | 15 | 0.3 Rune |
-| Master's Formula (7602) | 10 | 0.1 Rune |
-| 2 Serendipity 100% (7609) | 10 | 0.2 Rune |
-| Survival Tincture (7654) | 8 | 0.2 Rune |
-| 10 Healing Potions (7600, First-Class) | 8 | 0.5 Rune |
-| 1 Rune | 6 | 1 Rune |
-| Experience Potion (7714) | 4 | 5 Rune |
-| 10 Rune, announced | 1 | 10 Rune |
+| 100 Silver | 22 | 0.1 Gold |
+| 5 Apprentice Formulas (8501) | 16 | 0.05 Gold |
+| 300 Silver | 15 | 0.3 Gold |
+| Master's Formula (7602) | 10 | 0.1 Gold |
+| 2 Serendipity 100% (7609) | 10 | 0.2 Gold |
+| Survival Tincture (7654) | 8 | 0.2 Gold |
+| 10 Healing Potions (7600, First-Class) | 8 | 0.5 Gold |
+| 1 Gold | 6 | 1 Gold |
+| Experience Potion (7714) | 4 | 5 Gold |
+| 10 Gold, announced | 1 | 10 Gold |
 
-The weights add up to 100, so each weight is its chance in percent. An account wins about 0.5 Rune
+The weights add up to 100, so each weight is its chance in percent. An account wins about 0.5 Gold
 of value a day on average. All of it can be changed on the GM page before the switch goes on.
 
 ## How a spin works

@@ -63,14 +63,14 @@ describe('GM mail page', () => {
     const count = screen.getByRole('spinbutton', { name: 'Count for Small Potion' })
     await user.clear(count)
     await user.type(count, '2')
-    await user.clear(screen.getByLabelText('Rune'))
-    await user.type(screen.getByLabelText('Rune'), '5')
+    await user.clear(screen.getByLabelText('Gold'))
+    await user.type(screen.getByLabelText('Gold'), '5')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Send this mail?' })
     expect(dialog).toHaveTextContent('Moose')
     expect(dialog).toHaveTextContent('Small Potion x2')
-    expect(dialog).toHaveTextContent('5 Rune')
+    expect(dialog).toHaveTextContent('5 Gold')
     expect(sentBodies(fetchMock, 'POST /gm/mail')).toEqual([])
 
     await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))

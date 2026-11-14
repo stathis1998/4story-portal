@@ -114,7 +114,7 @@ describe('SqlWheelRepository against the _TEST copy', () => {
       // True on a database that had no prize table before this transaction; a table already there keeps what a GM made of it.
       if (prizes.every((row) => row.name !== 'Test prize') && prizes.length === 10) {
         expect(prizes.reduce((sum, row) => sum + row.weight, 0)).toBe(100);
-        expect(prizes.filter((row) => row.announce).map((row) => row.name)).toEqual(['10 Rune']);
+        expect(prizes.filter((row) => row.announce).map((row) => row.name)).toEqual(['10 Gold']);
       }
       expect(prizes.length).toBeGreaterThan(0);
     });

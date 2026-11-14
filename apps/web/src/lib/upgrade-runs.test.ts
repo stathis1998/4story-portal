@@ -95,7 +95,7 @@ describe('simulate', () => {
   })
 
   it('spreads the cost of the runs at the prices given', () => {
-    // Runs of 1, 2 and 3 attempts in turn, at 3 Cron a scroll.
+    // Runs of 1, 2 and 3 attempts in turn, at 3 Bronze a scroll.
     const random = rolls(0, FAIL, 0, FAIL, FAIL, 0)
     const { spread } = simulate(10, 11, always({ tincture: 'survival' }), { runs: 300, random, prices: cleanPrices({ apprentice: 3 }) })
 

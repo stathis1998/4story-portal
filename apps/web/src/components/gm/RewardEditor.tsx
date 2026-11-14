@@ -35,9 +35,9 @@ type Props = {
 type ItemRow = { itemId: number; name: string; icon: number | null; count: number; stack: number | null }
 
 const COINS = [
-  { key: 'gold', label: 'Rune', sprite: COIN_SPRITES.rune, max: MAIL_MAX_GOLD },
-  { key: 'silver', label: 'Luna', sprite: COIN_SPRITES.luna, max: 999 },
-  { key: 'copper', label: 'Cron', sprite: COIN_SPRITES.cron, max: 999 },
+  { key: 'gold', label: 'Gold', sprite: COIN_SPRITES.gold, max: MAIL_MAX_GOLD },
+  { key: 'silver', label: 'Silver', sprite: COIN_SPRITES.silver, max: 999 },
+  { key: 'copper', label: 'Bronze', sprite: COIN_SPRITES.bronze, max: 999 },
 ] as const
 
 const field =
@@ -98,7 +98,7 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel, la
               type="number"
               min={0}
               max={max}
-              // Rune is where most rewards start, and typing replaces what was there.
+              // Gold is where most rewards start, and typing replaces what was there.
               autoFocus={index === 0 && !children}
               onFocus={(event) => event.target.select()}
               value={money[key]}

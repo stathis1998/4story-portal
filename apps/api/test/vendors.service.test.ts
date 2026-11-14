@@ -284,7 +284,7 @@ describe('setPrice', () => {
     expect(result).toEqual({ itemId: 8001, name: 'Small Vitality Potion', price: 75, multiplier: 75, soldBy: 12 });
     expect(repo.prices).toEqual([[8001, 'fPrice', 75]]);
     expect(gm.audits[0]).toMatchObject({
-      command: 'ITEMPRICE', gmId: 'moose', log: '8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 cron',
+      command: 'ITEMPRICE', gmId: 'moose', log: '8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 bronze',
     });
   });
 

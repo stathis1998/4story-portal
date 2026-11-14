@@ -43,8 +43,8 @@
   - `chargedPrice(base: number, multiplier: number): number`
   - `multiplierForPrice(base: number, amount: number): number`
   - `sellBackPrice(price: number): number`
-  - `splitMoney(price: number): { rune: number; luna: number; cron: number }`
-  - `joinMoney(parts: { rune: number; luna: number; cron: number }): number`
+  - `splitMoney(price: number): { gold: number; silver: number; bronze: number }`
+  - `joinMoney(parts: { gold: number; silver: number; bronze: number }): number`
   - `gmIdSchema` (a `z.coerce.number()` integer, 1 to 32767, for route params)
   - `addVendorItemSchema` (`{ itemId }`, integer 1 to 32767), type `AddVendorItem`
   - `itemPriceSchema` (`{ currency: 'money' | 'pvp', amount }`, integer 0 to `MAX_PRICE`), type `ItemPriceInput`
@@ -96,8 +96,8 @@ describe('multiplierForPrice', () => {
 
 describe('sell back and money', () => {
   it('pays a quarter, rounded down', () => expect(sellBackPrice(75)).toBe(18));
-  it('splits', () => expect(splitMoney(268_750)).toEqual({ rune: 0, luna: 268, cron: 750 }));
-  it('joins, carrying oversized parts', () => expect(joinMoney({ rune: 1, luna: 1500, cron: 2 })).toBe(2_500_002));
+  it('splits', () => expect(splitMoney(268_750)).toEqual({ gold: 0, silver: 268, bronze: 750 }));
+  it('joins, carrying oversized parts', () => expect(joinMoney({ gold: 1, silver: 1500, bronze: 2 })).toBe(2_500_002));
 });
 
 describe('vendor schemas', () => {
@@ -539,7 +539,7 @@ describe('setPrice', () => {
     expect(result).toEqual({ itemId: 8001, name: 'Small Vitality Potion', price: 75, multiplier: 75, soldBy: 12 });
     expect(repo.prices).toEqual([[8001, 'fPrice', 75]]);
     expect(gm.audits[0]).toMatchObject({ command: 'ITEMPRICE',
-      log: '8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 cron' });
+      log: '8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 bronze' });
   });
   it('stores PvP in fPvPrice', /* log says '… fPvPrice 2 -> 3, 100 -> 150 points' with pvpMoney 50 */);
   it('allows a free item', /* amount 0, multiplier 0 */);
@@ -699,17 +699,17 @@ Expected: PASS, with `routeTree.gen.ts` updated.
   - `useSetItemPrice()`: variables `{ itemId, currency, amount }`, returns `GmItemPriceResult`.
   - Both invalidate `['gm','vendors']` in `onSettled`, so a stale list refreshes after a failure too.
   - `priceLabel(price: number, shop: VendorShop): string`: `Free`, `0R 5L 0C`, or `150 points`.
-  - `priceText(price: number, shop: VendorShop): string`: `75 cron` or `150 points`, with thousands separators.
+  - `priceText(price: number, shop: VendorShop): string`: `75 bronze` or `150 points`, with thousands separators.
 - `VendorItemsTable` props: `{ vendor: GmVendor; items: GmVendorItem[]; onNote: (note: string) => void }`. It owns which row is being edited or confirmed.
 - `PriceEditor` props: `{ item: GmVendorItem; shop: VendorShop; saving: boolean; error: string | null; onSave: (amount: number) => void; onCancel: () => void }`.
 
 Copy, exactly as in the spec:
-- `Sells back for 18 cron.`
+- `Sells back for 18 bronze.`
 - `Sold by 12 vendors: this changes all of them.`, shown only when `soldBy > 1`
-- `Will charge 15,999,999 cron`, shown only when `chargedPrice` differs from the typed amount
+- `Will charge 15,999,999 bronze`, shown only when `chargedPrice` differs from the typed amount
 - `Price can't be set: level 0 item`, shown when `base === 0` and `name !== null`
 - Confirmation: `Remove Small Potion from Mr Bab?`
-- Notes: `Small Potion now costs 75 cron at 12 vendors. Restart TMapSvr to apply.` (`1 vendor` when singular) and `Small Potion removed from Mr Bab. Restart TMapSvr to apply.`
+- Notes: `Small Potion now costs 75 bronze at 12 vendors. Restart TMapSvr to apply.` (`1 vendor` when singular) and `Small Potion removed from Mr Bab. Restart TMapSvr to apply.`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -723,21 +723,21 @@ it('shows points for a PvP shop')
 it('shows an unknown item, removable, with no edit button', /* name null: 'Unknown item #8001' */)
 it('shows no edit button when the base is 0', /* base 0: "Price can't be set: level 0 item" */)
 it('previews sell-back and warns about other vendors', async () => {
-  // open editor, type Cron 75
-  expect(screen.getByText('Sells back for 18 cron.')).toBeInTheDocument()
+  // open editor, type Bronze 75
+  expect(screen.getByText('Sells back for 18 bronze.')).toBeInTheDocument()
   expect(screen.getByText('Sold by 12 vendors: this changes all of them.')).toBeInTheDocument()
 })
 it('leaves out the vendor warning when only this vendor sells it', /* soldBy 1 */)
 it('disables save until the price changes')
 it('sends the joined amount and shows a note', async () => {
-  // Rune 1, Luna 2, Cron 3
+  // Gold 1, Silver 2, Bronze 3
   expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'money', amount: 1_002_003 }])
-  expect(await screen.findByText(/now costs 1,002,003 cron at 12 vendors\. Restart TMapSvr to apply\./)).toBeInTheDocument()
+  expect(await screen.findByText(/now costs 1,002,003 bronze at 12 vendors\. Restart TMapSvr to apply\./)).toBeInTheDocument()
 })
 it('edits one points field and hides sell-back on a PvP shop', /* currency 'pvp' */)
-it('treats a blank field as 0', /* clear Cron, Rune 1: amount 1,000,000 */)
+it('treats a blank field as 0', /* clear Bronze, Gold 1: amount 1,000,000 */)
 it('disables save for a negative or fractional value')
-it('warns when the price cannot be charged exactly', /* base 53750, Rune 16: 'Will charge 15,999,999 cron' */)
+it('warns when the price cannot be charged exactly', /* base 53750, Gold 16: 'Will charge 15,999,999 bronze' */)
 it('keeps the typed values and shows the error when saving fails', /* 422 message in the row */)
 it('closes the editor when another vendor is selected')
 it('asks before removing and sends nothing on cancel', /* 'Remove Small Potion from Mr Bab?' */)
@@ -750,7 +750,7 @@ it('refreshes after removing an item that was already gone', /* 404 message show
 Run: `npx vitest run src/routes/gm-vendors.test.tsx` in `apps/web`
 Expected: new tests FAIL.
 
-- [ ] **Step 3: Implement.** Table styling matches `LoginsTable`. Inputs are plain controlled `type="number" min="0"` inputs labelled `Rune`, `Luna`, `Cron` or `PvP points`, styled like `DestinationSearch`. Row actions have `aria-label`s such as `Edit price of Small Potion` and `Remove Small Potion`.
+- [ ] **Step 3: Implement.** Table styling matches `LoginsTable`. Inputs are plain controlled `type="number" min="0"` inputs labelled `Gold`, `Silver`, `Bronze` or `PvP points`, styled like `DestinationSearch`. Row actions have `aria-label`s such as `Edit price of Small Potion` and `Remove Small Potion`.
 
 - [ ] **Step 4: Run to verify they pass**
 
@@ -850,23 +850,23 @@ Added after the user saw the page: `10R 50L 10C` looks wrong, so prices use the 
 - Test: `packages/shared/src/gm.test.ts`, `apps/web/src/routes/gm-vendors.test.tsx`
 
 **Interfaces:**
-- Produces, in shared `gm.ts`: `COIN_SPRITES = { rune: 11137, luna: 11138, cron: 11136 } as const`.
+- Produces, in shared `gm.ts`: `COIN_SPRITES = { gold: 11137, silver: 11138, bronze: 11136 } as const`.
 - `GameIcon` gains an optional `alt` prop, default `''`.
-- `Price`, props `{ price: number; shop: VendorShop }`. Inline, no wrapping, `tabular-nums`. Price 0: `Free`. PvP: `1,200 points`. Money: for each non-zero of rune, luna, cron in that order, the number with thousands separators then a 16px `GameIcon` with `alt` `Rune`, `Luna` or `Cron`.
+- `Price`, props `{ price: number; shop: VendorShop }`. Inline, no wrapping, `tabular-nums`. Price 0: `Free`. PvP: `1,200 points`. Money: for each non-zero of gold, silver, bronze in that order, the number with thousands separators then a 16px `GameIcon` with `alt` `Gold`, `Silver` or `Bronze`.
 - `priceLabel` is removed; everything that used it renders `Price`.
-- `priceText(price, shop)` is words for notes: `1 Rune 2 Luna 3 Cron`, only non-zero parts, `75 Cron`, `150 points`, with thousands separators.
+- `priceText(price, shop)` is words for notes: `1 Gold 2 Silver 3 Bronze`, only non-zero parts, `75 Bronze`, `150 points`, with thousands separators.
 
 Copy:
-- Save note: `Small Potion now costs 75 Cron at 12 vendors. Restart TMapSvr to apply.` For 0: `Small Potion is now free at 12 vendors. Restart TMapSvr to apply.`
+- Save note: `Small Potion now costs 75 Bronze at 12 vendors. Restart TMapSvr to apply.` For 0: `Small Potion is now free at 12 vendors. Restart TMapSvr to apply.`
 - Editor: `Sells back for` then `<Price>`. When sell-back is 0: `Sells back for nothing.`
 - Editor: `Will charge` then `<Price>`.
-- The editor's Rune, Luna and Cron labels each show their coin next to the word, with an empty `alt` since the word is the label.
+- The editor's Gold, Silver and Bronze labels each show their coin next to the word, with an empty `alt` since the word is the label.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
 // shared
-it('names the coin sprites', () => expect(COIN_SPRITES).toEqual({ rune: 11137, luna: 11138, cron: 11136 }));
+it('names the coin sprites', () => expect(COIN_SPRITES).toEqual({ gold: 11137, silver: 11138, bronze: 11136 }));
 ```
 
 ```tsx
@@ -874,22 +874,22 @@ it('shows only non-zero denominations with their coins', async () => {
   // item price 5_200 in the stock table
   const cell = within(row).getByTestId('price')
   expect(cell).toHaveTextContent('5200')          // '5' + '200' with no R, L or C letters
-  expect(within(cell).getByRole('img', { name: 'Luna' })).toHaveAttribute('src', '/game-icons/11138.png')
-  expect(within(cell).getByRole('img', { name: 'Cron' })).toHaveAttribute('src', '/game-icons/11136.png')
-  expect(within(cell).queryByRole('img', { name: 'Rune' })).not.toBeInTheDocument()
+  expect(within(cell).getByRole('img', { name: 'Silver' })).toHaveAttribute('src', '/game-icons/11138.png')
+  expect(within(cell).getByRole('img', { name: 'Bronze' })).toHaveAttribute('src', '/game-icons/11136.png')
+  expect(within(cell).queryByRole('img', { name: 'Gold' })).not.toBeInTheDocument()
 })
-it('shows all three coins for a price with all three', /* 1_002_003: Rune 11137 too */)
+it('shows all three coins for a price with all three', /* 1_002_003: Gold 11137 too */)
 it('uses no coins for a PvP price', /* '1,200 points', no img */)
 it('shows Free with no coins for 0')
-it('renders the sell-back with a coin', /* text 'Sells back for 18', img named Cron */)
+it('renders the sell-back with a coin', /* text 'Sells back for 18', img named Bronze */)
 it('says a free sell-back is nothing', /* price 3 sells back 0: 'Sells back for nothing.' */)
-it('renders Will charge with coins', /* base 53750, Rune 16: 15 Rune, 999 Luna, 999 Cron */)
-it('words the save note', /* 'now costs 1 Rune 2 Luna 3 Cron at 12 vendors' */)
+it('renders Will charge with coins', /* base 53750, Gold 16: 15 Gold, 999 Silver, 999 Bronze */)
+it('words the save note', /* 'now costs 1 Gold 2 Silver 3 Bronze at 12 vendors' */)
 it('says when an item becomes free', /* 'is now free at 12 vendors' */)
 it('uses coins in add search results')
 ```
 
-Update existing tests that assert `0R 5L 0C` or `cron` copy to the new forms.
+Update existing tests that assert `0R 5L 0C` or `bronze` copy to the new forms.
 
 - [ ] **Step 2: Run to verify they fail**
 

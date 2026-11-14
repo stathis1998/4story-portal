@@ -113,9 +113,9 @@ const charts: TooltipCharts = {
     expired: 'The time has expired.',
     wrapFooter: '(Seal)',
     mogg: 'Transmogrified to:',
-    rune: '%d Gold',
-    luna: '%d silver',
-    cron: '%d bronze',
+    gold: '%d Gold',
+    silver: '%d silver',
+    bronze: '%d bronze',
     effects: { 2: ' (Lava)', 15: ' (Gold)' },
   },
 };

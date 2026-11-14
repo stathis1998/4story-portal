@@ -31,25 +31,25 @@ describe('cleanPrices', () => {
 })
 
 describe('coins', () => {
-  it('splits every price into Rune, Luna and Cron', () => {
+  it('splits every price into Gold, Silver and Bronze', () => {
     const coins = toCoins(cleanPrices({ greater: 3_250_075 }))
 
-    expect(coins.greater).toEqual({ rune: 3, luna: 250, cron: 75 })
-    expect(coins.master).toEqual({ rune: 0, luna: 0, cron: 0 })
+    expect(coins.greater).toEqual({ gold: 3, silver: 250, bronze: 75 })
+    expect(coins.master).toEqual({ gold: 0, silver: 0, bronze: 0 })
   })
 
-  it('joins them back into Cron', () => {
+  it('joins them back into Bronze', () => {
     expect(fromCoins(toCoins(prices))).toEqual(prices)
   })
 
   it('carries 1,000 of a coin into the next one', () => {
-    const coins = { ...toCoins(NO_PRICES), master: { rune: 1, luna: 1500, cron: 2 } }
+    const coins = { ...toCoins(NO_PRICES), master: { gold: 1, silver: 1500, bronze: 2 } }
 
     expect(fromCoins(coins).master).toBe(2_500_002)
   })
 
   it('counts an emptied or negative field as 0', () => {
-    const coins = { ...toCoins(NO_PRICES), master: { rune: Number.NaN, luna: -4, cron: 7 } }
+    const coins = { ...toCoins(NO_PRICES), master: { gold: Number.NaN, silver: -4, bronze: 7 } }
 
     expect(fromCoins(coins).master).toBe(7)
   })

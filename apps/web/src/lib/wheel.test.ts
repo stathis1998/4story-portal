@@ -73,7 +73,7 @@ describe('the wheel', () => {
   })
 
   it('shortens a long name to fit the segment', () => {
-    expect(segmentLabel('1 Rune')).toBe('1 Rune')
+    expect(segmentLabel('1 Gold')).toBe('1 Gold')
     expect(segmentLabel('10 First-Class Healing Potions')).toBe('10 First-Class Healin…')
     expect(segmentLabel('10 First-Class Healing Potions').length).toBeLessThanOrEqual(22)
   })

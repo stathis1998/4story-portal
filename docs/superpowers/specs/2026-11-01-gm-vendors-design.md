@@ -12,7 +12,7 @@ A helper script extracts the icons from the game client, so neither the API nor 
 
 **Decisions made with the user:**
 - Prices stay global to the item. There are no per-vendor prices and no game server changes.
-- GMs enter the actual price (Rune, Luna, Cron or PvP points), not the stored multiplier.
+- GMs enter the actual price (Gold, Silver, Bronze or PvP points), not the stored multiplier.
 - Generated PNGs and the ID lookup are committed to the repo.
 
 **Out of scope:**
@@ -59,7 +59,7 @@ Consequences:
 - The server pays `CTItem::GetPrice() / 4` when a player sells to any vendor, and that is computed from `fPrice`, so sell-back moves with the money price. For items with attributes, `GetPrice` uses the instance's power level, so an upgraded item sells for more than the formula here shows.
 - Selling is refused unless `bIsSell` has the `ITEMTRADE_SELL` bit (2, in `TMapType.h`), checked in `OnCS_ITEMSELL_REQ`.
 - The buy handler caps the count at `bStack` and computes `price * count` in a `DWORD` (`CSHandler.cpp:5951-5979`), so a price whose full stack passes 4,294,967,295 wraps around and becomes cheap. This is a money exploit, not just a wrong price: item 29104 Name Change (148,500,000, stack 200, sell flag set) buys 29 for 11,532,704 instead of 4,306,500,000 and sells back for 1,076,625,000. Items 7503 and 7921 are on sale with such a price today. The check is `fullStackOverflows` in `packages/shared`, which treats stack 0 as 1. It runs when setting a price and when adding an item.
-- Money is displayed as `Rune = price / 1,000,000`, `Luna = (price % 1,000,000) / 1,000`, `Cron = price % 1,000`.
+- Money is displayed as `Gold = price / 1,000,000`, `Silver = (price % 1,000,000) / 1,000`, `Bronze = price % 1,000`.
 
 ### 2.4 Client behavior
 
@@ -94,7 +94,7 @@ The `Extractor` folder in the source tree already implements the image decoding 
 - 7,158 of 7,775 client items resolve to an icon, using 1,912 unique sprites (about 4.2 MB). Of the 933 items currently sold, 1 has no icon.
 - 82 of 96 vendors have a portrait. Of the other 14: 5 have a face index past the end of list `26269`, which has 248 entries (Tranus has 274), 3 have face 0, 5 have a template missing from `TNPCTemp.tcd`, and 1 is in no client NPC file. The game has no portrait for these. The client never shows NPC faces, only monster ones, so nothing in it depends on them.
 
-**Coins:** sprites 11137, 11138 and 11136 are the 18×18 Rune, Luna and Cron coins, placed next to the money fields in the client's frame `0x4BB`.
+**Coins:** sprites 11137, 11138 and 11136 are the 18×18 Gold, Silver and Bronze coins, placed next to the money fields in the client's frame `0x4BB`.
 
 **Chart file quality:** the client skips unreadable `TNPC` unit files silently (`LoadTNPC` catches everything). Several are older layouts or empty: `TNPC00000004`, `TNPC00000101`, `TNPC00002202`, `TNPC03850000` to `TNPC038a0000`. Others in the folder are not unit files at all (`TNPCPOS.tcd`, `TNPC02bf00000.tcd`).
 
@@ -154,7 +154,7 @@ Pure functions in `packages/shared`, so the API and the browser preview cannot d
 - `chargedPrice(base, multiplier)`: `Math.trunc(Math.fround(Math.fround(base) * Math.fround(multiplier)) + 0.99)`.
 - `multiplierForPrice(base, amount)`: starts at `Math.fround(amount / base)` and tries neighboring float values, returning the first whose `chargedPrice` equals `amount`, or else the one that gets closest. The result can miss by a little at very large prices (a float has 24 bits of precision), so callers check what `chargedPrice` returns. An amount of 0 returns multiplier 0.
 - `sellBackPrice(price)`: `Math.floor(price / 4)`.
-- `splitMoney(price)` and `joinMoney({ rune, luna, cron })`.
+- `splitMoney(price)` and `joinMoney({ gold, silver, bronze })`.
 
 The stored multiplier is the 32-bit float value, so the database holds exactly what the server will read.
 
@@ -191,7 +191,7 @@ Every write calls the existing `writeAudit` (`OPTool_ManagerLog`). A failed audi
 |---|---|
 | `VENDORADD` | `Mr Bab (20002): +8001 Small Vitality Potion` |
 | `VENDORDEL` | `Mr Bab (20002): -8001 Small Vitality Potion` |
-| `ITEMPRICE` | `8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 cron` |
+| `ITEMPRICE` | `8001 Small Vitality Potion: fPrice 50 -> 75, 50 -> 75 bronze` |
 
 ## 5. Web
 
@@ -223,7 +223,7 @@ Changes reach players after TMapSvr restarts.
 - The first banner line appears only when `database` ends in `_TEST`. The restart line is always shown.
 - `GameIcon` builds `/game-icons/<spriteId>.png`, sets `loading="lazy"`, and shows a neutral placeholder when the sprite ID is `null` or the image fails to load.
 - **Vendor list:** filters as you type on name, title or ID, and has a PvP-only checkbox. Rows show the portrait, name, title and item count. A vendor with no name shows its title as the name.
-- **Stock table:** filters in the browser. Money prices show each non-zero denomination as a number followed by its coin icon, the way the game lays them out, for example `5 [luna] 200 [cron]`. PvP shops show `1,200 points`. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there. An unknown row (name null) shows a dash instead of a price. Rows show `#<id>` in muted text next to the name, and the filter matches IDs too.
+- **Stock table:** filters in the browser. Money prices show each non-zero denomination as a number followed by its coin icon, the way the game lays them out, for example `5 [silver] 200 [bronze]`. PvP shops show `1,200 points`. A price of 0 shows as `Free`, since an item with no multiplier for that shop's currency really is free there. An unknown row (name null) shows a dash instead of a price. Rows show `#<id>` in muted text next to the name, and the filter matches IDs too.
 - **Item names:** an empty name displays as `Item #<id>` everywhere, including notes and confirmations. A null name stays `Unknown item #<id>`.
 - **Stock row warnings:** a row whose full stack overflows shows `Buying a full stack costs almost nothing: lower this price.` in danger text. A row that isn't in the client shows `Not in client: crashes players opening this shop`, and can still be removed.
 - **Vendor list:** from the two-column width up it scrolls inside its own pane, so selecting a vendor far down the list never leaves the stock off-screen.
@@ -233,8 +233,8 @@ Changes reach players after TMapSvr restarts.
 The row becomes an inline editor:
 
 ```
-[i] Small Potion   [0] Rune [0] Luna [75] Cron    [Save] [Cancel]
-    Sells back for 18 [cron]. Sold by 12 vendors: this changes all of them.
+[i] Small Potion   [0] Gold [0] Silver [75] Bronze    [Save] [Cancel]
+    Sells back for 18 [bronze]. Sold by 12 vendors: this changes all of them.
 ```
 
 - PvP shops show one points field and no sell-back line, since sell-back is always paid from `fPrice`.
@@ -265,7 +265,7 @@ The trash button asks for confirmation inline, naming the item and the vendor, l
 
 ### 5.5 After a change
 
-The stock and vendor queries refresh. A note confirms the change, for example `Small Potion now costs 75 Cron at 12 vendors. Restart TMapSvr to apply.`, or `is now free at 12 vendors` for a price of 0
+The stock and vendor queries refresh. A note confirms the change, for example `Small Potion now costs 75 Bronze at 12 vendors. Restart TMapSvr to apply.`, or `is now free at 12 vendors` for a price of 0
 
 Load failures use `FormMessage` (`Could not load vendors.`).
 

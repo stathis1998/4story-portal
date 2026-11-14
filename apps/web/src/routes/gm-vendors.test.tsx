@@ -191,7 +191,7 @@ describe('vendor stock', () => {
     const row = (await screen.findByText('Small Potion')).closest('tr')!
     expect(row.querySelector('img')).toHaveAttribute('src', '/game-icons/500.png')
     expect(within(row).getByTestId('price')).toHaveTextContent('50')
-    expect(within(row).getByRole('img', { name: 'Cron' })).toBeInTheDocument()
+    expect(within(row).getByRole('img', { name: 'Bronze' })).toBeInTheDocument()
     expect(within(row).getByText('12')).toBeInTheDocument()
     expect(within(screen.getByText('Derion Cloth').closest('tr')!).getByTestId('price')).toHaveTextContent('5')
   })
@@ -235,10 +235,10 @@ describe('vendor stock', () => {
     stockApi([item()])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     const sells = screen.getByText(/Sells back for/)
     expect(sells).toHaveTextContent('Sells back for 18')
-    expect(within(sells).getByRole('img', { name: 'Cron' })).toBeInTheDocument()
+    expect(within(sells).getByRole('img', { name: 'Bronze' })).toBeInTheDocument()
     expect(screen.getByText('Sold by 12 vendors: this changes all of them.')).toBeInTheDocument()
   })
 
@@ -256,9 +256,9 @@ describe('vendor stock', () => {
     await openEditor(user)
     const save = screen.getByRole('button', { name: 'Save' })
     expect(save).toBeDisabled()
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     expect(save).toBeEnabled()
-    await setField(user, 'Cron', '50')
+    await setField(user, 'Bronze', '50')
     expect(save).toBeDisabled()
   })
 
@@ -269,15 +269,15 @@ describe('vendor stock', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '1')
-    await setField(user, 'Luna', '2')
-    await setField(user, 'Cron', '3')
+    await setField(user, 'Gold', '1')
+    await setField(user, 'Silver', '2')
+    await setField(user, 'Bronze', '3')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'money', amount: 1_002_003 }]),
     )
     expect(
-      await screen.findByText(/now costs 1 Rune 2 Luna 3 Cron at 12 vendors\. Restart TMapSvr to apply\./),
+      await screen.findByText(/now costs 1 Gold 2 Silver 3 Bronze at 12 vendors\. Restart TMapSvr to apply\./),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
@@ -289,10 +289,10 @@ describe('vendor stock', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(
-      await screen.findByText('Small Potion now costs 75 Cron at 1 vendor. Restart TMapSvr to apply.'),
+      await screen.findByText('Small Potion now costs 75 Bronze at 1 vendor. Restart TMapSvr to apply.'),
     ).toBeInTheDocument()
   })
 
@@ -303,7 +303,7 @@ describe('vendor stock', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20003', { me: gm })
     await openEditor(user)
-    expect(screen.queryByLabelText('Rune')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Gold')).not.toBeInTheDocument()
     expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
     await setField(user, 'PvP points', '200')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -320,8 +320,8 @@ describe('vendor stock', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '')
-    await setField(user, 'Rune', '1')
+    await setField(user, 'Bronze', '')
+    await setField(user, 'Gold', '1')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(sentBodies(fetchMock, 'PUT /gm/items/8001/price')).toEqual([{ currency: 'money', amount: 1_000_000 }]),
@@ -333,11 +333,11 @@ describe('vendor stock', () => {
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
     const save = screen.getByRole('button', { name: 'Save' })
-    await setField(user, 'Cron', '-5')
+    await setField(user, 'Bronze', '-5')
     expect(save).toBeDisabled()
-    await setField(user, 'Cron', '7.5')
+    await setField(user, 'Bronze', '7.5')
     expect(save).toBeDisabled()
-    await setField(user, 'Cron', '60')
+    await setField(user, 'Bronze', '60')
     expect(save).toBeEnabled()
   })
 
@@ -345,13 +345,13 @@ describe('vendor stock', () => {
     stockApi([item({ base: 53750, price: 0, multiplier: 0 })])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '16')
+    await setField(user, 'Gold', '16')
     const charge = screen.getByText(/Will charge/)
     expect(charge).toHaveTextContent('Will charge 15999999')
-    expect(within(charge).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Rune', 'Luna', 'Cron'])
+    expect(within(charge).getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual(['Gold', 'Silver', 'Bronze'])
     expect(screen.getByText(/Sells back for/)).toHaveTextContent('Sells back for 3999999')
-    await setField(user, 'Rune', '0')
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Gold', '0')
+    await setField(user, 'Bronze', '75')
     expect(screen.queryByText(/Will charge/)).not.toBeInTheDocument()
   })
 
@@ -361,10 +361,10 @@ describe('vendor stock', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Price is too high for this item')).toBeInTheDocument()
-    expect(screen.getByLabelText('Cron')).toHaveValue(75)
+    expect(screen.getByLabelText('Bronze')).toHaveValue(75)
   })
 
   it('closes the editor when another vendor is selected', async () => {
@@ -433,9 +433,9 @@ describe('coin prices', () => {
     renderRoute('/gm/vendors?vendor=20002', { me: gm })
     const cell = await priceCell('Small Potion')
     expect(cell).toHaveTextContent('5200')
-    expect(within(cell).getByRole('img', { name: 'Luna' })).toHaveAttribute('src', '/game-icons/11138.png')
-    expect(within(cell).getByRole('img', { name: 'Cron' })).toHaveAttribute('src', '/game-icons/11136.png')
-    expect(within(cell).queryByRole('img', { name: 'Rune' })).not.toBeInTheDocument()
+    expect(within(cell).getByRole('img', { name: 'Silver' })).toHaveAttribute('src', '/game-icons/11138.png')
+    expect(within(cell).getByRole('img', { name: 'Bronze' })).toHaveAttribute('src', '/game-icons/11136.png')
+    expect(within(cell).queryByRole('img', { name: 'Gold' })).not.toBeInTheDocument()
   })
 
   it('shows all three coins for a price with all three', async () => {
@@ -443,9 +443,9 @@ describe('coin prices', () => {
     renderRoute('/gm/vendors?vendor=20002', { me: gm })
     const cell = await priceCell('Small Potion')
     expect(cell).toHaveTextContent('123')
-    expect(within(cell).getByRole('img', { name: 'Rune' })).toHaveAttribute('src', '/game-icons/11137.png')
-    expect(within(cell).getByRole('img', { name: 'Luna' })).toBeInTheDocument()
-    expect(within(cell).getByRole('img', { name: 'Cron' })).toBeInTheDocument()
+    expect(within(cell).getByRole('img', { name: 'Gold' })).toHaveAttribute('src', '/game-icons/11137.png')
+    expect(within(cell).getByRole('img', { name: 'Silver' })).toBeInTheDocument()
+    expect(within(cell).getByRole('img', { name: 'Bronze' })).toBeInTheDocument()
   })
 
   it('uses no coins for a PvP price', async () => {
@@ -475,7 +475,7 @@ describe('coin prices', () => {
     stockApi([item()])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    for (const label of ['Rune', 'Luna', 'Cron']) {
+    for (const label of ['Gold', 'Silver', 'Bronze']) {
       expect(screen.getByText(label).closest('label')!.querySelector('img')).toHaveAttribute('alt', '')
     }
   })
@@ -487,7 +487,7 @@ describe('coin prices', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '')
+    await setField(user, 'Bronze', '')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(
       await screen.findByText('Small Potion is now free at 12 vendors. Restart TMapSvr to apply.'),
@@ -577,10 +577,10 @@ describe('item ids and names', () => {
     expect(row.textContent!.match(/#8001/g)).toHaveLength(1)
 
     await openEditor(user, 'Item #8001')
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(
-      await screen.findByText('Item #8001 now costs 75 Cron at 12 vendors. Restart TMapSvr to apply.'),
+      await screen.findByText('Item #8001 now costs 75 Bronze at 12 vendors. Restart TMapSvr to apply.'),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Remove Item #8001' }))
@@ -604,9 +604,9 @@ describe('price editor rules', () => {
     stockApi([item()])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '')
-    await setField(user, 'Luna', '')
-    await setField(user, 'Cron', '')
+    await setField(user, 'Gold', '')
+    await setField(user, 'Silver', '')
+    await setField(user, 'Bronze', '')
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(screen.queryByText(/Will be free/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
@@ -627,7 +627,7 @@ describe('price editor rules', () => {
     })
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '0')
+    await setField(user, 'Bronze', '0')
     expect(screen.getByText('Will be free at 12 vendors.')).toHaveClass('font-bold')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
@@ -639,7 +639,7 @@ describe('price editor rules', () => {
     stockApi([item({ soldBy: 1 })])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '0')
+    await setField(user, 'Bronze', '0')
     expect(screen.getByText('Will be free at 1 vendor.')).toBeInTheDocument()
   })
 
@@ -647,7 +647,7 @@ describe('price editor rules', () => {
     stockApi([item()])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Cron', '')
+    await setField(user, 'Bronze', '')
     expect(screen.getByText('Will be free at 12 vendors.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
@@ -664,13 +664,13 @@ describe('price editor rules', () => {
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
     const save = screen.getByRole('button', { name: 'Save' })
-    await setField(user, 'Rune', '42')
-    await setField(user, 'Luna', '949')
-    await setField(user, 'Cron', '672')
+    await setField(user, 'Gold', '42')
+    await setField(user, 'Silver', '949')
+    await setField(user, 'Bronze', '672')
     expect(screen.queryByText(tooHigh(100))).not.toBeInTheDocument()
     expect(save).toBeEnabled()
 
-    await setField(user, 'Cron', '676')
+    await setField(user, 'Bronze', '676')
     expect(screen.getByText(tooHigh(100))).toHaveClass('text-danger')
     expect(save).toBeDisabled()
     expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
@@ -681,9 +681,9 @@ describe('price editor rules', () => {
     stockApi([item({ stack: 100 })])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '42')
-    await setField(user, 'Luna', '949')
-    await setField(user, 'Cron', '673')
+    await setField(user, 'Gold', '42')
+    await setField(user, 'Silver', '949')
+    await setField(user, 'Bronze', '673')
     expect(screen.getByText(tooHigh(100))).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
@@ -701,9 +701,9 @@ describe('price editor rules', () => {
     stockApi([item({ stack: 0 })])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '4294')
-    await setField(user, 'Luna', '967')
-    await setField(user, 'Cron', '295')
+    await setField(user, 'Gold', '4294')
+    await setField(user, 'Silver', '967')
+    await setField(user, 'Bronze', '295')
     expect(screen.getByText(tooHigh(1))).toBeInTheDocument()
   })
 
@@ -711,7 +711,7 @@ describe('price editor rules', () => {
     stockApi([item({ stack: 200 })])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '123456')
+    await setField(user, 'Gold', '123456')
     expect(screen.getByText(/the most a price can be/)).toBeInTheDocument()
     expect(screen.queryByText(tooHigh(200))).not.toBeInTheDocument()
   })
@@ -741,15 +741,15 @@ describe('stock table states', () => {
       expect(img.className).toContain('clip-path')
     }
     await openEditor(user)
-    expect(screen.getByText('Rune').closest('label')!.querySelector('img')!.className).toContain('clip-path')
+    expect(screen.getByText('Gold').closest('label')!.querySelector('img')!.className).toContain('clip-path')
   })
 
   it('explains a price above the maximum', async () => {
     stockApi([item()])
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openEditor(user)
-    await setField(user, 'Rune', '123456')
-    expect(screen.getByText('Too high: the most a price can be is 4,294 Rune 967 Luna 295 Cron.')).toBeInTheDocument()
+    await setField(user, 'Gold', '123456')
+    expect(screen.getByText('Too high: the most a price can be is 4,294 Gold 967 Silver 295 Bronze.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(screen.queryByText(/Sells back/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Will charge/)).not.toBeInTheDocument()
@@ -813,7 +813,7 @@ describe('adding items', () => {
     expect(result.querySelector('img')).toHaveAttribute('src', '/game-icons/500.png')
     expect(result).toHaveTextContent('#8001')
     expect(result).toHaveTextContent('Lv 1')
-    expect(within(result).getByRole('img', { name: 'Cron' })).toBeInTheDocument()
+    expect(within(result).getByRole('img', { name: 'Bronze' })).toBeInTheDocument()
   })
 
   it('asks for the PvP price on a PvP shop', async () => {
@@ -942,15 +942,15 @@ describe('adding items', () => {
     expect(screen.getByText('Too high: buying a full stack of 200 would overflow.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
 
-    await setField(user, 'Rune', '21')
-    await setField(user, 'Luna', '0')
+    await setField(user, 'Gold', '21')
+    await setField(user, 'Silver', '0')
     expect(screen.queryByText(/Too high/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(sentBodies(fetchMock, 'PUT /gm/items/29104/price')).toEqual([{ currency: 'money', amount: 21_000_000 }]),
     )
     expect(
-      await screen.findByText('Name Change now costs 21 Rune at 4 vendors. Restart TMapSvr to apply.'),
+      await screen.findByText('Name Change now costs 21 Gold at 4 vendors. Restart TMapSvr to apply.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
 
@@ -979,11 +979,11 @@ describe('adding items', () => {
     const { user } = renderRoute('/gm/vendors?vendor=20002', { me: gm })
     await openSearch(user)
     await user.click(await screen.findByRole('button', { name: 'Set price of Small Potion' }))
-    await setField(user, 'Rune', '1')
-    await setField(user, 'Luna', '0')
+    await setField(user, 'Gold', '1')
+    await setField(user, 'Silver', '0')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Nope')).toBeInTheDocument()
-    expect(screen.getByLabelText('Rune')).toHaveValue(1)
+    expect(screen.getByLabelText('Gold')).toHaveValue(1)
   })
 
   it('keeps labels working with the search and stock editors both open', async () => {
@@ -992,7 +992,7 @@ describe('adding items', () => {
     await openSearch(user)
     await user.click(await screen.findByRole('button', { name: 'Set price of Small Potion' }))
     await openEditor(user, 'Old Sword')
-    const [first, second] = screen.getAllByLabelText('Rune')
+    const [first, second] = screen.getAllByLabelText('Gold')
     expect(first).not.toBe(second)
   })
 
@@ -1007,7 +1007,7 @@ describe('adding items', () => {
     await screen.findByRole('button', { name: /^Other/ })
     expect(searches()).toBe(1)
     await openEditor(user, 'Old Sword')
-    await setField(user, 'Cron', '75')
+    await setField(user, 'Bronze', '75')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(searches()).toBe(2))
   })

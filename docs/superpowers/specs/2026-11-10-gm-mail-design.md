@@ -44,7 +44,7 @@ From the game source (`C:\Users\stath\Documents\4Story\4s\4Story_5.0_Source - ko
 
 ### 2.3 Money
 
-`CalcMoney = copper + silver * 1000 + gold * 1000 * 1000` (`MONEY_MULTIPLY = 1000`, `Lib\Own\TProtocol\include\NetCode.h`). In game these are Rune, Luna and Cron.
+`CalcMoney = copper + silver * 1000 + gold * 1000 * 1000` (`MONEY_MULTIPLY = 1000`, `Lib\Own\TProtocol\include\NetCode.h`). In game these are Gold, Silver and Bronze.
 
 ### 2.4 Mail types
 
@@ -140,7 +140,7 @@ A new route `apps/web/src/routes/_authed/gm/mail.tsx`, listed in the GM navigati
 - **Recipients:** a text box that turns typed names into removable chips (Enter or comma), up to 20. Unknown names come back from the API and are highlighted.
 - **Sender** (prefilled with `[GM]`), **title**, **message**.
 - **Items:** up to 3 rows. Each row has an item search (reusing the vendor page's search component and icons) and a count input capped at the item's stack. Rows can be added and removed.
-- **Money:** three number inputs labelled Rune, Luna and Cron, all defaulting to 0.
+- **Money:** three number inputs labelled Gold, Silver and Bronze, all defaulting to 0.
 - **Send** opens a confirmation summary: recipients, items with counts, and money. Confirming posts the request. The page then shows the result for each recipient (post ID or error) and keeps the form filled for a resend.
 
 ## 6. Testing

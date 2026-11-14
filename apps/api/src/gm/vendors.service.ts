@@ -156,7 +156,7 @@ export class VendorsService {
     await this.repo.setPrice(itemId, column, multiplier);
     await this.audit(
       'ITEMPRICE',
-      `${itemId} ${item.name}: ${column} ${oldMultiplier} -> ${multiplier}, ${chargedPrice(base, oldMultiplier)} -> ${price} ${pvp ? 'points' : 'cron'}`,
+      `${itemId} ${item.name}: ${column} ${oldMultiplier} -> ${multiplier}, ${chargedPrice(base, oldMultiplier)} -> ${price} ${pvp ? 'points' : 'bronze'}`,
       actor,
     );
     return { itemId, name: item.name, price, multiplier, soldBy: pvp ? item.pvpSoldBy : item.moneySoldBy };
@@ -167,7 +167,7 @@ export class VendorsService {
     return rows.map((row) => ({ ...this.stockItem(row, shop === 'pvp'), name: row.name }));
   }
 
-  /** What a money vendor charges for each upgrade item, in Cron. An item missing from the database is 0. */
+  /** What a money vendor charges for each upgrade item, in Bronze. An item missing from the database is 0. */
   async upgradePrices(): Promise<UpgradePrices> {
     const keys = Object.keys(UPGRADE_PRICE_ITEMS) as UpgradePriceKey[];
     const rows = await Promise.all(keys.map((key) => this.repo.findItem(UPGRADE_PRICE_ITEMS[key])));
