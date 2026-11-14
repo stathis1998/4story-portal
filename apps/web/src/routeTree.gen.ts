@@ -22,6 +22,7 @@ import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderbo
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
 import { Route as AuthedMountsPetsRouteImport } from './routes/_authed/mounts-pets'
 import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
+import { Route as AuthedRouletteRouteImport } from './routes/_authed/roulette'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
@@ -98,6 +99,11 @@ const AuthedMountsPetsRoute = AuthedMountsPetsRouteImport.update({
 const AuthedOnlineRoute = AuthedOnlineRouteImport.update({
   id: '/online',
   path: '/online',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedRouletteRoute = AuthedRouletteRouteImport.update({
+  id: '/roulette',
+  path: '/roulette',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
+  '/roulette': typeof AuthedRouletteRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -206,6 +213,7 @@ export interface FileRoutesByTo {
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
+  '/roulette': typeof AuthedRouletteRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/_authed/mounts-pets': typeof AuthedMountsPetsRoute
   '/_authed/online': typeof AuthedOnlineRoute
+  '/_authed/roulette': typeof AuthedRouletteRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/mounts-chakras'
     | '/mounts-pets'
     | '/online'
+    | '/roulette'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -291,6 +301,7 @@ export interface FileRouteTypes {
     | '/mounts-chakras'
     | '/mounts-pets'
     | '/online'
+    | '/roulette'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -319,6 +330,7 @@ export interface FileRouteTypes {
     | '/_authed/mounts-chakras'
     | '/_authed/mounts-pets'
     | '/_authed/online'
+    | '/_authed/roulette'
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
@@ -434,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOnlineRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/roulette': {
+      id: '/_authed/roulette'
+      path: '/roulette'
+      fullPath: '/roulette'
+      preLoaderRoute: typeof AuthedRouletteRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/soul-lottery': {
       id: '/_authed/soul-lottery'
       path: '/soul-lottery'
@@ -538,6 +557,7 @@ interface AuthedRouteChildren {
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
   AuthedMountsPetsRoute: typeof AuthedMountsPetsRoute
   AuthedOnlineRoute: typeof AuthedOnlineRoute
+  AuthedRouletteRoute: typeof AuthedRouletteRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
@@ -563,6 +583,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,
   AuthedMountsPetsRoute: AuthedMountsPetsRoute,
   AuthedOnlineRoute: AuthedOnlineRoute,
+  AuthedRouletteRoute: AuthedRouletteRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
