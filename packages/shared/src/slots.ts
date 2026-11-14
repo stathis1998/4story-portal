@@ -120,6 +120,38 @@ export function slotPrize(machine: SlotMachine, stops: SlotStops): SlotPrize {
   return { multiple: 0, count: 0, symbol: null };
 }
 
+/**
+ * Where a machine rests before its first spin, so a resting machine never looks like a win: the line pays nothing,
+ * its three symbols are all different and the left one is not the lucky symbol, and no row of the window is three
+ * alike. Found from the strips, so it stays right if a strip changes: the first stops in the order [0, 0, 0],
+ * [0, 0, 1] ... [31, 31, 31] (reel 1 counted slowest, reel 3 fastest) that keep all of that. If no stops keep it
+ * all, the first stops that pay nothing and keep the most of the other rules, and if every result pays, the first
+ * that keeps the most of them.
+ */
+export function slotRest(machine: SlotMachine): SlotStops {
+  let best: SlotStops = [0, 0, 0];
+  let bestScore = -1;
+  for (let a = 0; a < SLOT_REEL_STOPS; a++)
+    for (let b = 0; b < SLOT_REEL_STOPS; b++)
+      for (let c = 0; c < SLOT_REEL_STOPS; c++) {
+        const stops: SlotStops = [a, b, c];
+        const window = slotWindow(machine, stops);
+        const line = window.map((rows) => rows[1]);
+        const others =
+          Number(new Set(line).size === 3) +
+          Number(line[0] !== 0) +
+          Number([0, 1, 2].every((row) => new Set(window.map((rows) => rows[row])).size > 1));
+        // Paying nothing outranks every other rule together.
+        const score = (slotPrize(machine, stops).multiple === 0 ? 4 : 0) + others;
+        if (score === 7) return stops;
+        if (score > bestScore) {
+          best = stops;
+          bestScore = score;
+        }
+      }
+  return best;
+}
+
 const NUMBER_WORDS = { 2: 'Two', 3: 'Three' } as const;
 
 /** 'Three Experience Potions.', 'Two Healing Potions.' or 'No win this time.' */
@@ -155,7 +187,7 @@ export const slotReturn = (machine: SlotMachine): number => {
 export const slotLargestWin = (machine: SlotMachine, stakes: SlotStakes): number =>
   Math.max(...machine.pays, machine.twoLucky) * Math.max(...stakes);
 
-/** Null when the text is three different whole stakes within the limits, lowest first; otherwise unusable. */
+/** The stakes when the text is three different whole stakes within the limits, lowest first; otherwise null. */
 export function parseSlotStakes(text: string): SlotStakes | null {
   const parts = text.split(',').map((p) => p.trim());
   if (parts.length !== 3 || parts.some((p) => !/^\d+$/.test(p))) return null;

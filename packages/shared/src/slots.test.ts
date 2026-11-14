@@ -9,6 +9,7 @@ import {
   slotMachineSettingsSchema,
   slotOdds,
   slotPrize,
+  slotRest,
   slotReturn,
   slotSpinRequestSchema,
   slotWindow,
@@ -55,6 +56,36 @@ describe.each(SLOT_MACHINES)('$name', (machine) => {
     const last = slotWindow(machine, [31, 31, 31]);
     expect(last[2]).toEqual([letter(machine.reels[2], 30), letter(machine.reels[2], 31), letter(machine.reels[2], 0)]);
   });
+
+  it('rests where nothing looks like a win', () => {
+    const rest = slotRest(machine);
+    expect(slotPrize(machine, rest)).toEqual({ multiple: 0, count: 0, symbol: null });
+    const window = slotWindow(machine, rest);
+    const line = window.map((rows) => rows[1]);
+    expect(new Set(line).size).toBe(3);
+    expect(line[0]).not.toBe(0);
+    for (const row of [0, 1, 2]) {
+      const across = window.map((rows) => rows[row]);
+      expect(new Set(across).size, `row ${row}`).toBeGreaterThan(1);
+    }
+    expect(slotRest(machine)).toEqual(rest);
+  });
+});
+
+it.each([
+  ['shelf', [1, 0, 2]],
+  ['armoury', [1, 0, 1]],
+  ['hoard', [0, 0, 1]],
+])('%s rests on %j', (key, stops) => expect(slotRest(slotMachine(key)!)).toEqual(stops));
+
+it('falls back to the first rest that pays nothing and keeps most of the other rules when none keeps them all', () => {
+  // The lucky symbol is always on the left, and [0, 0, x] is two lucky.
+  const luckyLeft = { ...shelf, reels: ['A'.repeat(32), 'A' + 'B'.repeat(31), 'C'.repeat(32)] as const };
+  expect(slotRest(luckyLeft)).toEqual([0, 1, 0]);
+  expect(slotPrize(luckyLeft, [0, 1, 0]).multiple).toBe(0);
+  // Every result pays: the first stops, rather than nothing.
+  const allLucky = { ...shelf, reels: ['A'.repeat(32), 'A'.repeat(32), 'A'.repeat(32)] as const };
+  expect(slotRest(allLucky)).toEqual([0, 0, 0]);
 });
 
 it.each([
