@@ -15,13 +15,17 @@ export type BetTables = { portalSettings: string; currentUsers: string; characte
  * Inputs the caller binds: @userId INT, @charId INT, @stake BIGINT, @payout BIGINT, plus whatever `record` uses.
  * `record` is the game's own INSERT; it may use @name (the character's name) and @wallet (Bronze afterwards).
  * `liveKey` is a constant from code, never user input.
- * Returns one row: { code, id, name, gold, silver, copper }.
+ * Returns one row: { code, id, name, gold, silver, copper }. Throws on a negative @stake or @payout; a zero stake is allowed.
  */
 export function walletBetSql(tables: BetTables, liveKey: string, record: string): string {
   // The online list is locked before the wallet. TLogin inserts the account's row and TEnterServer sets its
   // dwCharID, both by dwUserID, so the range lock makes them wait for the COMMIT: the character cannot enter
   // the game between the check and the UPDATE, and the map server loads the wallet only after it.
-  return `SET NOCOUNT ON; SET XACT_ABORT ON;
+  // A negative stake would pass the wallet check and add money, so it is refused before anything is read or
+  // locked. This comes before XACT_ABORT, so the error does not also roll back a transaction the caller holds.
+  return `SET NOCOUNT ON;
+IF @stake < 0 OR @payout < 0 THROW 50000, 'Stake and payout cannot be negative', 1;
+SET XACT_ABORT ON;
 DECLARE @code INT = 0, @id INT = 0, @wallet BIGINT, @name VARCHAR(50), @online INT;
 BEGIN TRAN;
 IF NOT EXISTS (SELECT 1 FROM ${tables.portalSettings} WHERE szKey = '${liveKey}' AND szValue = 'true') SET @code = ${BET_CLOSED};

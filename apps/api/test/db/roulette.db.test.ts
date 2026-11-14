@@ -306,6 +306,15 @@ describe('SqlRouletteRepository against the _TEST copy', () => {
       expect(await walletOf(tx, character.charId)).toEqual({ gold: 0, silver: 0, copper: 999 });
     }));
 
+  it('rejects a negative stake or payout before touching anything', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await expect(repo.bet(bet(character, { stake: -100, payout: 0, numberHit: false }))).rejects.toThrow('Stake and payout cannot be negative');
+      await expect(repo.bet(bet(character, { stake: 100, payout: -100, numberHit: false }))).rejects.toThrow('Stake and payout cannot be negative');
+
+      expect(await walletOf(tx, character.charId)).toEqual(START);
+      expect(await spinRows(tx)).toEqual([]);
+    }));
+
   it('lists big wins only when a number bet won, newest first', () =>
     withLiveRepo(async ({ repo, character }) => {
       const ids: number[] = [];
