@@ -1,5 +1,5 @@
 /**
- * The game's item upgrades, from the IK_UPGRADE and IK_GEM cases of OnCS_ITEMUPGRADE_REQ and from CalcProb in the map server.
+ * The game's item upgrades, from the IK_UPGRADE, IK_DOWNGRADE and IK_GEM cases of OnCS_ITEMUPGRADE_REQ and from CalcProb in the map server.
  * Runs in the browser and changes nothing in the game.
  */
 
@@ -14,6 +14,7 @@ export const MAX_GEMS = GEM_PERCENT.length - 1
 export const SCROLLS = [
   { value: 'apprentice', label: "Apprentice's Formula" },
   { value: 'master', label: "Master's Formula" },
+  { value: 'reflection', label: 'Scroll of Reflection' },
 ] as const
 export const POTIONS = [
   { value: 0, label: 'None' },
@@ -40,7 +41,11 @@ export type Scroll = (typeof SCROLLS)[number]['value']
 export type Tincture = (typeof TINCTURES)[number]['value']
 export type Stone = (typeof STONES)[number]['value']
 export type UpgradeChoices = { scroll: Scroll; potion: number; tincture: Tincture }
-export type UpgradeResult = { outcome: 'success' | 'kept' | 'downgraded' | 'destroyed'; level: number; tinctureUsed: boolean }
+export type UpgradeResult = {
+  outcome: 'success' | 'kept' | 'downgraded' | 'destroyed' | 'reflected'
+  level: number
+  tinctureUsed: boolean
+}
 export type GemResult = { success: boolean; gem: number }
 
 // TITEMCHART.wUseValue halves to the multiplier: 50 is x1, 100 is x2 and 200 is x4.
@@ -63,7 +68,17 @@ function downgrade(level: number, floor: number, random: () => number): UpgradeR
   return { outcome: loss > 0 ? 'downgraded' : 'kept', level: level - loss, tinctureUsed: true }
 }
 
+/** The server refuses every scroll at +24. A Scroll of Reflection at +0 is used up and changes nothing. */
+export function canAttempt(level: number, scroll: Scroll): boolean {
+  return level < MAX_LEVEL && (scroll !== 'reflection' || level > 0)
+}
+
 export function attemptUpgrade(level: number, choices: UpgradeChoices, random: () => number = Math.random): UpgradeResult {
+  // IK_DOWNGRADE: one level off with no roll, and no Serendipity or Tincture is touched.
+  if (choices.scroll === 'reflection') {
+    return level > 0 ? { outcome: 'reflected', level: level - 1, tinctureUsed: false } : { outcome: 'kept', level, tinctureUsed: false }
+  }
+
   if (gameRand(random) % 100 < upgradeChance(level, choices.potion)) {
     const step = choices.scroll === 'master' ? (gameRand(random) % MASTER_MAX_STEP) + 1 : 1
     return { outcome: 'success', level: Math.min(level + step, MAX_LEVEL), tinctureUsed: false }

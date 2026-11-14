@@ -5,9 +5,10 @@ type Props = {
   registration: UseFormRegisterReturn
   error?: string
   options: { value: string | number; label: string }[]
+  disabled?: boolean
 }
 
-export function Select({ label, registration, error, options }: Props) {
+export function Select({ label, registration, error, options, disabled }: Props) {
   const id = registration.name
   const errorId = `${id}-error`
 
@@ -20,7 +21,8 @@ export function Select({ label, registration, error, options }: Props) {
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        className="rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent aria-invalid:border-danger aria-invalid:focus:ring-danger"
+        disabled={disabled}
+        className="rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-danger aria-invalid:focus:ring-danger"
         {...registration}
       >
         {options.map((option) => (

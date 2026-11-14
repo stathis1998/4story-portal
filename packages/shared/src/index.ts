@@ -5,4 +5,5 @@ export * from './gm.js';
 export * from './gm-events.js';
 export * from './gm-mail.js';
 export * from './player-stats.js';
+export * from './upgrade-prices.js';
 export * from './weapon-effects.js';

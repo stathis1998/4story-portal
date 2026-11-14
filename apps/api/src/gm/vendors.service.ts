@@ -15,6 +15,9 @@ import {
   type GmVendorItem,
   type GmVendorList,
   type ItemPriceInput,
+  UPGRADE_PRICE_ITEMS,
+  type UpgradePriceKey,
+  type UpgradePrices,
   type VendorShop,
 } from '@4story-portal/shared';
 import { className, countryName } from '../characters/character-codes.js';
@@ -162,6 +165,18 @@ export class VendorsService {
   async searchItems(q: string, shop: VendorShop): Promise<GmItemSearchResult[]> {
     const rows = await this.repo.searchItems(q);
     return rows.map((row) => ({ ...this.stockItem(row, shop === 'pvp'), name: row.name }));
+  }
+
+  /** What a money vendor charges for each upgrade item, in Cron. An item missing from the database is 0. */
+  async upgradePrices(): Promise<UpgradePrices> {
+    const keys = Object.keys(UPGRADE_PRICE_ITEMS) as UpgradePriceKey[];
+    const rows = await Promise.all(keys.map((key) => this.repo.findItem(UPGRADE_PRICE_ITEMS[key])));
+    const prices = {} as UpgradePrices;
+    keys.forEach((key, index) => {
+      const row = rows[index];
+      prices[key] = row ? chargedPrice(row.money, row.fPrice) : 0;
+    });
+    return prices;
   }
 
   private async requireVendor(id: number): Promise<VendorRow> {
