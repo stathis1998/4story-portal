@@ -74,6 +74,10 @@ Each machine has three stake sizes in whole Silver, lowest to highest, set by GM
 from 1 Silver to 100 Gold, and the three must be different. Changing them takes effect from the next
 spin. The page shows the largest win the current stakes allow.
 
+When a GM changes the stakes while a player is on the machine and the stake they had is no longer
+offered, the page tells the player. It picks the machine's new lowest stake only if that is no more
+than the stake they had, and otherwise picks none and waits for them to pick one.
+
 There is no limit on how many spins a player makes in a day and no automatic play: every spin is a
 press. The spin request is throttled per minute, well above what the reels allow by hand.
 
@@ -151,7 +155,9 @@ so a thumb reaches it and the reels stay in view.
   character are remembered in the browser. A machine a GM has closed is shown with "Closed" and
   cannot be spun.
 - **The machine.** A cabinet in the machine's own colour holding the three reels. Each reel shows
-  three symbols; the middle row is marked as the win line.
+  three symbols; the middle row is marked as the win line. Before its first spin a machine rests on a
+  fixed line that pays nothing, with three different symbols on it and no row of three alike, so a
+  resting machine never looks like a win.
 - **Spinning.** Spin, or the space bar, sends one spin. The reels blur downward and stop one after
   the other, left to right, each with a small settle. About two and a half seconds. With "reduce
   motion" set in the browser they jump straight to the result. Spin is disabled until the last reel
