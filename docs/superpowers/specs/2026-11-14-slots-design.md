@@ -254,7 +254,7 @@ copied.
 
 ## Not in this version
 
-- A growing jackpot fed by a slice of every bet.
+- A growing jackpot fed by a slice of every bet. (Added on 2026-11-15: see 2026-11-15-slots-jackpot-design.md.)
 - Wild symbols, free spins, bonus rounds, more than one win line, hold and nudge.
 - Automatic play, or holding a key down to keep spinning.
 - In-game announcements of big wins.

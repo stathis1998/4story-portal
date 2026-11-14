@@ -177,6 +177,61 @@ export function slotOdds(machine: SlotMachine): { combos: number; paid: number; 
   return { combos: SLOT_REEL_STOPS ** 3, paid, hits, top };
 }
 
+export const SLOT_JACKPOT_DEFAULT_CAP = 50; // whole Gold
+export const SLOT_JACKPOT_MIN_CAP = 1;
+export const SLOT_JACKPOT_MAX_CAP = 10_000;
+/** The jackpot's random draw is a whole number from 0 up to (not including) this. */
+export const SLOT_JACKPOT_ROLLS = 1_000_000_000;
+export const BRONZE_PER_SILVER = 1000;
+export const BRONZE_PER_GOLD = 1_000_000;
+
+/**
+ * The share of a lost stake that goes to the pot, as two whole numbers: (combos - paid) / (combos - hits). The
+ * lost rounds then give back to the pot exactly what the winning ones took out of the stakes.
+ */
+export function slotJackpotShare(machine: SlotMachine): { num: number; den: number } {
+  const { combos, paid, hits } = slotOdds(machine);
+  return { num: combos - paid, den: combos - hits };
+}
+
+/** What a lost round of `stake` Silver adds to the pot, in whole Bronze, rounded down. */
+export function slotJackpotAdd(machine: SlotMachine, stake: number): number {
+  const { num, den } = slotJackpotShare(machine);
+  return Math.floor((stake * BRONZE_PER_SILVER * num) / den);
+}
+
+/**
+ * Whether the lost round that adds `add` to a pot of `pot` under `cap` makes it drop. All three in Bronze;
+ * `roll` is a whole number from 0 up to SLOT_JACKPOT_ROLLS. The database step does the same sum.
+ */
+export function slotJackpotDrops(pot: number, add: number, cap: number, roll: number): boolean {
+  // BigInt so a 10,000 Gold cap times the roll range cannot overflow.
+  const p = BigInt(pot);
+  const c = BigInt(cap);
+  const floor = c / 10n;
+  const from = p > floor ? p : floor;
+  const to = p + BigInt(add) > floor ? p + BigInt(add) : floor;
+  if (from >= c) return true;
+  return BigInt(roll) * (c - from) < (to - from) * BigInt(SLOT_JACKPOT_ROLLS);
+}
+
+export const slotJackpotSettingsSchema = z.object({
+  live: z.boolean(),
+  cap: z.number().int().min(SLOT_JACKPOT_MIN_CAP).max(SLOT_JACKPOT_MAX_CAP),
+});
+export type SlotJackpotSettingsInput = z.output<typeof slotJackpotSettingsSchema>;
+
+/** What players see. All money whole Silver, rounded down. */
+export type SlotJackpot = {
+  live: boolean;
+  pot: number;
+  /** The cap this pot runs under; the cap set now while the pot has none. */
+  cap: number;
+  /** A tenth of the cap. */
+  floor: number;
+  last: { character: string; amount: number; at: string } | null;
+};
+
 /** The share of all stakes the machine pays back: paid / combos. */
 export const slotReturn = (machine: SlotMachine): number => {
   const { paid, combos } = slotOdds(machine);

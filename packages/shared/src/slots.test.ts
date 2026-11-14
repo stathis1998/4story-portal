@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   SLOT_MACHINES,
+  SLOT_MAX_STAKE,
   SLOT_REEL_STOPS,
   parseSlotStakes,
+  slotJackpotAdd,
+  slotJackpotDrops,
+  slotJackpotSettingsSchema,
+  slotJackpotShare,
   slotLargestWin,
   slotLine,
   slotMachine,
@@ -161,4 +166,54 @@ it('refuses machine settings whose stakes are not three different, rising', () =
   const bad = slotMachineSettingsSchema.safeParse({ live: true, stakes: [10, 10, 25] });
   expect(!bad.success && bad.error.issues[0].message).toBe('Enter three different stakes, lowest first');
   expect(!bad.success && bad.error.issues[0].path).toEqual(['stakes']);
+});
+
+describe('the jackpot', () => {
+  it.each([
+    ['shelf', 1368, 24564],
+    ['armoury', 1408, 27331],
+    ['hoard', 1279, 29493],
+  ])('a lost round on %s adds %i / %i of its stake', (key, num, den) =>
+    expect(slotJackpotShare(slotMachine(key)!)).toEqual({ num, den }));
+
+  it.each([
+    ['shelf', 50, 2784],
+    ['shelf', 10, 556],
+    ['armoury', 100, 5151],
+    ['hoard', 200, 8673],
+  ])('a lost %s round of %i Silver adds %i Bronze', (key, stake, bronze) =>
+    expect(slotJackpotAdd(slotMachine(key)!, stake)).toBe(bronze));
+
+  it('pays back exactly the stakes before rounding, and never more after it', () => {
+    for (const machine of SLOT_MACHINES) {
+      const { combos, paid, hits } = slotOdds(machine);
+      const { num, den } = slotJackpotShare(machine);
+      expect(paid * den + (combos - hits) * num).toBe(combos * den);
+      for (const stake of [1, ...machine.stakes, SLOT_MAX_STAKE]) {
+        const bronze = stake * 1000;
+        expect(paid * bronze + (combos - hits) * slotJackpotAdd(machine, stake)).toBeLessThanOrEqual(combos * bronze);
+      }
+    }
+  });
+
+  const CAP = 50_000_000; // 50 Gold: the floor is 5_000_000
+  it.each([
+    ['below the floor it cannot drop', 1_000_000, 2784, CAP, 0, false],
+    ['across the floor only the part past it counts', 4_999_000, 2784, CAP, 39_644, true],
+    ['across the floor, one roll higher', 4_999_000, 2784, CAP, 39_645, false],
+    ['between floor and cap', 27_500_000, 2784, CAP, 123_733, true],
+    ['between floor and cap, one roll higher', 27_500_000, 2784, CAP, 123_734, false],
+    ['a round that passes the cap always wins', 49_998_000, 2784, CAP, 999_999_999, true],
+    ['a round that lands exactly on the cap always wins', 49_997_216, 2784, CAP, 999_999_999, true],
+    ['a pot already past its cap always drops', 60_000_000, 2784, CAP, 999_999_999, true],
+    ['a 10,000 Gold cap does not overflow', 5_000_000_000, 8673, 10_000_000_000, 999_999_999, false],
+    ['a 10,000 Gold cap, the lowest roll', 5_000_000_000, 8673, 10_000_000_000, 0, true],
+  ])('%s', (_name, pot, add, cap, roll, drops) => expect(slotJackpotDrops(pot, add, cap, roll)).toBe(drops));
+
+  it.each([0, 10_001, 1.5])('refuses a cap of %s', (cap) =>
+    expect(slotJackpotSettingsSchema.safeParse({ live: true, cap }).success).toBe(false));
+  it('accepts a cap from 1 to 10,000 Gold', () => {
+    expect(slotJackpotSettingsSchema.parse({ live: false, cap: 1 })).toEqual({ live: false, cap: 1 });
+    expect(slotJackpotSettingsSchema.safeParse({ live: true, cap: 10_000 }).success).toBe(true);
+  });
 });
