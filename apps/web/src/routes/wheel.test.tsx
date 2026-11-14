@@ -62,7 +62,8 @@ describe('wheel of fortune', () => {
     mockApi({ 'GET /wheel': () => json(200, state()) })
     const { user, router } = renderRoute('/characters', { me })
 
-    await user.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Wheel' }))
+    await user.click(await screen.findByRole('button', { name: 'Try Your Luck' }))
+    await user.click(within(screen.getByRole('list', { name: 'Try Your Luck' })).getByRole('link', { name: 'Wheel of Fortune' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/wheel'))
     expect(await screen.findByRole('heading', { name: 'Wheel of Fortune', level: 1 })).toBeInTheDocument()

@@ -7,7 +7,7 @@ const me = { userId: 1, username: 'friend', isGm: false }
 const main = () => screen.getByRole('navigation', { name: 'Main' })
 
 describe('header menu', () => {
-  it('keeps six entries, with the rest grouped under Rankings and Tools', async () => {
+  it('keeps six entries, with the rest grouped under Try Your Luck, Rankings and Tools', async () => {
     mockApi()
     renderRoute('/characters', { me })
 
@@ -16,9 +16,8 @@ describe('header menu', () => {
       'Characters',
       'Online',
       'Achievements',
-      'Wheel',
     ])
-    expect(within(main()).getAllByRole('button').map((button) => button.textContent)).toEqual(['Rankings', 'Tools'])
+    expect(within(main()).getAllByRole('button').map((button) => button.textContent)).toEqual(['Try Your Luck', 'Rankings', 'Tools'])
   })
 
   it('opens a group to show its pages, and closes it again', async () => {
@@ -36,6 +35,19 @@ describe('header menu', () => {
     await user.keyboard('{Escape}')
     expect(rankings).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('list', { name: 'Rankings' })).not.toBeInTheDocument()
+  })
+
+  it('groups the games under Try Your Luck', async () => {
+    mockApi()
+    const { user } = renderRoute('/characters', { me })
+
+    const luck = await screen.findByRole('button', { name: 'Try Your Luck' })
+    expect(luck).toHaveAttribute('aria-controls', 'nav-try-your-luck')
+    await user.click(luck)
+
+    const list = screen.getByRole('list', { name: 'Try Your Luck' })
+    expect(list).toHaveAttribute('id', 'nav-try-your-luck')
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Roulette', 'Wheel of Fortune'])
   })
 
   it('closes a group when you click elsewhere or open the other one', async () => {
@@ -95,7 +107,7 @@ describe('phone menu', () => {
     expect(screen.queryByRole('navigation', { name: 'Menu' })).not.toBeInTheDocument()
   })
 
-  it('lists every page, with the grouped ones under Rankings and Tools', async () => {
+  it('lists every page, with the grouped ones under Try Your Luck, Rankings and Tools', async () => {
     mockApi()
     const { user } = renderRoute('/characters', { me })
 
@@ -105,7 +117,8 @@ describe('phone menu', () => {
       'Characters',
       'Online',
       'Achievements',
-      'Wheel',
+      'Roulette',
+      'Wheel of Fortune',
       'Hall of Fame',
       'Leaderboard',
       'Upgrade Stats',
@@ -115,6 +128,7 @@ describe('phone menu', () => {
       'Mounts & Pets',
       'Chakras & Auras',
     ])
+    expect(within(within(menu()).getByRole('list', { name: 'Try Your Luck' })).getAllByRole('link')).toHaveLength(2)
     expect(within(within(menu()).getByRole('list', { name: 'Rankings' })).getAllByRole('link')).toHaveLength(3)
     expect(within(within(menu()).getByRole('list', { name: 'Tools' })).getAllByRole('link')).toHaveLength(5)
   })

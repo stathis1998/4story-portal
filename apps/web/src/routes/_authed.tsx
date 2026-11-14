@@ -13,8 +13,15 @@ export const Route = createFileRoute('/_authed')({
   component: AuthedLayout,
 })
 
-// Six entries instead of eleven: the rankings and the planning tools each get a group.
+// Six entries instead of thirteen: the games, the rankings and the planning tools each get a group.
 const GROUPS: { label: string; links: NavLink[] }[] = [
+  {
+    label: 'Try Your Luck',
+    links: [
+      { to: '/roulette', label: 'Roulette' },
+      { to: '/wheel', label: 'Wheel of Fortune' },
+    ],
+  },
   {
     label: 'Rankings',
     links: [
@@ -40,7 +47,6 @@ const LINKS: NavLink[] = [
   { to: '/characters', label: 'Characters' },
   { to: '/online', label: 'Online' },
   { to: '/achievements', label: 'Achievements' },
-  { to: '/wheel', label: 'Wheel' },
 ]
 
 const TOP_LINK = { className: 'hover:underline pointer-coarse:py-2', activeProps: { className: 'text-fg' }, inactiveProps: { className: 'text-muted' } }

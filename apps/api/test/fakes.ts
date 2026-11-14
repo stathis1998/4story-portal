@@ -42,6 +42,17 @@ import {
   type WheelItemRow,
   type WheelRepository,
 } from '../src/wheel/wheel.repository.js';
+import { ROULETTE_DEFAULT_LIMITS } from '@4story-portal/shared';
+import {
+  type BetInput,
+  type BetOutcome,
+  type RouletteRepository,
+  type RouletteSettings,
+  type RouletteSpinRow,
+  type RouletteTotalsRow,
+  type WalletCharacterRow,
+} from '../src/roulette/roulette.repository.js';
+import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR } from '../src/games/wallet-bet.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -628,5 +639,104 @@ export class FakeWheelRepository implements WheelRepository {
   async findItems(itemIds: number[]): Promise<WheelItemRow[]> {
     this.check();
     return this.items.filter((item) => itemIds.includes(item.itemId));
+  }
+}
+
+// In-memory stand-in for the roulette's settings, wallets and spin table.
+export class FakeRouletteRepository implements RouletteRepository {
+  settingsRow: RouletteSettings = { live: false, ...ROULETTE_DEFAULT_LIMITS };
+  characterRows: (WalletCharacterRow & { userId: number })[] = [];
+  spinRows: (RouletteSpinRow & { numberHit: boolean; bets: string })[] = [];
+  /** The database's clock: stamps new spins and decides today. */
+  now: () => Date = () => new Date();
+  /** Every call rejects, as when the table is not in the database. */
+  failing = false;
+  /** Every bet() call, including the ones that changed nothing. */
+  readonly betCalls: BetInput[] = [];
+  private nextId = 1;
+
+  private check(): void {
+    if (this.failing) throw new Error('Invalid object name TPortalRouletteSpin');
+  }
+
+  private plain(row: RouletteSpinRow & { numberHit?: boolean; bets?: string }): RouletteSpinRow {
+    const { id, userId, character, spunAt, pocket, stake, payout } = row;
+    return { id, userId, character, spunAt, pocket, stake, payout };
+  }
+
+  async settings(): Promise<RouletteSettings> {
+    this.check();
+    return { ...this.settingsRow };
+  }
+
+  async saveSettings(settings: RouletteSettings): Promise<void> {
+    this.check();
+    this.settingsRow = { ...settings };
+  }
+
+  async characters(userId: number): Promise<WalletCharacterRow[]> {
+    this.check();
+    return this.characterRows.filter((row) => row.userId === userId).map(({ userId: _owner, ...row }) => row);
+  }
+
+  async bet(input: BetInput): Promise<BetOutcome> {
+    this.check();
+    this.betCalls.push(input);
+    // The real batch refuses the same way, before it reads anything.
+    if (input.stake < 0 || input.payout < 0) throw new Error('Stake and payout cannot be negative');
+    if (!this.settingsRow.live) return { code: BET_CLOSED, name: null };
+    const row = this.characterRows.find((c) => c.charId === input.charId && c.userId === input.userId);
+    if (!row) return { code: BET_NOT_YOURS, name: null };
+    if (row.online) return { code: BET_ONLINE, name: row.name };
+    // Bronze, like the database.
+    const before = row.gold * 1_000_000 + row.silver * 1000 + row.copper;
+    if (before < input.stake * 1000) return { code: BET_POOR, name: row.name };
+    const after = before - input.stake * 1000 + input.payout * 1000;
+    row.gold = Math.floor(after / 1_000_000);
+    row.silver = Math.floor(after / 1000) % 1000;
+    row.copper = after % 1000;
+    const id = this.nextId++;
+    this.spinRows.push({
+      id,
+      userId: input.userId,
+      character: row.name,
+      spunAt: this.now(),
+      pocket: input.pocket,
+      stake: input.stake,
+      payout: input.payout,
+      numberHit: input.numberHit,
+      bets: input.bets,
+    });
+    return { code: BET_OK, id, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
+  }
+
+  private newest(rows: typeof this.spinRows, limit: number): RouletteSpinRow[] {
+    return [...rows].sort((a, b) => b.id - a.id).slice(0, limit).map((row) => this.plain(row));
+  }
+
+  async spinsOf(userId: number, limit: number): Promise<RouletteSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.userId === userId), limit);
+  }
+
+  async bigWins(limit: number): Promise<RouletteSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.numberHit), limit);
+  }
+
+  async latest(limit: number): Promise<RouletteSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows, limit);
+  }
+
+  async totals(): Promise<{ today: RouletteTotalsRow; allTime: RouletteTotalsRow }> {
+    this.check();
+    const sum = (rows: typeof this.spinRows): RouletteTotalsRow => ({
+      spins: rows.length,
+      staked: rows.reduce((total, row) => total + row.stake, 0),
+      paid: rows.reduce((total, row) => total + row.payout, 0),
+    });
+    const day = this.now().toISOString().slice(0, 10);
+    return { today: sum(this.spinRows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(this.spinRows) };
   }
 }

@@ -22,6 +22,7 @@ import { Route as AuthedLeaderboardRouteImport } from './routes/_authed/leaderbo
 import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts-chakras'
 import { Route as AuthedMountsPetsRouteImport } from './routes/_authed/mounts-pets'
 import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
+import { Route as AuthedRouletteRouteImport } from './routes/_authed/roulette'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
@@ -31,6 +32,7 @@ import { Route as AuthedGmAchievementsRouteImport } from './routes/_authed/gm/ac
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
+import { Route as AuthedGmRouletteRouteImport } from './routes/_authed/gm/roulette'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
 import { Route as AuthedGmWheelRouteImport } from './routes/_authed/gm/wheel'
@@ -100,6 +102,11 @@ const AuthedOnlineRoute = AuthedOnlineRouteImport.update({
   path: '/online',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedRouletteRoute = AuthedRouletteRouteImport.update({
+  id: '/roulette',
+  path: '/roulette',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
   id: '/soul-lottery',
   path: '/soul-lottery',
@@ -145,6 +152,11 @@ const AuthedGmMailRoute = AuthedGmMailRouteImport.update({
   path: '/gm/mail',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmRouletteRoute = AuthedGmRouletteRouteImport.update({
+  id: '/gm/roulette',
+  path: '/gm/roulette',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmTeleportRoute = AuthedGmTeleportRouteImport.update({
   id: '/gm/teleport',
   path: '/gm/teleport',
@@ -179,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
+  '/roulette': typeof AuthedRouletteRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -188,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
+  '/gm/roulette': typeof AuthedGmRouletteRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/gm/wheel': typeof AuthedGmWheelRoute
@@ -206,6 +220,7 @@ export interface FileRoutesByTo {
   '/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
+  '/roulette': typeof AuthedRouletteRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -215,6 +230,7 @@ export interface FileRoutesByTo {
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
+  '/gm/roulette': typeof AuthedGmRouletteRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
   '/gm/wheel': typeof AuthedGmWheelRoute
@@ -235,6 +251,7 @@ export interface FileRoutesById {
   '/_authed/mounts-chakras': typeof AuthedMountsChakrasRoute
   '/_authed/mounts-pets': typeof AuthedMountsPetsRoute
   '/_authed/online': typeof AuthedOnlineRoute
+  '/_authed/roulette': typeof AuthedRouletteRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -244,6 +261,7 @@ export interface FileRoutesById {
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/mail': typeof AuthedGmMailRoute
+  '/_authed/gm/roulette': typeof AuthedGmRouletteRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
   '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
   '/_authed/gm/wheel': typeof AuthedGmWheelRoute
@@ -264,6 +282,7 @@ export interface FileRouteTypes {
     | '/mounts-chakras'
     | '/mounts-pets'
     | '/online'
+    | '/roulette'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -273,6 +292,7 @@ export interface FileRouteTypes {
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
+    | '/gm/roulette'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/gm/wheel'
@@ -291,6 +311,7 @@ export interface FileRouteTypes {
     | '/mounts-chakras'
     | '/mounts-pets'
     | '/online'
+    | '/roulette'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -300,6 +321,7 @@ export interface FileRouteTypes {
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
+    | '/gm/roulette'
     | '/gm/teleport'
     | '/gm/vendors'
     | '/gm/wheel'
@@ -319,6 +341,7 @@ export interface FileRouteTypes {
     | '/_authed/mounts-chakras'
     | '/_authed/mounts-pets'
     | '/_authed/online'
+    | '/_authed/roulette'
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
@@ -328,6 +351,7 @@ export interface FileRouteTypes {
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
     | '/_authed/gm/mail'
+    | '/_authed/gm/roulette'
     | '/_authed/gm/teleport'
     | '/_authed/gm/vendors'
     | '/_authed/gm/wheel'
@@ -434,6 +458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOnlineRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/roulette': {
+      id: '/_authed/roulette'
+      path: '/roulette'
+      fullPath: '/roulette'
+      preLoaderRoute: typeof AuthedRouletteRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/soul-lottery': {
       id: '/_authed/soul-lottery'
       path: '/soul-lottery'
@@ -497,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmMailRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/roulette': {
+      id: '/_authed/gm/roulette'
+      path: '/gm/roulette'
+      fullPath: '/gm/roulette'
+      preLoaderRoute: typeof AuthedGmRouletteRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/teleport': {
       id: '/_authed/gm/teleport'
       path: '/gm/teleport'
@@ -538,6 +576,7 @@ interface AuthedRouteChildren {
   AuthedMountsChakrasRoute: typeof AuthedMountsChakrasRoute
   AuthedMountsPetsRoute: typeof AuthedMountsPetsRoute
   AuthedOnlineRoute: typeof AuthedOnlineRoute
+  AuthedRouletteRoute: typeof AuthedRouletteRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
@@ -547,6 +586,7 @@ interface AuthedRouteChildren {
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmMailRoute: typeof AuthedGmMailRoute
+  AuthedGmRouletteRoute: typeof AuthedGmRouletteRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
   AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
   AuthedGmWheelRoute: typeof AuthedGmWheelRoute
@@ -563,6 +603,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMountsChakrasRoute: AuthedMountsChakrasRoute,
   AuthedMountsPetsRoute: AuthedMountsPetsRoute,
   AuthedOnlineRoute: AuthedOnlineRoute,
+  AuthedRouletteRoute: AuthedRouletteRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
@@ -572,6 +613,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmMailRoute: AuthedGmMailRoute,
+  AuthedGmRouletteRoute: AuthedGmRouletteRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
   AuthedGmVendorsRoute: AuthedGmVendorsRoute,
   AuthedGmWheelRoute: AuthedGmWheelRoute,
