@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attemptGem, attemptUpgrade, gemChance, upgradeChance, type UpgradeChoices } from './upgrade-simulator'
+import { attemptGem, attemptUpgrade, canAttempt, gemChance, upgradeChance, type UpgradeChoices } from './upgrade-simulator'
 
 /** Hands out these game rand() values in order. */
 const rolls = (...values: number[]) => {
@@ -59,6 +59,30 @@ describe('attemptUpgrade', () => {
 
   it('destroys the item with no tincture', () => {
     expect(attemptUpgrade(12, choices(), rolls(FAIL))).toEqual({ outcome: 'destroyed', level: 12, tinctureUsed: false })
+  })
+
+  describe('Scroll of Reflection', () => {
+    const reflection = choices({ scroll: 'reflection', potion: 300, tincture: 'survival' })
+
+    it('takes one level off without a roll', () => {
+      expect(attemptUpgrade(20, reflection, rolls())).toEqual({ outcome: 'reflected', level: 19, tinctureUsed: false })
+    })
+
+    it('does nothing at +0', () => {
+      expect(attemptUpgrade(0, reflection, rolls())).toEqual({ outcome: 'kept', level: 0, tinctureUsed: false })
+    })
+
+    it('cannot be used at +0 or +24', () => {
+      expect(canAttempt(0, 'reflection')).toBe(false)
+      expect(canAttempt(1, 'reflection')).toBe(true)
+      expect(canAttempt(24, 'reflection')).toBe(false)
+    })
+  })
+
+  it('can use a formula at any level below +24', () => {
+    expect(canAttempt(0, 'apprentice')).toBe(true)
+    expect(canAttempt(23, 'master')).toBe(true)
+    expect(canAttempt(24, 'master')).toBe(false)
   })
 
   describe('Survival Tincture', () => {

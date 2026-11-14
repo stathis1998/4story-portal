@@ -11,13 +11,14 @@ import { MailController } from './mail.controller.js';
 import { MAIL_REPOSITORY, SqlMailRepository } from './mail.repository.js';
 import { MailService } from './mail.service.js';
 import { TeleportService } from './teleport.service.js';
+import { UpgradePricesController } from './upgrade-prices.controller.js';
 import { VendorsController } from './vendors.controller.js';
 import { SqlVendorsRepository, VENDORS_REPOSITORY } from './vendors.repository.js';
 import { VendorsService } from './vendors.service.js';
 
 @Module({
   imports: [AuthModule],
-  controllers: [GmController, VendorsController, EventsController, MailController],
+  controllers: [GmController, VendorsController, EventsController, MailController, UpgradePricesController],
   providers: [
     EventsService,
     MailService,
