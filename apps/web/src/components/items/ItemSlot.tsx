@@ -34,7 +34,7 @@ export function ItemSlot({ item }: { item: GearItem }) {
         type="button"
         aria-label={`${item.slotName}: ${item.name}`}
         aria-describedby={open ? tooltipId : undefined}
-        className="flex size-[42px] items-center justify-center border border-line bg-bg transition hover:brightness-125 focus-visible:outline-1 focus-visible:outline-accent"
+        className="flex size-[42px] min-h-0 items-center justify-center border border-line bg-bg transition hover:brightness-125 focus-visible:outline-1 focus-visible:outline-accent"
         style={{ borderColor: qualityBorder(item.tooltip) }}
         onPointerEnter={(event) => event.pointerType === 'mouse' && setOpen(true)}
         onPointerLeave={(event) => event.pointerType === 'mouse' && setOpen(false)}

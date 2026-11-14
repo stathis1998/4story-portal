@@ -9,6 +9,13 @@ const ROWS: { count: Count; name: string }[] = [
   { count: 'cost', name: 'Cost' },
 ]
 
+const HEADINGS = ['Average', ...PERCENTILES.map((percent) => `p${percent}`)]
+
+// On a phone the five figures of a row sit under its name, in five equal columns that line up with the headings.
+// A cost is too wide for that, so the costs are listed one per line, each with its heading in front.
+const ROW = 'max-sm:grid max-sm:grid-cols-5 max-sm:py-1.5'
+const COST_CELL = 'max-sm:flex max-sm:items-center max-sm:justify-between max-sm:before:text-muted max-sm:before:content-[attr(data-label)]'
+
 const number = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 1 })
 const share = (part: number, whole: number) => `${number((part / whole) * 100)}%`
 
@@ -18,7 +25,7 @@ export function SimulationResults({ result }: { result: SimulationRun }) {
   const rows = ROWS.filter(({ count }) => priced || count !== 'cost')
 
   return (
-    <section aria-label="Simulation results" className="flex flex-col gap-3 rounded-xs border border-line bg-surface p-5">
+    <section aria-label="Simulation results" className="flex flex-col gap-3 rounded-xs border border-line bg-surface p-4 sm:p-5">
       <h2 className="text-xl font-bold">
         {number(runs)} runs from +{from} to +{target}
       </h2>
@@ -34,27 +41,37 @@ export function SimulationResults({ result }: { result: SimulationRun }) {
       {spread && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr>
-                  <th scope="col" className="px-2 pb-2 text-xs font-bold tracking-wider text-muted uppercase">
+            <table role="table" className="w-full text-left text-sm max-sm:block">
+              <thead role="rowgroup" className="max-sm:block">
+                <tr role="row" className={ROW}>
+                  <th role="columnheader" scope="col" className="px-2 pb-2 text-xs font-bold tracking-wider text-muted uppercase max-sm:sr-only">
                     Used
                   </th>
-                  {['Average', ...PERCENTILES.map((percent) => `p${percent}`)].map((heading) => (
-                    <th key={heading} scope="col" className="px-2 pb-2 text-right text-xs font-bold tracking-wider text-muted">
+                  {HEADINGS.map((heading) => (
+                    <th
+                      key={heading}
+                      role="columnheader"
+                      scope="col"
+                      className="px-2 pb-2 text-right text-xs font-bold tracking-wider text-muted max-sm:px-1 max-sm:pb-0"
+                    >
                       {heading}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup" className="max-sm:block">
                 {rows.map(({ count, name }) => (
-                  <tr key={count} className="border-t border-line">
-                    <th scope="row" className="px-2 py-1.5 font-bold">
+                  <tr key={count} role="row" className={`border-t border-line ${ROW} ${count === 'cost' ? 'max-sm:grid-cols-1' : ''}`}>
+                    <th role="rowheader" scope="row" className="px-2 py-1.5 font-bold max-sm:col-span-full max-sm:px-1 max-sm:py-0">
                       {name}
                     </th>
                     {[spread[count].mean, ...spread[count].percentiles].map((value, index) => (
-                      <td key={index} className="px-2 py-1.5 text-right tabular-nums">
+                      <td
+                        key={index}
+                        role="cell"
+                        data-label={HEADINGS[index]}
+                        className={`px-2 py-1.5 text-right tabular-nums max-sm:px-1 max-sm:py-0.5 ${count === 'cost' ? COST_CELL : ''}`}
+                      >
                         {count === 'cost' ? <Price price={Math.round(value)} shop="money" /> : number(value)}
                       </td>
                     ))}

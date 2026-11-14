@@ -31,7 +31,7 @@ function VendorsPage() {
   const [note, setNote] = useState<string | null>(null)
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <GmNav />
       <h1 className="text-4xl">Vendors</h1>
       {data?.database.endsWith('_TEST') && (

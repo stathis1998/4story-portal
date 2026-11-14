@@ -14,7 +14,7 @@ function OnlinePage() {
   const { data, isPending, isError, refetch, isFetching } = useQuery(onlineQueryOptions)
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Online</h1>
       <p className="mt-1 mb-6 text-muted">Characters in the game right now. The list updates every 30 seconds.</p>
 

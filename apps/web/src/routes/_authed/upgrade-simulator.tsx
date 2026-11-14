@@ -17,7 +17,7 @@ function UpgradeSimulatorPage() {
   const [active, setActive] = useState(TABS[0].id)
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
+    <main className="mx-auto max-w-3xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Upgrade Simulator</h1>
       <p className="mt-1 mb-6 text-muted">
         Same chances and rules as the game, using its current rates. Just for fun, nothing here changes your items. Server events and

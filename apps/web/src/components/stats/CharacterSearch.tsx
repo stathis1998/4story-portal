@@ -39,7 +39,7 @@ export function CharacterSearch() {
         <ul aria-label="Search results" className="mt-3 flex flex-col gap-1.5">
           {data.map((character) => (
             <li key={character.id}>
-              <Link to="/inspect/$id" params={{ id: String(character.id) }} className="font-bold hover:underline">
+              <Link to="/inspect/$id" params={{ id: String(character.id) }} className="inline-block font-bold hover:underline pointer-coarse:py-2">
                 {character.name}
               </Link>
               <span className="ml-2 text-xs text-muted">

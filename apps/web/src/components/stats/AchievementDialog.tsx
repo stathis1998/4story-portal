@@ -102,7 +102,7 @@ export function AchievementDialog({ achievement, onClose }: Props) {
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="shrink-0 cursor-pointer rounded-xs border border-line px-2.5 py-1 text-lg leading-none text-muted outline-none transition hover:border-accent hover:text-fg focus-visible:ring-2 focus-visible:ring-accent-text"
+              className="shrink-0 cursor-pointer rounded-xs border border-line px-2.5 py-1 text-lg pointer-coarse:min-w-11 leading-none text-muted outline-none transition hover:border-accent hover:text-fg focus-visible:ring-2 focus-visible:ring-accent-text"
             >
               <span aria-hidden="true">×</span>
             </button>

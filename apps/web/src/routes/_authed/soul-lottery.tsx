@@ -33,7 +33,7 @@ function SoulLotteryPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
+    <main className="mx-auto max-w-2xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Soul Lottery Simulator</h1>
       <p className="mt-1 mb-6 text-muted">
         Same odds and prizes as the game: you get 4 numbers out of 30, and one number is drawn. Just for fun, nothing here changes your

@@ -76,7 +76,7 @@ function WheelPage() {
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-10">
+      <main className="mx-auto max-w-2xl px-4 py-6 md:py-10">
         <h1 className="text-4xl">Wheel of Fortune</h1>
         {isError ? (
           <div className="mt-6">
@@ -126,7 +126,7 @@ function WheelPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
+    <main className="mx-auto max-w-2xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Wheel of Fortune</h1>
       <p className="mt-1 mb-6 text-muted">
         One free spin a day. Pick the character that gets the prize, and it arrives in that character's mailbox in the game.

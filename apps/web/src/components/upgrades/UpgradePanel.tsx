@@ -144,7 +144,7 @@ export function UpgradePanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-5 rounded-xs border border-line bg-surface p-5">
+      <section className="flex flex-col gap-5 rounded-xs border border-line bg-surface p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-3">
           <Select label="Starting level" registration={register('start', { valueAsNumber: true, onChange: newItem })} options={[...START_OPTIONS]} />
           <Select label="Scroll" registration={register('scroll')} options={[...SCROLLS]} />
@@ -229,7 +229,7 @@ export function UpgradePanel() {
 
       {simulation && <SimulationResults result={simulation} />}
 
-      <section aria-label="Your totals" className="rounded-xs border border-line bg-surface p-5">
+      <section aria-label="Your totals" className="rounded-xs border border-line bg-surface p-4 sm:p-5">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Total name="Attempts" value={totals.attempts} />
           <Total name="Successes" value={totals.successes} />

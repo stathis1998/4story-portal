@@ -25,7 +25,7 @@ function HallOfFamePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Hall of Fame</h1>
       <p className="mt-1 mb-6 text-muted">The best on the server, updated when a character's session is saved.</p>
 

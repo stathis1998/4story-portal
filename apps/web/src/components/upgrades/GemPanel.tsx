@@ -60,7 +60,7 @@ export function GemPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-5 rounded-xs border border-line bg-surface p-5">
+      <section className="flex flex-col gap-5 rounded-xs border border-line bg-surface p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2">
           <Select label="Starting gems" registration={register('start', { valueAsNumber: true, onChange: restart })} options={START_OPTIONS} />
           <Select label="Gemstone" registration={register('stone')} options={[...STONES]} />
@@ -89,7 +89,7 @@ export function GemPanel() {
         <p role="status">{message}</p>
       </section>
 
-      <section aria-label="Your totals" className="rounded-xs border border-line bg-surface p-5">
+      <section aria-label="Your totals" className="rounded-xs border border-line bg-surface p-4 sm:p-5">
         <dl className="grid grid-cols-3 gap-4">
           <Total name="Gemstones used" value={totals.stones} />
           <Total name="Successes" value={totals.successes} />

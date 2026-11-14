@@ -13,9 +13,10 @@ export const Route = createFileRoute('/_authed/mounts-pets')({
 
 function MountsPetsPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
       <h1 className="text-4xl">Mounts & Pets</h1>
       <p className="mt-1 mb-6 text-muted">Every mount in the game, and every pet a companion rune summons.</p>
+      <p className="-mt-4 mb-6 text-sm text-muted lg:hidden">Pick one to see it. Drag sideways on the model to turn it, and pinch or scroll to zoom.</p>
 
       <Mounts />
       <Pets />
@@ -25,7 +26,7 @@ function MountsPetsPage() {
 
 function Model({ src, name }: { src: string; name: string }) {
   return (
-    <Suspense fallback={<p className="flex h-80 items-center justify-center text-sm text-muted">Loading model...</p>}>
+    <Suspense fallback={<p className="flex h-[28svh] max-h-56 min-h-36 items-center justify-center text-sm text-muted lg:h-80 lg:max-h-none">Loading model...</p>}>
       <MountViewer src={src} name={name} />
     </Suspense>
   )
@@ -41,7 +42,7 @@ function Mounts() {
         <PreviewPanel label="Mount preview">
           <h3 className="text-lg font-bold">{selected.name}</h3>
           <Model src={`/mount-models/${selected.model}.glb`} name={selected.name} />
-          <p className="text-sm text-muted">Drag to turn it, scroll to zoom. Pick a mount from the list to see it.</p>
+          <p className="text-sm text-muted max-lg:hidden">Drag to turn it, scroll to zoom. Pick a mount from the list to see it.</p>
         </PreviewPanel>
 
         <CardList label="Mounts">
@@ -99,7 +100,7 @@ function Pets() {
               ))}
             </div>
           )}
-          <p className="text-sm text-muted">Drag to turn it, scroll to zoom. Pick a pet from the list to see it.</p>
+          <p className="text-sm text-muted max-lg:hidden">Drag to turn it, scroll to zoom. Pick a pet from the list to see it.</p>
         </PreviewPanel>
 
         <CardList label="Pets">
