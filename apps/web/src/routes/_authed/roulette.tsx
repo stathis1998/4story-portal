@@ -123,7 +123,7 @@ function RoulettePage() {
     setProblem(null)
     let result: RouletteSpinResult
     try {
-      result = await send(character.id, () => spinRoulette(character.id, bets))
+      result = await send(character.id, stake, () => spinRoulette(character.id, bets))
     } catch (err) {
       setProblem(rouletteErrorMessage(err))
       return

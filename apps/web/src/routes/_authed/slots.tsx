@@ -162,7 +162,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     setProblem(null)
     let result: SlotSpinResult
     try {
-      result = await send(character.id, () => spinSlots({ characterId: character.id, machine: key, stake }))
+      result = await send(character.id, stake, () => spinSlots({ characterId: character.id, machine: key, stake }))
     } catch (err) {
       // The stakes come back with the reload, and a stake that went is replaced the way the page always does it.
       setProblem(slotsErrorMessage(err))
@@ -228,7 +228,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           ? 'Log out of the game to play: your characters are all in it.'
           : character && inGame
             ? `Log out of ${character.name} in the game to keep playing, or pick another character.`
-            : characterFree && money !== null && stake !== null && money < stake
+            : // Not while a spin is in play: the wallet on screen is then already short of the stake it just paid.
+              !busy && characterFree && money !== null && stake !== null && money < stake
               ? 'Not enough money in that wallet for this stake.'
               : null
   const lastSpin = shown && !busy && shown.spin.machine === machine.key ? shown.spin : null

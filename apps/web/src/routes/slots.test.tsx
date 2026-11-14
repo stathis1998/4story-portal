@@ -306,7 +306,8 @@ describe('slots', () => {
     expect(status()).toHaveTextContent('Good luck...')
     expect(spinButton()).toHaveTextContent('Spinning...')
     expect(spinButton()).toBeDisabled()
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    // The stake has left the wallet; whatever was won only arrives when the reels stop.
+    expect(wallet()).toBe('5 Gold 200 Silver')
     expect(tab('The Armoury')).toBeDisabled()
     expect(tab("Tranus's Shelf")).toBeDisabled()
     expect(picker()).toBeDisabled()
@@ -314,7 +315,7 @@ describe('slots', () => {
     // A poll that brings the new wallet in mid-spin does not give the result away.
     await poll(queryClient)
     expect(getGets(fetchMock)).toHaveLength(2)
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(wallet()).toBe('5 Gold 200 Silver')
     expect(within(screen.getByRole('region', { name: 'Your last spins' })).queryAllByRole('listitem')).toHaveLength(0)
 
     // At full speed the reels are smeared along their run with the strongest blur, which is vertical only.
@@ -446,7 +447,8 @@ describe('slots', () => {
     await screen.findByRole('button', { name: 'Spinning...' })
     await poll(queryClient)
 
-    expect(wallet()).toBe('5 Gold 250 Silver')
+    // Only the stake is gone: the win the poll brought is not shown.
+    expect(wallet()).toBe('5 Gold 200 Silver')
     expect(within(screen.getByRole('region', { name: 'Your last spins' })).queryAllByRole('listitem')).toHaveLength(0)
     expect(status()).toHaveTextContent('Good luck...')
     expect(reels()).toHaveAccessibleName('Reels')
@@ -800,6 +802,48 @@ describe('slots', () => {
 
     await screen.findByRole('img', { name: /^Reels: / })
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 25 }])
+  })
+
+  it('takes the stake from the wallet at the press, and puts it back when the spin is refused', async () => {
+    let answer: (response: Response) => void = () => {}
+    const { user } = open(state(), {
+      'POST /slots/spin': () => new Promise<Response>((resolve) => (answer = resolve)),
+    })
+    await loaded()
+    await user.click(stake('50 Silver'))
+    expect(wallet()).toBe('5 Gold 250 Silver')
+
+    await user.click(spinButton())
+
+    // Before the server has answered at all.
+    await screen.findByRole('button', { name: 'Spinning...' })
+    expect(wallet()).toBe('5 Gold 200 Silver')
+
+    await act(async () => answer(json(422, { statusCode: 422, message: 'Not enough money in that wallet' })))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not enough money in that wallet')
+    expect(wallet()).toBe('5 Gold 250 Silver')
+  })
+
+  it('does not call the wallet short while the stake it just paid is in play', async () => {
+    let answer: (response: Response) => void = () => {}
+    const purse: Wallet = { gold: 0, silver: 60, copper: 0 }
+    const { user } = open(state({ characters: [{ ...mounara, wallet: purse }] }), {
+      'POST /slots/spin': () => new Promise<Response>((resolve) => (answer = resolve)),
+    })
+    await loaded()
+    await user.click(stake('50 Silver'))
+
+    await user.click(spinButton())
+    await screen.findByRole('button', { name: 'Spinning...' })
+
+    // 10 Silver is left, less than the stake, but that is the spin in play, not a reason it cannot be played.
+    expect(wallet()).toBe('10 Silver')
+    expect(status()).toHaveTextContent('Good luck...')
+    expect(status()).not.toHaveTextContent('Not enough money')
+
+    await act(async () => answer(json(422, { statusCode: 422, message: 'Not enough money in that wallet' })))
+    await screen.findByRole('alert')
   })
 
   it('says why Spin is off when the wallet is short of the stake', async () => {

@@ -163,9 +163,10 @@ so a thumb reaches it and the reels stay in view.
   motion" set in the browser they jump straight to the result. Spin is disabled until the last reel
   has stopped.
 - **The result.** Winning symbols on the line light up, and a line says "Three Experience Potions.
-  You won 5 Gold on a stake of 50 Silver." or "No win this time. You staked 50 Silver." The wallet
-  figure changes only when the last reel stops, so it does not give the result away. While a spin is
-  on its way or the reels are turning, nothing else on the page changes either.
+  You won 5 Gold on a stake of 50 Silver." or "No win this time. You staked 50 Silver." The stake
+  leaves the wallet figure the moment Spin is pressed, and whatever was won is added only when the
+  last reel stops, so the figure never gives the result away. A refused spin puts the stake straight
+  back. While a spin is on its way or the reels are turning, nothing else on the page changes.
 - **What it pays.** The machine's payout table drawn with its icons (three of each symbol, and two
   lucky symbols), each prize as a multiple and as money at the chosen stake, then: "This machine
   pays back 95.8% of what goes into it, over time. One spin in four pays something."

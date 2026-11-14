@@ -77,9 +77,16 @@ function afterSpin<S extends GameState, R extends GameSpinResult<S>>({ result, b
   }
 }
 
+/** The wallet with `silver` staked out of it. Loose Bronze stays, and it never shows less than nothing. */
+function walletLess(wallet: Wallet, silver: number): Wallet {
+  const left = Math.max(0, wallet.gold * 1000 + wallet.silver - silver)
+  return { gold: Math.floor(left / 1000), silver: left % 1000, copper: wallet.copper }
+}
+
 /**
  * Holds what the page shows still from the press until the spin stops: `view` is what the page showed when the
- * spin was sent until `reveal` is called, so a poll answered after the bet went through cannot give the result away.
+ * spin was sent, with the stake already out of the wallet, until `reveal` is called. So the player sees the stake
+ * leave at once, and a poll answered after the bet went through cannot give the result away.
  */
 export function useHeldSpin<S extends GameState, R extends GameSpinResult<S>>(queryKey: QueryKey, data: S | undefined) {
   const queryClient = useQueryClient()
@@ -90,13 +97,17 @@ export function useHeldSpin<S extends GameState, R extends GameSpinResult<S>>(qu
   const view = frozen ?? data
 
   /**
-   * Sends a spin for `characterId` from the state on screen. Resolves with the answer once the wheel can turn;
-   * rejects with the refusal, after asking for the state again.
+   * Sends a spin for `characterId` staking `stake` Silver from the state on screen. Resolves with the answer once
+   * the wheel can turn; rejects with the refusal, after asking for the state again.
    */
-  async function send(characterId: number, request: () => Promise<R>): Promise<R> {
+  async function send(characterId: number, stake: number, request: () => Promise<R>): Promise<R> {
     if (!view) throw new Error('Nothing to spin from yet')
     setShown(null)
-    setFrozen(view)
+    // The stake shows as spent from the press. A refusal drops this view, which puts it back.
+    setFrozen({
+      ...view,
+      characters: view.characters.map((entry) => (entry.id === characterId ? { ...entry, wallet: walletLess(entry.wallet, stake) } : entry)),
+    })
     setSending(true)
     let result: R
     try {
