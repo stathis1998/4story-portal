@@ -6,7 +6,7 @@ import {
   MAIL_MAX_GOLD,
   MAIL_MAX_ITEMS,
 } from '@4story-portal/shared'
-import { useId, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { itemDisplayName } from '../../lib/gm'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
@@ -23,6 +23,12 @@ type Props = {
   error: string | null
   onSave: (reward: AchievementRewardInput) => void
   onCancel: () => void
+  /** What the form is called for screen readers. `Reward for <name>` when left out. */
+  label?: string
+  /** More fields of the same form, shown above the coins. They take the first focus. */
+  children?: ReactNode
+  /** What saving with no coins and no items means here. */
+  emptyNote?: string
 }
 
 /** `stack` is only known for an item picked just now; the API checks the others. */
@@ -38,7 +44,7 @@ const field =
   'rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent'
 const labelText = 'text-xs font-bold tracking-wider text-muted uppercase'
 
-export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: Props) {
+export function RewardEditor({ name, reward, saving, error, onSave, onCancel, label, children, emptyNote }: Props) {
   const id = useId()
   const [money, setMoney] = useState({
     gold: String(reward?.gold ?? 0),
@@ -78,7 +84,8 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: 
 
   return (
     // The messages below say what is wrong, in place of the browser's own bubbles.
-    <form noValidate aria-label={`Reward for ${name}`} onSubmit={submit} className="flex flex-col gap-3">
+    <form noValidate aria-label={label ?? `Reward for ${name}`} onSubmit={submit} className="flex flex-col gap-3">
+      {children}
       <div className="flex flex-wrap items-end gap-3">
         {COINS.map(({ key, label, sprite, max }, index) => (
           <div key={key} className="flex flex-col gap-1">
@@ -92,7 +99,7 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: 
               min={0}
               max={max}
               // Rune is where most rewards start, and typing replaces what was there.
-              autoFocus={index === 0}
+              autoFocus={index === 0 && !children}
               onFocus={(event) => event.target.select()}
               value={money[key]}
               onChange={(event) => {
@@ -166,7 +173,7 @@ export function RewardEditor({ name, reward, saving, error, onSave, onCancel }: 
         )}
       </div>
 
-      <p className="text-xs text-muted">No coins and no items means this level pays nothing.</p>
+      <p className="text-xs text-muted">{emptyNote ?? 'No coins and no items means this level pays nothing.'}</p>
       <FormMessage message={problem ?? error} />
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={saving}>

@@ -25,6 +25,7 @@ import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
+import { Route as AuthedWheelRouteImport } from './routes/_authed/wheel'
 import { Route as AuthedCharactersIdRouteImport } from './routes/_authed/characters_.$id'
 import { Route as AuthedGmAchievementsRouteImport } from './routes/_authed/gm/achievements'
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
@@ -32,6 +33,7 @@ import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
 import { Route as AuthedGmVendorsRouteImport } from './routes/_authed/gm/vendors'
+import { Route as AuthedGmWheelRouteImport } from './routes/_authed/gm/wheel'
 import { Route as AuthedInspectIdRouteImport } from './routes/_authed/inspect.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -113,6 +115,11 @@ const AuthedUpgradeStatsRoute = AuthedUpgradeStatsRouteImport.update({
   path: '/upgrade-stats',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWheelRoute = AuthedWheelRouteImport.update({
+  id: '/wheel',
+  path: '/wheel',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedCharactersIdRoute = AuthedCharactersIdRouteImport.update({
   id: '/characters_/$id',
   path: '/characters/$id',
@@ -148,6 +155,11 @@ const AuthedGmVendorsRoute = AuthedGmVendorsRouteImport.update({
   path: '/gm/vendors',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmWheelRoute = AuthedGmWheelRouteImport.update({
+  id: '/gm/wheel',
+  path: '/gm/wheel',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedInspectIdRoute = AuthedInspectIdRouteImport.update({
   id: '/inspect/$id',
   path: '/inspect/$id',
@@ -170,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/wheel': typeof AuthedWheelRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/achievements': typeof AuthedGmAchievementsRoute
   '/gm/events': typeof AuthedGmEventsRoute
@@ -177,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/gm/mail': typeof AuthedGmMailRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
+  '/gm/wheel': typeof AuthedGmWheelRoute
   '/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRoutesByTo {
@@ -195,6 +209,7 @@ export interface FileRoutesByTo {
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/wheel': typeof AuthedWheelRoute
   '/characters/$id': typeof AuthedCharactersIdRoute
   '/gm/achievements': typeof AuthedGmAchievementsRoute
   '/gm/events': typeof AuthedGmEventsRoute
@@ -202,6 +217,7 @@ export interface FileRoutesByTo {
   '/gm/mail': typeof AuthedGmMailRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
   '/gm/vendors': typeof AuthedGmVendorsRoute
+  '/gm/wheel': typeof AuthedGmWheelRoute
   '/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRoutesById {
@@ -222,6 +238,7 @@ export interface FileRoutesById {
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
+  '/_authed/wheel': typeof AuthedWheelRoute
   '/_authed/characters_/$id': typeof AuthedCharactersIdRoute
   '/_authed/gm/achievements': typeof AuthedGmAchievementsRoute
   '/_authed/gm/events': typeof AuthedGmEventsRoute
@@ -229,6 +246,7 @@ export interface FileRoutesById {
   '/_authed/gm/mail': typeof AuthedGmMailRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
   '/_authed/gm/vendors': typeof AuthedGmVendorsRoute
+  '/_authed/gm/wheel': typeof AuthedGmWheelRoute
   '/_authed/inspect/$id': typeof AuthedInspectIdRoute
 }
 export interface FileRouteTypes {
@@ -249,6 +267,7 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
+    | '/wheel'
     | '/characters/$id'
     | '/gm/achievements'
     | '/gm/events'
@@ -256,6 +275,7 @@ export interface FileRouteTypes {
     | '/gm/mail'
     | '/gm/teleport'
     | '/gm/vendors'
+    | '/gm/wheel'
     | '/inspect/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -274,6 +294,7 @@ export interface FileRouteTypes {
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
+    | '/wheel'
     | '/characters/$id'
     | '/gm/achievements'
     | '/gm/events'
@@ -281,6 +302,7 @@ export interface FileRouteTypes {
     | '/gm/mail'
     | '/gm/teleport'
     | '/gm/vendors'
+    | '/gm/wheel'
     | '/inspect/$id'
   id:
     | '__root__'
@@ -300,6 +322,7 @@ export interface FileRouteTypes {
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
+    | '/_authed/wheel'
     | '/_authed/characters_/$id'
     | '/_authed/gm/achievements'
     | '/_authed/gm/events'
@@ -307,6 +330,7 @@ export interface FileRouteTypes {
     | '/_authed/gm/mail'
     | '/_authed/gm/teleport'
     | '/_authed/gm/vendors'
+    | '/_authed/gm/wheel'
     | '/_authed/inspect/$id'
   fileRoutesById: FileRoutesById
 }
@@ -431,6 +455,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUpgradeStatsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/wheel': {
+      id: '/_authed/wheel'
+      path: '/wheel'
+      fullPath: '/wheel'
+      preLoaderRoute: typeof AuthedWheelRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/characters_/$id': {
       id: '/_authed/characters_/$id'
       path: '/characters/$id'
@@ -480,6 +511,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmVendorsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/wheel': {
+      id: '/_authed/gm/wheel'
+      path: '/gm/wheel'
+      fullPath: '/gm/wheel'
+      preLoaderRoute: typeof AuthedGmWheelRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/inspect/$id': {
       id: '/_authed/inspect/$id'
       path: '/inspect/$id'
@@ -503,6 +541,7 @@ interface AuthedRouteChildren {
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
+  AuthedWheelRoute: typeof AuthedWheelRoute
   AuthedCharactersIdRoute: typeof AuthedCharactersIdRoute
   AuthedGmAchievementsRoute: typeof AuthedGmAchievementsRoute
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
@@ -510,6 +549,7 @@ interface AuthedRouteChildren {
   AuthedGmMailRoute: typeof AuthedGmMailRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
   AuthedGmVendorsRoute: typeof AuthedGmVendorsRoute
+  AuthedGmWheelRoute: typeof AuthedGmWheelRoute
   AuthedInspectIdRoute: typeof AuthedInspectIdRoute
 }
 
@@ -526,6 +566,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
+  AuthedWheelRoute: AuthedWheelRoute,
   AuthedCharactersIdRoute: AuthedCharactersIdRoute,
   AuthedGmAchievementsRoute: AuthedGmAchievementsRoute,
   AuthedGmEventsRoute: AuthedGmEventsRoute,
@@ -533,6 +574,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedGmMailRoute: AuthedGmMailRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,
   AuthedGmVendorsRoute: AuthedGmVendorsRoute,
+  AuthedGmWheelRoute: AuthedGmWheelRoute,
   AuthedInspectIdRoute: AuthedInspectIdRoute,
 }
 

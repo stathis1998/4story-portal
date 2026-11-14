@@ -45,6 +45,9 @@ export function tableNames(config: AppConfig) {
     achievementRewards: `${game}.TPORTALACHIEVEMENTREWARD`,
     portalSettings: `${game}.TPORTALSETTING`,
     achievementProcedure: `${game}.TPortalAchievementAward`,
+    wheelPrizes: `${game}.TPORTALWHEELPRIZE`,
+    wheelSpins: `${game}.TPORTALWHEELSPINTABLE`,
+    wheelProcedure: `${game}.TPortalWheelSpin`,
   };
 }
 

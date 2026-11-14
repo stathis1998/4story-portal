@@ -43,4 +43,7 @@ it('builds bracketed three-part table names from the configured databases', () =
     achievementRewards: '[TGAME_GSP_TEST].dbo.TPORTALACHIEVEMENTREWARD',
     portalSettings: '[TGAME_GSP_TEST].dbo.TPORTALSETTING',
     achievementProcedure: '[TGAME_GSP_TEST].dbo.TPortalAchievementAward',
+    wheelPrizes: '[TGAME_GSP_TEST].dbo.TPORTALWHEELPRIZE',
+    wheelSpins: '[TGAME_GSP_TEST].dbo.TPORTALWHEELSPINTABLE',
+    wheelProcedure: '[TGAME_GSP_TEST].dbo.TPortalWheelSpin',
   }));
