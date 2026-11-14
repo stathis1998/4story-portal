@@ -23,6 +23,7 @@ import { Route as AuthedMountsChakrasRouteImport } from './routes/_authed/mounts
 import { Route as AuthedMountsPetsRouteImport } from './routes/_authed/mounts-pets'
 import { Route as AuthedOnlineRouteImport } from './routes/_authed/online'
 import { Route as AuthedRouletteRouteImport } from './routes/_authed/roulette'
+import { Route as AuthedSlotsRouteImport } from './routes/_authed/slots'
 import { Route as AuthedSoulLotteryRouteImport } from './routes/_authed/soul-lottery'
 import { Route as AuthedUpgradeSimulatorRouteImport } from './routes/_authed/upgrade-simulator'
 import { Route as AuthedUpgradeStatsRouteImport } from './routes/_authed/upgrade-stats'
@@ -105,6 +106,11 @@ const AuthedOnlineRoute = AuthedOnlineRouteImport.update({
 const AuthedRouletteRoute = AuthedRouletteRouteImport.update({
   id: '/roulette',
   path: '/roulette',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedSlotsRoute = AuthedSlotsRouteImport.update({
+  id: '/slots',
+  path: '/slots',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedSoulLotteryRoute = AuthedSoulLotteryRouteImport.update({
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/roulette': typeof AuthedRouletteRoute
+  '/slots': typeof AuthedSlotsRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -221,6 +228,7 @@ export interface FileRoutesByTo {
   '/mounts-pets': typeof AuthedMountsPetsRoute
   '/online': typeof AuthedOnlineRoute
   '/roulette': typeof AuthedRouletteRoute
+  '/slots': typeof AuthedSlotsRoute
   '/soul-lottery': typeof AuthedSoulLotteryRoute
   '/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/_authed/mounts-pets': typeof AuthedMountsPetsRoute
   '/_authed/online': typeof AuthedOnlineRoute
   '/_authed/roulette': typeof AuthedRouletteRoute
+  '/_authed/slots': typeof AuthedSlotsRoute
   '/_authed/soul-lottery': typeof AuthedSoulLotteryRoute
   '/_authed/upgrade-simulator': typeof AuthedUpgradeSimulatorRoute
   '/_authed/upgrade-stats': typeof AuthedUpgradeStatsRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/mounts-pets'
     | '/online'
     | '/roulette'
+    | '/slots'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -312,6 +322,7 @@ export interface FileRouteTypes {
     | '/mounts-pets'
     | '/online'
     | '/roulette'
+    | '/slots'
     | '/soul-lottery'
     | '/upgrade-simulator'
     | '/upgrade-stats'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/_authed/mounts-pets'
     | '/_authed/online'
     | '/_authed/roulette'
+    | '/_authed/slots'
     | '/_authed/soul-lottery'
     | '/_authed/upgrade-simulator'
     | '/_authed/upgrade-stats'
@@ -465,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedRouletteRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/slots': {
+      id: '/_authed/slots'
+      path: '/slots'
+      fullPath: '/slots'
+      preLoaderRoute: typeof AuthedSlotsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/soul-lottery': {
       id: '/_authed/soul-lottery'
       path: '/soul-lottery'
@@ -577,6 +596,7 @@ interface AuthedRouteChildren {
   AuthedMountsPetsRoute: typeof AuthedMountsPetsRoute
   AuthedOnlineRoute: typeof AuthedOnlineRoute
   AuthedRouletteRoute: typeof AuthedRouletteRoute
+  AuthedSlotsRoute: typeof AuthedSlotsRoute
   AuthedSoulLotteryRoute: typeof AuthedSoulLotteryRoute
   AuthedUpgradeSimulatorRoute: typeof AuthedUpgradeSimulatorRoute
   AuthedUpgradeStatsRoute: typeof AuthedUpgradeStatsRoute
@@ -604,6 +624,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedMountsPetsRoute: AuthedMountsPetsRoute,
   AuthedOnlineRoute: AuthedOnlineRoute,
   AuthedRouletteRoute: AuthedRouletteRoute,
+  AuthedSlotsRoute: AuthedSlotsRoute,
   AuthedSoulLotteryRoute: AuthedSoulLotteryRoute,
   AuthedUpgradeSimulatorRoute: AuthedUpgradeSimulatorRoute,
   AuthedUpgradeStatsRoute: AuthedUpgradeStatsRoute,
