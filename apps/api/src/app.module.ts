@@ -12,6 +12,7 @@ import { StatsModule } from './stats/stats.module.js';
 import { StoreModule } from './store/store.module.js';
 import { WeaponsModule } from './weapons/weapons.module.js';
 import { RouletteModule } from './roulette/roulette.module.js';
+import { SlotsModule } from './slots/slots.module.js';
 import { WheelModule } from './wheel/wheel.module.js';
 
 @Module({
@@ -33,6 +34,7 @@ import { WheelModule } from './wheel/wheel.module.js';
     WeaponsModule,
     WheelModule,
     RouletteModule,
+    SlotsModule,
     StoreModule,
   ],
 })

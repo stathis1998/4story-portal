@@ -42,7 +42,8 @@ import {
   type WheelItemRow,
   type WheelRepository,
 } from '../src/wheel/wheel.repository.js';
-import { ROULETTE_DEFAULT_LIMITS, type Wallet } from '@4story-portal/shared';
+import { ROULETTE_DEFAULT_LIMITS, SLOT_BIG_WIN, SLOT_MACHINES, type SlotMachineKey, type Wallet } from '@4story-portal/shared';
+import type { SlotBetInput, SlotSettings, SlotSpinRow, SlotsRepository, SlotTotalsRow } from '../src/slots/slots.repository.js';
 import {
   type BetInput,
   type RouletteRepository,
@@ -775,5 +776,112 @@ export class FakeRouletteRepository implements RouletteRepository {
     });
     const day = this.now().toISOString().slice(0, 10);
     return { today: sum(this.spinRows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(this.spinRows) };
+  }
+}
+
+// In-memory stand-in for the slots' settings and spin table; it pays from and to `wallets`.
+export class FakeSlotsRepository implements SlotsRepository {
+  settingsRow: SlotSettings = {
+    live: false,
+    machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
+  };
+  /** machine is a string so a test can plant a spin for a machine the code no longer has. */
+  spinRows: (SlotSpinRow & { multiple: number })[] = [];
+  /** The database's clock: stamps new spins and decides today. */
+  now: () => Date = () => new Date();
+  /** Every bet() call, including the ones that changed nothing. */
+  readonly betCalls: SlotBetInput[] = [];
+  /** The slots' own tables reject. The wallets' list is another table and has its own flag (`wallets.failing`). */
+  failing = false;
+  private nextId = 1;
+
+  constructor(readonly wallets: FakeWalletsRepository = new FakeWalletsRepository()) {}
+
+  /** The wallets' rows, which the bet pays from and to. */
+  get characterRows(): (WalletCharacterRow & { userId: number })[] {
+    return this.wallets.rows;
+  }
+  set characterRows(rows: (WalletCharacterRow & { userId: number })[]) {
+    this.wallets.rows = rows;
+  }
+
+  private check(): void {
+    if (this.failing) throw new Error('Invalid object name TPortalSlotSpin');
+  }
+
+  private plain({ multiple: _multiple, ...row }: SlotSpinRow & { multiple?: number }): SlotSpinRow {
+    return row;
+  }
+
+  async settings(): Promise<SlotSettings> {
+    this.check();
+    return structuredClone(this.settingsRow);
+  }
+
+  async saveFloor(live: boolean): Promise<void> {
+    this.check();
+    this.settingsRow.live = live;
+  }
+
+  async saveMachine(key: SlotMachineKey, settings: { live: boolean; stakes: [number, number, number] }): Promise<void> {
+    this.check();
+    this.settingsRow.machines[key] = { live: settings.live, stakes: [...settings.stakes] };
+  }
+
+  /** Like the real batch, only the floor switch is checked here; the rest is the service's job. */
+  async bet(input: SlotBetInput): Promise<BetOutcome> {
+    this.check();
+    this.betCalls.push(input);
+    const moved = this.wallets.move(input, this.settingsRow.live);
+    if (moved.code !== BET_OK) return moved;
+    const id = this.nextId++;
+    this.spinRows.push({
+      id,
+      userId: input.userId,
+      character: moved.name,
+      spunAt: this.now(),
+      machine: input.machine,
+      stops: input.stops,
+      stake: input.stake,
+      payout: input.payout,
+      multiple: input.multiple,
+    });
+    return { code: BET_OK, id, wallet: moved.wallet };
+  }
+
+  private newest(rows: typeof this.spinRows, limit: number): SlotSpinRow[] {
+    return [...rows].sort((a, b) => b.id - a.id).slice(0, limit).map((row) => this.plain(row));
+  }
+
+  async spinsOf(userId: number, limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.userId === userId), limit);
+  }
+
+  async bigWins(limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.multiple >= SLOT_BIG_WIN), limit);
+  }
+
+  async latest(limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows, limit);
+  }
+
+  async totals(): Promise<Record<string, { today: SlotTotalsRow; allTime: SlotTotalsRow }>> {
+    this.check();
+    const sum = (rows: typeof this.spinRows): SlotTotalsRow => ({
+      spins: rows.length,
+      staked: rows.reduce((total, row) => total + row.stake, 0),
+      paid: rows.reduce((total, row) => total + row.payout, 0),
+    });
+    const day = this.now().toISOString().slice(0, 10);
+    const machines = [...new Set(this.spinRows.map((row) => row.machine))];
+    return Object.fromEntries(
+      machines.map((machine) => {
+        const rows = this.spinRows.filter((row) => row.machine === machine);
+        return [machine, { today: sum(rows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(rows) }];
+      }),
+    );
   }
 }
