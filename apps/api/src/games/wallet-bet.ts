@@ -10,6 +10,11 @@ export const BET_OK = 0,
   BET_POOR = 4;
 export type BetCode = typeof BET_OK | typeof BET_CLOSED | typeof BET_NOT_YOURS | typeof BET_ONLINE | typeof BET_POOR;
 
+/** A game's own refusal from its check step: 10 to 99, so it never meets a shared code. */
+export type GameCode = number;
+export const GAME_CODE_MIN = 10,
+  GAME_CODE_MAX = 99;
+
 export type BetOutcome = { code: typeof BET_OK; id: number; wallet: Wallet } | { code: Exclude<BetCode, typeof BET_OK>; name: string | null };
 
 /** How a switch row is read, the same way the batch's SQL compares it: 'true' in any case, trailing spaces ignored. */
@@ -25,10 +30,14 @@ export type BetTables = { portalSettings: string; currentUsers: string; characte
  * `before` is the game's own SQL, run once every check has passed and before the wallet is written. It may set
  * @extra (BIGINT Bronze, 0 until then), which is paid into the wallet with @payout. `record` may use @extra.
  * `before` must return no result set (assign with SELECT @x = ...), since callers read the batch's first one.
+ * `check` is the game's own refusal, run once every shared check has passed and before `before`, inside the
+ * transaction and under the locks the shared part took. It may SET @code to a GameCode, 10 to 99, and then nothing
+ * is written: the wallet, `before` and `record` all run only while @code is 0. It must return no result set either.
+ * Any other code it sets is a bug there, and THROW rolls everything back.
  * Returns one row: { code, id, name, gold, silver, copper, extra }. `extra` is a BIGINT, so a string from the driver.
  * Throws on a negative or NULL @stake or @payout, and on a negative or NULL @extra; a zero stake is allowed.
  */
-export function walletBetSql(tables: BetTables, liveKey: string, record: string, before = ''): string {
+export function walletBetSql(tables: BetTables, liveKey: string, record: string, before = '', check = ''): string {
   // The online list is locked before the wallet. TLogin inserts the account's row and TEnterServer sets its
   // dwCharID, both by dwUserID, so the range lock makes them wait for the COMMIT: the character cannot enter
   // the game between the check and the UPDATE, and the map server loads the wallet only after it. The lock
@@ -54,7 +63,7 @@ BEGIN
   IF @name IS NULL SET @code = ${BET_NOT_YOURS};
   ELSE IF @online > 0 SET @code = ${BET_ONLINE};
   ELSE IF @wallet < @stake SET @code = ${BET_POOR};
-END
+END${check ? gameCheck(check) : ''}
 IF @code = 0
 BEGIN
   ${before};
@@ -69,6 +78,14 @@ COMMIT;
 SELECT @code AS code, @id AS id, @name AS name,
        CAST(@wallet / 1000000 AS INT) AS gold, CAST((@wallet / 1000) % 1000 AS INT) AS silver, CAST(@wallet % 1000 AS INT) AS copper, @extra AS extra;`;
 }
+
+/** The game's check, run only while the shared checks have passed; a code it sets outside 10 to 99, or NULL, is a bug. */
+const gameCheck = (check: string) => `
+IF @code = 0
+BEGIN
+  ${check};
+  IF @code IS NULL OR (@code <> 0 AND (@code < ${GAME_CODE_MIN} OR @code > ${GAME_CODE_MAX})) THROW 50000, 'A game code must be from ${GAME_CODE_MIN} to ${GAME_CODE_MAX}', 1;
+END`;
 
 /** The account's characters with wallet and whether each is in the game. Binds @userId. Columns: charId, name, level, classCode, gold, silver, copper, online (bit). Ordered by bSlot. */
 export function walletCharactersSql(tables: BetTables): string {
