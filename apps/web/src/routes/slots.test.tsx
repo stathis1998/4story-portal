@@ -294,6 +294,7 @@ function fakeSounds(muted = false) {
       calls.push(`muted ${value}`)
     },
     stop: () => calls.push('stop'),
+    setHidden: (hidden) => calls.push(`hidden ${hidden}`),
   }
   return { sounds, calls }
 }
@@ -1386,6 +1387,28 @@ describe('slots', () => {
       expect(await within(status()).findByText(lineOf(lost.spin))).toBeInTheDocument()
       expect(calls).toEqual(['unlock', 'press'])
       expect(winFigure()).toBeNull()
+    })
+
+    it('pauses the sound while the tab is hidden, and stops listening when the page goes', async () => {
+      const shown = (hidden: boolean) => {
+        Object.defineProperty(document, 'hidden', { value: hidden, configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      }
+      try {
+        open()
+        await loaded()
+        shown(true)
+        expect(calls).toEqual(['hidden true'])
+        shown(false)
+        expect(calls).toEqual(['hidden true', 'hidden false'])
+
+        cleanup()
+        calls.length = 0
+        shown(true)
+        expect(calls.filter((call) => call.startsWith('hidden'))).toEqual([])
+      } finally {
+        delete (document as { hidden?: boolean }).hidden
+      }
     })
 
     it('leaving the page mid-round stops the sound and sets nothing afterwards', async () => {

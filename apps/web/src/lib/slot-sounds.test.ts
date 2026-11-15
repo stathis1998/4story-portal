@@ -5,7 +5,7 @@ import type { SlotSound } from './slot-sounds'
 // A stand-in for the browser's sound generator that only records what was asked of it.
 type Param = {
   value: number
-  setValueAtTime: () => Param
+  setValueAtTime: (value: number) => Param
   linearRampToValueAtTime: () => Param
   exponentialRampToValueAtTime: () => Param
   cancelScheduledValues: () => Param
@@ -13,7 +13,10 @@ type Param = {
 function param(): Param {
   const p: Param = {
     value: 0,
-    setValueAtTime: () => p,
+    setValueAtTime: (value) => {
+      p.value = value
+      return p
+    },
     linearRampToValueAtTime: () => p,
     exponentialRampToValueAtTime: () => p,
     cancelScheduledValues: () => p,
@@ -38,10 +41,10 @@ type FakeNode = {
   end: () => void
 }
 
-function fakeContext(opts: { resume?: () => Promise<void>; state?: string } = {}) {
+function fakeContext(opts: { resume?: () => Promise<void>; suspend?: () => Promise<void>; state?: string } = {}) {
   const started: FakeNode[] = []
   const nodes: FakeNode[] = []
-  const calls = { resume: 0 }
+  const calls = { resume: 0, suspend: 0 }
   function node(): FakeNode {
     const n: FakeNode = {
       frequency: param(),
@@ -78,9 +81,18 @@ function fakeContext(opts: { resume?: () => Promise<void>; state?: string } = {}
     createGain: node,
     createBiquadFilter: node,
     createBuffer: (_channels: number, length: number) => ({ getChannelData: () => new Float32Array(length) }),
+    // Like the browser's: the state changes once the promise has settled, and only if it succeeded.
     resume: () => {
       calls.resume += 1
-      return opts.resume ? opts.resume() : Promise.resolve()
+      return (opts.resume ? opts.resume() : Promise.resolve()).then(() => {
+        context.state = 'running'
+      })
+    },
+    suspend: () => {
+      calls.suspend += 1
+      return (opts.suspend ? opts.suspend() : Promise.resolve()).then(() => {
+        context.state = 'suspended'
+      })
     },
   }
   return { context: context as unknown as AudioContext, started, nodes, calls }
@@ -269,5 +281,150 @@ describe('slot sounds', () => {
     sounds.stop()
     // Everything had ended, so stop() has nothing left to stop.
     expect(fake.started.every((n) => n.stopped === 0)).toBe(true)
+  })
+
+  it('cuts what is playing when muted, and lets it be heard again when unmuted', () => {
+    const fake = fakeContext()
+    const sounds = createSlotSounds(() => fake.context)
+    sounds.unlock()
+    // The first gain made is the master, everything goes through it.
+    const master = fake.nodes[0]
+    expect(master.gain.value).toBe(0.25)
+    sounds.play('bigWin')
+    sounds.setMuted(true)
+    expect(master.gain.value).toBe(0)
+    sounds.setMuted(false)
+    expect(master.gain.value).toBe(0.25)
+  })
+
+  it('starts muted at no volume when the switch was off', () => {
+    localStorage.setItem('slots.sound', 'off')
+    const fake = fakeContext()
+    createSlotSounds(() => fake.context).unlock()
+    expect(fake.nodes[0].gain.value).toBe(0)
+  })
+
+  it('unmuting starts again a loop the page still wants', () => {
+    const fake = fakeContext()
+    const sounds = createSlotSounds(() => fake.context)
+    sounds.unlock()
+    sounds.spinning(true)
+    sounds.setMuted(true)
+    const before = fake.started.length
+    sounds.setMuted(false)
+    const restarted = fake.started.slice(before)
+    expect(restarted.filter((n) => n.loop && n.stopped === 0)).toHaveLength(1)
+  })
+
+  it('a loop turned on before the first press starts at unlock()', () => {
+    const fake = fakeContext()
+    const sounds = createSlotSounds(() => fake.context)
+    sounds.spinning(true)
+    expect(fake.started).toHaveLength(0)
+    sounds.unlock()
+    expect(fake.started.filter((n) => n.loop && n.stopped === 0)).toHaveLength(1)
+  })
+
+  describe('in a hidden tab', () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+    it('suspends the context when hidden and resumes it when visible', async () => {
+      const fake = fakeContext()
+      const sounds = createSlotSounds(() => fake.context)
+      sounds.unlock()
+      sounds.spinning(true)
+      const loop = fake.started.find((n) => n.loop)!
+
+      sounds.setHidden(true)
+      expect(fake.calls.suspend).toBe(1)
+      await settle()
+      expect(fake.context.state).toBe('suspended')
+      // The loop is paused with the context, not ended: it goes on when the player comes back.
+      expect(loop.stopped).toBe(0)
+
+      sounds.setHidden(false)
+      expect(fake.calls.resume).toBe(1)
+      await settle()
+      expect(fake.context.state).toBe('running')
+      expect(fake.started.filter((n) => n.loop)).toEqual([loop])
+    })
+
+    it('does nothing before the first press', () => {
+      const make = vi.fn(() => fakeContext().context)
+      const sounds = createSlotSounds(make)
+      expect(() => {
+        sounds.setHidden(true)
+        sounds.setHidden(false)
+      }).not.toThrow()
+      expect(make).not.toHaveBeenCalled()
+    })
+
+    it('starts no sound and no loop on a suspended context, so nothing piles up for its return', async () => {
+      const fake = fakeContext()
+      const sounds = createSlotSounds(() => fake.context)
+      sounds.unlock()
+      sounds.setHidden(true)
+      await settle()
+      for (const name of ALL) sounds.play(name)
+      sounds.spinning(true)
+      sounds.suspense(true)
+      expect(fake.started).toHaveLength(0)
+
+      // Back in view, the loops the page still wants start.
+      sounds.setHidden(false)
+      await settle()
+      expect(fake.started.filter((n) => n.stopped === 0).length).toBe(2)
+    })
+
+    it('starts no sound on a context the browser suspended by itself', () => {
+      const fake = fakeContext()
+      const sounds = createSlotSounds(() => fake.context)
+      sounds.unlock()
+      ;(fake.context as { state: string }).state = 'interrupted'
+      sounds.play('win')
+      sounds.spinning(true)
+      expect(fake.started).toHaveLength(0)
+    })
+
+    it('plays on a suspended context while the resume the press started is pending, and not once it failed', async () => {
+      const fake = fakeContext({ state: 'suspended', resume: () => Promise.reject(new Error('blocked')) })
+      const sounds = createSlotSounds(() => fake.context)
+      sounds.unlock()
+      sounds.play('press')
+      expect(fake.started.length).toBeGreaterThan(0)
+      await settle()
+      const count = fake.started.length
+      sounds.play('press')
+      expect(fake.started).toHaveLength(count)
+    })
+
+    it('does not throw or leave an unhandled rejection when suspend or resume is refused', async () => {
+      const fake = fakeContext({ suspend: () => Promise.reject(new Error('no')), resume: () => Promise.reject(new Error('no')) })
+      const sounds = createSlotSounds(() => fake.context)
+      sounds.unlock()
+      expect(() => {
+        sounds.setHidden(true)
+        sounds.setHidden(false)
+      }).not.toThrow()
+      await settle()
+
+      const throwing = fakeContext()
+      const other = createSlotSounds(() => throwing.context)
+      other.unlock()
+      Object.assign(throwing.context, {
+        suspend: () => {
+          throw new Error('no')
+        },
+        resume: () => {
+          throw new Error('no')
+        },
+      })
+      expect(() => {
+        other.setHidden(true)
+        other.setHidden(false)
+      }).not.toThrow()
+      await settle()
+      // An unhandled rejection would fail the whole run.
+    })
   })
 })

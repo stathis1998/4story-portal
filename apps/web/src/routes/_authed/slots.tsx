@@ -115,6 +115,13 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const playArea = useRef<HTMLDivElement>(null)
   const stakeGroup = useRef<HTMLDivElement>(null)
 
+  // In a hidden tab the show waits on its frames; the sound waits with it, and both go on when the tab is back.
+  useEffect(() => {
+    const listener = () => sounds.setHidden(document.hidden)
+    document.addEventListener('visibilitychange', listener)
+    return () => document.removeEventListener('visibilitychange', listener)
+  }, [sounds])
+
   // Spin ready again once the pause is over: looked at on each frame, so it keeps time with the show.
   useEffect(() => {
     if (!resting) return

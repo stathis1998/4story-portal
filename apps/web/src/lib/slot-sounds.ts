@@ -6,7 +6,11 @@ export type SlotSound =
   | 'count' | 'freeStart' | 'freeEnd' | 'jackpot' | 'refused'
 
 export type SlotSounds = {
-  /** Does nothing until unlock() has run, while muted, or without a sound generator. `step` raises the pitch (the nth scatter, the nth line). */
+  /**
+   * Does nothing until unlock() has run, while muted, without a sound generator, or while the generator is not
+   * running (a hidden tab, a phone call), so nothing piles up to sound all at once later. `step` raises the pitch
+   * (the nth scatter, the nth line).
+   */
   play(sound: SlotSound, step?: number): void
   /** The turning reels: a loop that runs while on. */
   spinning(on: boolean): void
@@ -15,8 +19,10 @@ export type SlotSounds = {
   /** Call from the player's first press. Safe to call on every press. */
   unlock(): void
   readonly muted: boolean
-  /** Remembered in the browser under 'slots.sound' ('off' or 'on'). Muting stops both loops at once. */
+  /** Remembered in the browser under 'slots.sound' ('off' or 'on'). Muting stops both loops, and silences what is playing, at once. */
   setMuted(muted: boolean): void
+  /** The page went out of sight, or came back: the sound pauses and goes on with the show, which waits too. */
+  setHidden(hidden: boolean): void
   /** Stops both loops and anything scheduled. For unmount and for leaving the page. */
   stop(): void
 }
@@ -178,6 +184,9 @@ export function createSlotSounds(make: () => AudioContext | null = browserContex
   let rising: Loop | null = null
   let wantTurning = false
   let wantRising = false
+  // Set while a resume that unlock() started is pending: what the press asks for meanwhile plays once it is done.
+  let unlocking = 0
+  let resumes = 0
 
   function track(source: AudioScheduledSourceNode, ...others: AudioNode[]) {
     playing.add(source)
@@ -305,9 +314,29 @@ export function createSlotSounds(make: () => AudioContext | null = browserContex
     rising = null
   }
 
-  /** The context, once the player has pressed. Null while locked, muted-out, or without a generator. */
+  /** The context, once the player has pressed and while it runs. Null while locked, paused, or without a generator. */
   function ready(): { ctx: AudioContext; out: AudioNode } | null {
-    return context && master ? { ctx: context, out: master } : null
+    if (!context || !master) return null
+    return context.state === 'running' || unlocking !== 0 ? { ctx: context, out: master } : null
+  }
+
+  function refreshLoopsQuietly() {
+    try {
+      refreshLoops()
+    } catch {
+      // A broken generator stays silent.
+    }
+  }
+
+  /** The master volume: none while muted. */
+  function setVolume() {
+    if (!context || !master) return
+    try {
+      master.gain.cancelScheduledValues(context.currentTime)
+      master.gain.setValueAtTime(muted ? 0 : MASTER_GAIN, context.currentTime)
+    } catch {
+      // Silent.
+    }
   }
 
   function refreshLoops() {
@@ -328,7 +357,7 @@ export function createSlotSounds(make: () => AudioContext | null = browserContex
           const ctx = make()
           if (ctx) {
             const out = ctx.createGain()
-            out.gain.setValueAtTime(MASTER_GAIN, ctx.currentTime)
+            out.gain.setValueAtTime(muted ? 0 : MASTER_GAIN, ctx.currentTime)
             out.connect(ctx.destination)
             noiseBuffer = makeNoiseBuffer(ctx)
             master = out
@@ -340,18 +369,19 @@ export function createSlotSounds(make: () => AudioContext | null = browserContex
         }
       }
       if (context && context.state === 'suspended') {
+        const mine = ++resumes
+        const settled = () => {
+          if (unlocking === mine) unlocking = 0
+        }
         try {
+          unlocking = mine
           // A browser may refuse; the next press tries again.
-          context.resume().catch(() => undefined)
+          context.resume().then(settled, settled)
         } catch {
-          // Nothing to do.
+          settled()
         }
       }
-      try {
-        refreshLoops()
-      } catch {
-        // A broken generator stays silent.
-      }
+      refreshLoopsQuietly()
     },
     play(sound, step = 0) {
       const r = ready()
@@ -365,33 +395,37 @@ export function createSlotSounds(make: () => AudioContext | null = browserContex
     spinning(on) {
       wantTurning = on
       if (!on) return endTurning()
-      try {
-        refreshLoops()
-      } catch {
-        // Silent.
-      }
+      refreshLoopsQuietly()
     },
     suspense(on) {
       wantRising = on
       if (!on) return endRising()
-      try {
-        refreshLoops()
-      } catch {
-        // Silent.
-      }
+      refreshLoopsQuietly()
     },
     setMuted(value) {
       muted = value
       remember(value)
+      // A cheer already playing is cut at once too.
+      setVolume()
       if (value) {
         endTurning()
         endRising()
-      } else {
-        try {
-          refreshLoops()
-        } catch {
-          // Silent.
+      } else refreshLoopsQuietly()
+    },
+    setHidden(hidden) {
+      const ctx = context
+      if (!ctx) return
+      try {
+        if (hidden) {
+          // Hidden wins over a press's resume still on its way.
+          unlocking = 0
+          ctx.suspend().catch(() => undefined)
+        } else {
+          // A loop the show asked for while the sound was paused starts once it runs again.
+          ctx.resume().then(refreshLoopsQuietly, () => undefined)
         }
+      } catch {
+        // A browser that refuses keeps the sound as it was.
       }
     },
     stop() {
