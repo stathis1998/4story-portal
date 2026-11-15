@@ -19,7 +19,7 @@ export function JackpotBanner({ jackpot, won }: Props) {
     <section
       aria-label="Jackpot"
       data-won={won ? 'true' : undefined}
-      className="mt-2 rounded-xs border border-line bg-surface p-3 data-[won=true]:animate-[jackpot-won_1.2s_ease-in-out_3] motion-reduce:animate-none sm:mt-0 sm:mb-4 sm:p-4"
+      className="mt-2 rounded-xs border border-line bg-surface p-3 motion-safe:data-[won=true]:animate-[jackpot-won_1.2s_ease-in-out_3] sm:mt-0 sm:mb-4 sm:p-4"
     >
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-xs font-bold tracking-wider text-muted uppercase">Jackpot</span>
