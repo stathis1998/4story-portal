@@ -63,7 +63,7 @@ export function roundLine(spin: SlotSpinView, spins: RoundSpin[]): string {
 
 /** A list entry: "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins". */
 export function roundListLine(machine: SlotMachine, spin: SlotSpinView): string {
-  const won = spin.jackpot > 0 ? `the jackpot, ${silverText(spin.payout)}` : spin.payout > 0 ? silverText(spin.payout) : 'nothing';
+  const won = spin.jackpot > 0 ? `the jackpot, ${silverText(spin.jackpot)}` : spin.payout > 0 ? silverText(spin.payout) : 'nothing';
   const free = spin.free.length > 0 ? ` with ${spin.free.length} free spins` : '';
   return `${machine.name}: staked ${silverText(spin.stake)}, won ${won}${free}`;
 }

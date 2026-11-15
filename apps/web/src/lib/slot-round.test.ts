@@ -43,8 +43,8 @@ describe('roundLine', () => {
   const lose = Array.from({ length: 8 }, () => at(2));
   const winFree = [at(1), at(2)];
   it.each([
-    ['jackpot', view({ stops: at(2), jackpot: 5000, payout: 5000, stake: 40 }),
-      'Jackpot. This round made it drop. You won 5 Gold on a stake of 40 Silver.'],
+    ['jackpot', view({ stops: at(2), jackpot: 31420, payout: 0, stake: 40 }),
+      'Jackpot. This round made it drop. You won 31 Gold 420 Silver on a stake of 40 Silver.'],
     ['nothing', view({ stops: at(2) }), 'No win this time. You staked 40 Silver.'],
     ['nothing with free spins', view({ stops: at(2), free: lose }), '8 free spins won you nothing. You staked 40 Silver.'],
     ['paid, one line', view({ payout: 20 }), '1 line won. You won 20 Silver on a stake of 40 Silver.'],
@@ -68,7 +68,7 @@ describe('roundListLine', () => {
   it.each([
     ['nothing', view({}), "Tranus's Shelf: staked 40 Silver, won nothing"],
     ['an amount', view({ payout: 20 }), "Tranus's Shelf: staked 40 Silver, won 20 Silver"],
-    ['the jackpot', view({ payout: 5000, jackpot: 5000 }), "Tranus's Shelf: staked 40 Silver, won the jackpot, 5 Gold"],
+    ['the jackpot', view({ payout: 0, jackpot: 31420 }), "Tranus's Shelf: staked 40 Silver, won the jackpot, 31 Gold 420 Silver"],
     ['free spins', view({ payout: 1200, free: Array.from({ length: 8 }, () => at(1)) }),
       "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins"],
   ])('says a list entry: %s', (_name, v, line) => expect(roundListLine(named, v)).toBe(line));
