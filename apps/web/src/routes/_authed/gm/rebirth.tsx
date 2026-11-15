@@ -28,6 +28,7 @@ function GmRebirthPage() {
   const queryOptions = gmRebirthQueryOptions()
   const { data, isError } = useQuery(queryOptions)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const {
     register,
     handleSubmit,
@@ -49,6 +50,7 @@ function GmRebirthPage() {
 
   async function onSubmit(values: RebirthSettings) {
     setError(null)
+    setSaved(false)
     clearErrors()
     const input = {
       live: values.live,
@@ -66,6 +68,7 @@ function GmRebirthPage() {
     if (invalid) return
     try {
       await save.mutateAsync(input)
+      setSaved(true)
     } catch (err) {
       setError(applyServerError(err, setFieldError))
     }
@@ -76,7 +79,9 @@ function GmRebirthPage() {
       <GmNav />
       <h1 className="text-4xl">Rebirth</h1>
       <p className="mt-2 text-sm text-muted">
-        Players can send a level 90 character back to level 1 for Gold and keep a lasting bonus to all stats. Changes apply to the next rebirth.
+        {
+          "Players can send a level 90 character back to level 1 for Gold and keep a lasting bonus to all stats. A new price applies to the next rebirth. A new percent or limit changes every reborn character's bonus at its next login."
+        }
       </p>
 
       <div className="mt-6 flex flex-col gap-6">
@@ -133,10 +138,15 @@ function GmRebirthPage() {
                 {`Rebirth 2 costs twice the price, rebirth 3 three times. A character at the limit has +${Number.isFinite(top) ? top : 0}% to all stats.`}
               </p>
               <FormMessage message={error} />
-              <div>
+              <div className="flex flex-wrap items-center gap-3">
                 <Button type="submit" disabled={save.isPending}>
                   Save
                 </Button>
+                {saved && (
+                  <p role="status" className="text-sm">
+                    Saved.
+                  </p>
+                )}
               </div>
             </form>
 

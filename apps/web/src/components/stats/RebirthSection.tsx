@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { applyServerError } from '../../lib/form-errors'
 import { beReborn, rebirthQueryOptions } from '../../lib/rebirth'
-import { profileQueryOptions } from '../../lib/stats'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
 
@@ -42,7 +41,12 @@ export function RebirthSection({ characterId }: { characterId: string }) {
     onSuccess: (state) => {
       setAsking(false)
       queryClient.setQueryData(queryOptions.queryKey, state)
-      void queryClient.invalidateQueries({ queryKey: profileQueryOptions(characterId).queryKey })
+      // Everything else about this character changed too (profile, level freeze, gear effect). The answer
+      // is the rebirth state, so that one is not read again.
+      void queryClient.invalidateQueries({
+        queryKey: ['characters', characterId],
+        predicate: (query) => query.queryKey[2] !== queryOptions.queryKey[2],
+      })
     },
     onError: (error) => {
       setAsking(false)
@@ -53,7 +57,22 @@ export function RebirthSection({ characterId }: { characterId: string }) {
 
   if (isPending) return muted('Loading...')
   if (!data) return muted('Rebirth could not be loaded right now.')
-  if (!data.open) return muted('Rebirth is closed right now.')
+  const summary = (
+    <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <span>Rebirths: {data.rebirths}</span>
+      <span>Bonus: {data.bonus > 0 ? `+${data.bonus}% all stats` : 'none yet'}</span>
+    </p>
+  )
+
+  if (!data.open) {
+    if (data.rebirths === 0) return muted('Rebirth is closed right now.')
+    return (
+      <div className="flex flex-col gap-4">
+        {summary}
+        {muted('Rebirth is closed right now.')}
+      </div>
+    )
+  }
 
   const { next } = data
   const lines = next ? checklist(data, next.priceGold) : []
@@ -61,10 +80,7 @@ export function RebirthSection({ characterId }: { characterId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <span>Rebirths: {data.rebirths}</span>
-        <span>Bonus: {data.bonus > 0 ? `+${data.bonus}% all stats` : 'none yet'}</span>
-      </p>
+      {summary}
       {next ? (
         <>
           <ul className="flex flex-col gap-1 text-sm">
@@ -159,7 +175,11 @@ function ConfirmDialog({ priceGold, pending, onConfirm, onCancel }: DialogProps)
           Be reborn as level 1?
         </h2>
         <ul className="flex flex-col gap-2 text-sm">
-          <li>Reset: level, EXP, skills and skill points, quests, the level freeze.</li>
+          <li>
+            {
+              "Reset: level, EXP, skills and skill points, skill hotkeys, quests, running buffs, the level freeze. You return to your country's starting town."
+            }
+          </li>
           <li>Kept: items, the rest of your Gold, pets, mounts, titles, guild and friends.</li>
           <li className="font-bold">{`Cost: ${grouped(priceGold)} Gold.`}</li>
         </ul>

@@ -41,6 +41,13 @@ describe('GM rebirth page', () => {
     expect(await field('Bonus per rebirth (%)')).toHaveValue(2)
     expect(await field('Most rebirths')).toHaveValue(10)
     expect(screen.getByText('Characters reborn: 3')).toBeInTheDocument()
+    expect(
+      screen.getByText("A new price applies to the next rebirth. A new percent or limit changes every reborn character's bonus at its next login.", {
+        exact: false,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Changes apply to the next rebirth/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
     const table = screen.getByRole('table')
     expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
@@ -88,6 +95,7 @@ describe('GM rebirth page', () => {
     await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/rebirth/settings')).toHaveLength(1))
     expect(sentBodies(fetchMock, 'PUT /gm/rebirth/settings')).toEqual([{ live: true, priceGold: 2000, percent: 2, limit: 10 }])
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Rebirth is open' })).toBeChecked())
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved.')
   })
 
   it("puts the server's complaint on the price field", async () => {
@@ -107,6 +115,7 @@ describe('GM rebirth page', () => {
 
     expect(await screen.findByText('Set a price before opening rebirth')).toBeInTheDocument()
     expect(price).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('is in the GM menu', async () => {

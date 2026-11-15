@@ -7,6 +7,7 @@ import { renderRoute } from '../test/render-route'
 const me = { userId: 1, username: 'friend', isGm: false }
 const GET = 'GET /characters/1/rebirth'
 const POST = 'POST /characters/1/rebirth'
+const FREEZE = 'GET /characters/1/level-freeze'
 
 const profile: CharacterProfile = {
   id: 1,
@@ -47,6 +48,7 @@ function setup(state: Partial<RebirthState>, post?: (body: unknown) => Response)
   const current: RebirthState = { ...ready, ...state }
   const fetchMock = mockApi({
     'GET /characters/1/profile': () => json(200, profile),
+    [FREEZE]: () => json(200, { level: current.level, freezeLevel: null, online: false }),
     [GET]: () => json(200, current),
     [POST]: post ?? (() => json(200, { ...current, level: 1, rebirths: 2, bonus: 4, next: null })),
   })
@@ -55,6 +57,9 @@ function setup(state: Partial<RebirthState>, post?: (body: unknown) => Response)
 
 const beReborn = () => screen.findByRole('button', { name: 'Be reborn' })
 const calls = (fetchMock: ReturnType<typeof mockApi>, key: string) => sentBodies(fetchMock, key).length
+/** GET requests to a path; sentBodies only reads requests that carry a body. */
+const gets = (fetchMock: ReturnType<typeof mockApi>, key: string) =>
+  fetchMock.mock.calls.filter(([url, init]) => `${init?.method ?? 'GET'} ${String(url).replace(/^\/api/, '')}` === key).length
 
 describe('rebirth section', () => {
   it('shows the count, the bonus and the next rebirth', async () => {
@@ -82,12 +87,22 @@ describe('rebirth section', () => {
     expect(await beReborn()).toBeDisabled()
   })
 
-  it('says rebirth is closed', async () => {
+  it('says rebirth is closed and still shows what the character has', async () => {
     setup({ open: false })
 
     expect(await screen.findByText('Rebirth is closed right now.')).toBeInTheDocument()
+    expect(screen.getByText('Rebirths: 1')).toBeInTheDocument()
+    expect(screen.getByText('Bonus: +2% all stats')).toBeInTheDocument()
     expect(screen.queryByText('Nothing worn')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Be reborn' })).not.toBeInTheDocument()
+  })
+
+  it('says only that rebirth is closed for a character never reborn', async () => {
+    setup({ open: false, rebirths: 0, bonus: 0 })
+
+    expect(await screen.findByText('Rebirth is closed right now.')).toBeInTheDocument()
+    expect(screen.queryByText(/^Rebirths:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Bonus:/)).not.toBeInTheDocument()
   })
 
   it('says the limit is reached', async () => {
@@ -104,7 +119,11 @@ describe('rebirth section', () => {
 
     await user.click(await beReborn())
     const dialog = await screen.findByRole('dialog', { name: 'Be reborn as level 1?' })
-    expect(within(dialog).getByText('Reset: level, EXP, skills and skill points, quests, the level freeze.')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        "Reset: level, EXP, skills and skill points, skill hotkeys, quests, running buffs, the level freeze. You return to your country's starting town.",
+      ),
+    ).toBeInTheDocument()
     expect(
       within(dialog).getByText('Kept: items, the rest of your Gold, pets, mounts, titles, guild and friends.'),
     ).toBeInTheDocument()
@@ -197,5 +216,21 @@ describe('rebirth section', () => {
     expect(screen.getByText('Bonus: +4% all stats')).toBeInTheDocument()
     expect(screen.getByText('Level 90 needed, this character is 1')).toBeInTheDocument()
     expect(screen.getByText('Next: rebirth 3, +6% all stats')).toBeInTheDocument()
+  })
+
+  it("refreshes the character's other sections after a rebirth", async () => {
+    const { fetchMock, user } = setup({})
+    await screen.findByText('Rebirths: 1')
+    await waitFor(() => expect(gets(fetchMock, FREEZE)).toBe(1))
+    const profiles = gets(fetchMock, 'GET /characters/1/profile')
+
+    await user.click(await beReborn())
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Be reborn' }))
+
+    await waitFor(() => expect(gets(fetchMock, FREEZE)).toBe(2))
+    expect(gets(fetchMock, 'GET /characters/1/profile')).toBe(profiles + 1)
+    // The answer to the POST is the rebirth state; it is not read again.
+    expect(gets(fetchMock, GET)).toBe(1)
+    expect(screen.getByText('Rebirths: 2')).toBeInTheDocument()
   })
 })
