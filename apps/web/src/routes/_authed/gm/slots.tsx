@@ -15,14 +15,12 @@ import {
   slotMachine,
   slotMachineSettingsSchema,
   slotReturn,
-  slotWindow,
 } from '@4story-portal/shared'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { type FormEvent, useId, useState } from 'react'
 import { Button } from '../../../components/Button'
 import { FormMessage } from '../../../components/FormMessage'
-import { GameIcon } from '../../../components/gm/GameIcon'
 import { GmNav } from '../../../components/gm/GmNav'
 import { meQueryOptions } from '../../../lib/session'
 import { gmSlotsQueryOptions, slotsErrorMessage, useSaveSlots } from '../../../lib/slots'
@@ -398,7 +396,7 @@ function MachineSection({ state, rules }: { state: GmSlotMachine; rules: SlotMac
       </form>
       <FormMessage message={error} />
 
-      <p className="text-sm text-muted">The most one spin can win at these stakes is {silverText(slotLargestWin(rules, shown))}.</p>
+      <p className="text-sm text-muted">The most one paid spin can win at these stakes is {silverText(slotLargestWin(rules, shown))}.</p>
       <p className="text-sm text-muted">Pays back {(slotReturn(rules) * 100).toFixed(1)}% by its reels.</p>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -463,7 +461,7 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
           <table aria-labelledby="slots-latest-heading" className="w-full text-left text-sm">
             <thead className={labelText}>
               <tr>
-                {['When', 'Character', 'Machine', 'Symbols', 'Staked', 'Paid'].map((title) => (
+                {['When', 'Character', 'Machine', 'Staked', 'Paid'].map((title) => (
                   <th key={title} scope="col" className="px-3 py-2">
                     {title}
                   </th>
@@ -476,17 +474,11 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
                   <td className="px-3 py-2 whitespace-nowrap text-muted">{formatSpinTime(spin.at)}</td>
                   <td className="px-3 py-2 font-bold">{spin.character}</td>
                   <td className="px-3 py-2">{rules.name}</td>
-                  <td className="px-3 py-2">
-                    {/* The win line is the middle row of each reel. */}
-                    <span className="flex gap-1">
-                      {slotWindow(rules, spin.stops).map((column, reel) => {
-                        const symbol = rules.symbols[column[1]]
-                        return <GameIcon key={reel} spriteId={symbol.sprite} size={32} alt={symbol.name} className="[image-rendering:pixelated]" />
-                      })}
-                    </span>
-                  </td>
                   <td className="px-3 py-2">{silverText(spin.stake)}</td>
-                  <td className="px-3 py-2">{spin.jackpot > 0 ? `Jackpot ${silverText(spin.jackpot)}` : silverText(spin.payout)}</td>
+                  <td className="px-3 py-2">{spin.jackpot > 0 ? `Jackpot ${silverText(spin.jackpot)}` : silverText(spin.payout)}
+                    {/* A round is the paid spin and its free spins: the paid amount is all of it. */}
+                    {spin.free.length > 0 && ` with ${spin.free.length} free spins`}
+                  </td>
                 </tr>
               ))}
             </tbody>
