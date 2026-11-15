@@ -42,8 +42,27 @@ import {
   type WheelItemRow,
   type WheelRepository,
 } from '../src/wheel/wheel.repository.js';
-import { ROULETTE_DEFAULT_LIMITS, SLOT_BIG_WIN, SLOT_MACHINES, type SlotMachineKey, type Wallet } from '@4story-portal/shared';
-import type { SlotBetInput, SlotSettings, SlotSpinRow, SlotsRepository, SlotTotalsRow } from '../src/slots/slots.repository.js';
+import {
+  BRONZE_PER_GOLD,
+  BRONZE_PER_SILVER,
+  ROULETTE_DEFAULT_LIMITS,
+  SLOT_BIG_WIN,
+  SLOT_JACKPOT_DEFAULT_CAP,
+  SLOT_MACHINES,
+  slotJackpotDrops,
+  type SlotMachineKey,
+  type Wallet,
+} from '@4story-portal/shared';
+import type {
+  SlotBetInput,
+  SlotBetOutcome,
+  SlotJackpotTotalsRow,
+  SlotPotRow,
+  SlotSettings,
+  SlotSpinRow,
+  SlotsRepository,
+  SlotTotalsRow,
+} from '../src/slots/slots.repository.js';
 import {
   type BetInput,
   type RouletteRepository,
@@ -784,9 +803,14 @@ export class FakeSlotsRepository implements SlotsRepository {
   settingsRow: SlotSettings = {
     live: false,
     machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
+    jackpot: { live: true, cap: SLOT_JACKPOT_DEFAULT_CAP },
   };
-  /** machine is a string so a test can plant a spin for a machine the code no longer has. */
-  spinRows: (SlotSpinRow & { multiple: number })[] = [];
+  /** machine is a string so a test can plant a spin for a machine the code no longer has. `added` is Bronze. */
+  spinRows: (SlotSpinRow & { multiple: number; added: number })[] = [];
+  /** The jackpot's one row, in Bronze. */
+  potRow: SlotPotRow = { pot: 0, cap: null };
+  /** The jackpot's table is not there: pot() rejects, and so does a bet that adds to it. */
+  potMissing = false;
   /** The database's clock: stamps new spins and decides today. */
   now: () => Date = () => new Date();
   /** Every bet() call, including the ones that changed nothing. */
@@ -809,7 +833,7 @@ export class FakeSlotsRepository implements SlotsRepository {
     if (this.failing) throw new Error('Invalid object name TPortalSlotSpin');
   }
 
-  private plain({ multiple: _multiple, ...row }: SlotSpinRow & { multiple?: number }): SlotSpinRow {
+  private plain({ multiple: _multiple, added: _added, ...row }: SlotSpinRow & { multiple?: number; added?: number }): SlotSpinRow {
     return row;
   }
 
@@ -828,12 +852,44 @@ export class FakeSlotsRepository implements SlotsRepository {
     this.settingsRow.machines[key] = { live: settings.live, stakes: [...settings.stakes] };
   }
 
-  /** Like the real batch, only the floor switch is checked here; the rest is the service's job. */
-  async bet(input: SlotBetInput): Promise<BetOutcome> {
+  async saveJackpot(settings: { live: boolean; cap: number }): Promise<void> {
+    this.check();
+    this.settingsRow.jackpot = { ...settings };
+  }
+
+  async pot(): Promise<SlotPotRow> {
+    this.check();
+    if (this.potMissing) throw new Error('Invalid object name TPortalSlotJackpot');
+    return { ...this.potRow };
+  }
+
+  /**
+   * Like the real batch, only the floor switch is checked here; the rest is the service's job. The pot step's
+   * arithmetic is the SQL's, and the pot changes only when the wallet step took the stake.
+   */
+  async bet(input: SlotBetInput): Promise<SlotBetOutcome> {
     this.check();
     this.betCalls.push(input);
-    const moved = this.wallets.move(input, this.settingsRow.live);
+    const added = input.add > 0 ? input.add : 0;
+    let jackpot = 0;
+    let nextPot = this.potRow;
+    if (added > 0) {
+      if (this.potMissing) throw new Error('Invalid object name TPortalSlotJackpot');
+      const cap = this.potRow.cap ?? input.cap * BRONZE_PER_GOLD;
+      const pot = this.potRow.pot + added;
+      if (slotJackpotDrops(this.potRow.pot, added, cap, input.roll)) {
+        jackpot = Math.floor(pot / BRONZE_PER_SILVER);
+        nextPot = { pot: pot % BRONZE_PER_SILVER, cap: null };
+      } else {
+        nextPot = { pot, cap };
+      }
+    }
+    const moved = this.wallets.move(
+      { userId: input.userId, charId: input.charId, stake: input.stake, payout: input.payout + jackpot },
+      this.settingsRow.live,
+    );
     if (moved.code !== BET_OK) return moved;
+    this.potRow = nextPot;
     const id = this.nextId++;
     this.spinRows.push({
       id,
@@ -844,9 +900,11 @@ export class FakeSlotsRepository implements SlotsRepository {
       stops: input.stops,
       stake: input.stake,
       payout: input.payout,
+      jackpot,
       multiple: input.multiple,
+      added,
     });
-    return { code: BET_OK, id, wallet: moved.wallet };
+    return { code: BET_OK, id, wallet: moved.wallet, jackpot };
   }
 
   private newest(rows: typeof this.spinRows, limit: number): SlotSpinRow[] {
@@ -860,7 +918,12 @@ export class FakeSlotsRepository implements SlotsRepository {
 
   async bigWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
-    return this.newest(this.spinRows.filter((row) => row.multiple >= SLOT_BIG_WIN), limit);
+    return this.newest(this.spinRows.filter((row) => row.multiple >= SLOT_BIG_WIN || row.jackpot > 0), limit);
+  }
+
+  async jackpotWins(limit: number): Promise<SlotSpinRow[]> {
+    this.check();
+    return this.newest(this.spinRows.filter((row) => row.jackpot > 0), limit);
   }
 
   async latest(limit: number): Promise<SlotSpinRow[]> {
@@ -874,6 +937,7 @@ export class FakeSlotsRepository implements SlotsRepository {
       spins: rows.length,
       staked: rows.reduce((total, row) => total + row.stake, 0),
       paid: rows.reduce((total, row) => total + row.payout, 0),
+      added: Math.floor(rows.reduce((total, row) => total + row.added, 0) / BRONZE_PER_SILVER),
     });
     const day = this.now().toISOString().slice(0, 10);
     const machines = [...new Set(this.spinRows.map((row) => row.machine))];
@@ -883,5 +947,14 @@ export class FakeSlotsRepository implements SlotsRepository {
         return [machine, { today: sum(rows.filter((row) => row.spunAt.toISOString().slice(0, 10) === day)), allTime: sum(rows) }];
       }),
     );
+  }
+
+  async jackpotTotals(): Promise<SlotJackpotTotalsRow> {
+    this.check();
+    return {
+      added: this.spinRows.reduce((total, row) => total + row.added, 0),
+      paid: this.spinRows.reduce((total, row) => total + row.jackpot, 0),
+      drops: this.spinRows.filter((row) => row.jackpot > 0).length,
+    };
   }
 }

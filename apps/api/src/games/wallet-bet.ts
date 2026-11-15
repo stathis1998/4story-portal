@@ -24,6 +24,7 @@ export type BetTables = { portalSettings: string; currentUsers: string; characte
  * `liveKey` is a constant from code, never user input.
  * `before` is the game's own SQL, run once every check has passed and before the wallet is written. It may set
  * @extra (BIGINT Bronze, 0 until then), which is paid into the wallet with @payout. `record` may use @extra.
+ * `before` must return no result set (assign with SELECT @x = ...), since callers read the batch's first one.
  * Returns one row: { code, id, name, gold, silver, copper, extra }. `extra` is a BIGINT, so a string from the driver.
  * Throws on a negative or NULL @stake or @payout, and on a negative or NULL @extra; a zero stake is allowed.
  */

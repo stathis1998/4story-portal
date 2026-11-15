@@ -113,7 +113,7 @@ describe('/api/slots', () => {
       expect(res.body.state.mine).toEqual([res.body.spin]);
       // The repository was handed whole Silver and the prize's multiple.
       expect(slots.betCalls).toEqual([
-        { userId: playerId, charId: 7, machine: 'shelf', stops: TINCTURES, stake: 50, payout: 2500, multiple: 50 },
+        { userId: playerId, charId: 7, machine: 'shelf', stops: TINCTURES, stake: 50, payout: 2500, multiple: 50, add: 0, cap: 50, roll: 0 },
       ]);
     });
 
@@ -269,7 +269,7 @@ describe('/api/slots', () => {
     it('leaves out of the lists a spin for a machine the code no longer has', async () => {
       roll(...TINCTURES);
       const real = await spin().expect(200);
-      const stray = { userId: playerId, character: 'Mounara', spunAt: now, stake: 50, payout: 2500, multiple: 50 };
+      const stray = { userId: playerId, character: 'Mounara', spunAt: now, stake: 50, payout: 2500, multiple: 50, jackpot: 0, added: 0 };
       slots.spinRows.push(
         { ...stray, id: 100, machine: 'vault', stops: [1, 2, 3] },
         { ...stray, id: 101, machine: 'shelf', stops: [1, 2, 32] },
@@ -289,14 +289,14 @@ describe('/api/slots', () => {
   describe('the fake repository', () => {
     it('refuses a negative stake or payout like the real batch', async () => {
       slots.settingsRow.live = true;
-      const input = { userId: playerId, charId: 7, machine: 'shelf' as const, stops: [1, 0, 0] as [number, number, number], stake: 10, payout: 0, multiple: 0 };
+      const input = { userId: playerId, charId: 7, machine: 'shelf' as const, stops: [1, 0, 0] as [number, number, number], stake: 10, payout: 0, multiple: 0, add: 0, cap: 50, roll: 0 };
       await expect(slots.bet({ ...input, stake: -1 })).rejects.toThrow('cannot be negative');
       await expect(slots.bet({ ...input, payout: -1 })).rejects.toThrow('cannot be negative');
       untouched();
     });
 
     it('refuses a closed floor', async () => {
-      const input = { userId: playerId, charId: 7, machine: 'shelf' as const, stops: [1, 0, 0] as [number, number, number], stake: 10, payout: 0, multiple: 0 };
+      const input = { userId: playerId, charId: 7, machine: 'shelf' as const, stops: [1, 0, 0] as [number, number, number], stake: 10, payout: 0, multiple: 0, add: 0, cap: 50, roll: 0 };
       expect(await slots.bet(input)).toEqual({ code: 1, name: null });
       untouched();
     });

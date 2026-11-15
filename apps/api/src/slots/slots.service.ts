@@ -13,6 +13,7 @@ import {
   type GmSlotMachine,
   type GmSlots,
   type SessionUser,
+  SLOT_JACKPOT_DEFAULT_CAP,
   SLOT_MACHINES,
   SLOT_REEL_STOPS,
   slotMachine,
@@ -44,8 +45,9 @@ const CLOSED_FLOOR = 'The slots are not open yet';
 const CLOSED: SlotSettings = {
   live: false,
   machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
+  jackpot: { live: true, cap: SLOT_JACKPOT_DEFAULT_CAP },
 };
-const NO_TOTALS: SlotTotalsRow = { spins: 0, staked: 0, paid: 0 };
+const NO_TOTALS: SlotTotalsRow = { spins: 0, staked: 0, paid: 0, added: 0 };
 
 @Injectable()
 export class SlotsService {
@@ -93,7 +95,18 @@ export class SlotsService {
     const stake = request.stake;
     const payout = stake * multiple;
     const outcome = await this.write(() =>
-      this.repo.bet({ userId: user.userId, charId: request.characterId, machine: machine.key, stops, stake, payout, multiple }),
+      this.repo.bet({
+        userId: user.userId,
+        charId: request.characterId,
+        machine: machine.key,
+        stops,
+        stake,
+        payout,
+        multiple,
+        add: 0,
+        cap: settings.jackpot.cap,
+        roll: 0,
+      }),
     );
 
     switch (outcome.code) {
