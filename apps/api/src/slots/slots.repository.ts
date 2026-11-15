@@ -59,6 +59,8 @@ export type SlotSpinRow = {
   stops: SlotStops;
   free: SlotStops[];
   meterFree: SlotStops[];
+  /** The meter's points before the round, which a replay needs to know whether the meter fired. */
+  meterBefore: number;
   stake: number;
   payout: number;
   jackpot: number;
@@ -384,9 +386,11 @@ export class SqlSlotsRepository implements SlotsRepository {
     const { tables } = this.db;
     const record = `INSERT INTO ${tables.slotSpins}
       (dwUserID, dwCharID, szCharName, szMachine, bStop1, bStop2, bStop3, bStop4, bStop5, bRules, szFree, szMeterFree,
-       llStake, llPayout, llWallet, wMultiple, llAdded, llJackpot, llAddMini, llAddMajor, llAddGiga, llWonMini, llWonMajor, llWonGiga)
+       llStake, llPayout, llWallet, wMultiple, llAdded, llJackpot, llAddMini, llAddMajor, llAddGiga, llWonMini, llWonMajor, llWonGiga,
+       bMeterBefore)
       VALUES (@userId, @charId, @name, @machine, @stop1, @stop2, @stop3, @stop4, @stop5, @rules, @free, @meterFree,
-       @stake, @payout, @wallet, @multiple, @addMini + @addMajor + @addGiga, @extra, @addMini, @addMajor, @addGiga, @wonMini, @wonMajor, @wonGiga)`;
+       @stake, @payout, @wallet, @multiple, @addMini + @addMajor + @addGiga, @extra, @addMini, @addMajor, @addGiga, @wonMini, @wonMajor, @wonGiga,
+       @meterBefore)`;
     const [stop1, stop2, stop3, stop4, stop5] = input.stops;
     // A pot whose add is 0 is not touched at all, so it neither waits for its lock nor sets its cap.
     const feeding = POTS_BY_ROW.filter((pot) => input.adds[pot] > 0);
@@ -479,7 +483,7 @@ SELECT @wonMini AS mini, @wonMajor AS major, @wonGiga AS giga;`;
       .query<RawSpin>(
         `SELECT TOP (@top) dwID AS id, dwUserID AS userId, szCharName AS character, dSpun AS spunAt, szMachine AS machine,
                 bStop1 AS stop1, bStop2 AS stop2, bStop3 AS stop3, bStop4 AS stop4, bStop5 AS stop5,
-                szFree AS free, szMeterFree AS meterFree,
+                szFree AS free, szMeterFree AS meterFree, bMeterBefore AS meterBefore,
                 CAST(llStake / ${SILVER} AS BIGINT) AS stake, CAST(llPayout / ${SILVER} AS BIGINT) AS payout,
                 CAST(llJackpot / ${SILVER} AS BIGINT) AS jackpot, CAST(llWonMini / ${SILVER} AS BIGINT) AS wonMini,
                 CAST(llWonMajor / ${SILVER} AS BIGINT) AS wonMajor, CAST(llWonGiga / ${SILVER} AS BIGINT) AS wonGiga

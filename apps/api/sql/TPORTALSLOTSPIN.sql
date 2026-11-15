@@ -5,7 +5,8 @@
 --   llAddMini, llAddMajor, llAddGiga and llWonMini, llWonMajor, llWonGiga are each pot's share of those two; llAdded
 --   and llJackpot stay their sums, so a reader from before the three pots still adds up the same money.
 --   A round is one row: the paid spin's five stops, its free spins in szFree, the meter's free spins in szMeterFree
---   (both slotFreeText, up to 50 spins), and the whole round's payout.
+--   (both slotFreeText, up to 50 spins), the meter's points before the round in bMeterBefore (a replay needs them to
+--   know whether the meter fired), and the whole round's payout.
 --   bRules 1 is a three-reel row, 2 a five-reel row without cascades, 3 a cascade round. 1 and 2 stay in the totals
 --   and out of every list.
 --   The character's name is copied here, so a rename or delete later does not change history.
@@ -38,7 +39,8 @@ BEGIN
 		llAddGiga		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llAddGiga DEFAULT 0,
 		llWonMini		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonMini DEFAULT 0,
 		llWonMajor		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonMajor DEFAULT 0,
-		llWonGiga		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonGiga DEFAULT 0
+		llWonGiga		BIGINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonGiga DEFAULT 0,
+		bMeterBefore	TINYINT			NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_bMeterBefore DEFAULT 0	-- the meter's points before the round
 	);
 	CREATE INDEX IX_TPORTALSLOTSPIN_USER ON dbo.TPORTALSLOTSPIN (dwUserID, dwID);
 END
@@ -60,7 +62,7 @@ IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'szFree') IS NULL
 	ALTER TABLE dbo.TPORTALSLOTSPIN ADD szFree VARCHAR(800) NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_szFree DEFAULT '';
 
 -- A table made before the cascades: the free text widened to hold 50 spins, the meter's free spins, each pot's
--- share, and the index for the daily count. An older row keeps its rules number and reads 0 for each pot.
+-- share, the meter before the round, and the index for the daily count. An older row keeps its rules number and reads 0 for each pot.
 IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'szFree') < 800
 	ALTER TABLE dbo.TPORTALSLOTSPIN ALTER COLUMN szFree VARCHAR(800) NOT NULL;
 IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'szMeterFree') IS NULL
@@ -77,5 +79,7 @@ IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'llWonMajor') IS NULL
 	ALTER TABLE dbo.TPORTALSLOTSPIN ADD llWonMajor BIGINT NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonMajor DEFAULT 0;
 IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'llWonGiga') IS NULL
 	ALTER TABLE dbo.TPORTALSLOTSPIN ADD llWonGiga BIGINT NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_llWonGiga DEFAULT 0;
+IF COL_LENGTH('dbo.TPORTALSLOTSPIN', 'bMeterBefore') IS NULL
+	ALTER TABLE dbo.TPORTALSLOTSPIN ADD bMeterBefore TINYINT NOT NULL CONSTRAINT DF_TPORTALSLOTSPIN_bMeterBefore DEFAULT 0;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.TPORTALSLOTSPIN') AND name = 'IX_TPORTALSLOTSPIN_USER_TIME')
 	CREATE INDEX IX_TPORTALSLOTSPIN_USER_TIME ON dbo.TPORTALSLOTSPIN (dwUserID, dSpun);

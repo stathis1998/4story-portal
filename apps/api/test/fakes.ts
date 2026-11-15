@@ -1016,6 +1016,7 @@ export class FakeSlotsRepository implements SlotsRepository {
       stops: input.stops,
       free: input.free,
       meterFree: input.meterFree,
+      meterBefore: input.meterBefore,
       stake: input.stake,
       payout: input.payout,
       jackpot: won.mini + won.major + won.giga,

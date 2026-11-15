@@ -1,6 +1,16 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { SLOT_MACHINES, slotFreeText, slotJackpotAdds, type SlotPot, type SlotStops, type Wallet } from '@4story-portal/shared';
+import {
+  SLOT_LINE_COUNT,
+  SLOT_MACHINES,
+  slotFreeText,
+  slotJackpotAdds,
+  slotPlayRound,
+  slotReplayRound,
+  type SlotPot,
+  type SlotStops,
+  type Wallet,
+} from '@4story-portal/shared';
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/config.js';
@@ -52,10 +62,11 @@ type SpinTableRow = {
   llWonMini: string;
   llWonMajor: string;
   llWonGiga: string;
+  bMeterBefore: number;
 };
 
 /** The columns this change adds to the spin table, each with its DF_ default. */
-const NEW_COLUMNS = ['szMeterFree', 'llAddMini', 'llAddMajor', 'llAddGiga', 'llWonMini', 'llWonMajor', 'llWonGiga'];
+const NEW_COLUMNS = ['szMeterFree', 'llAddMini', 'llAddMajor', 'llAddGiga', 'llWonMini', 'llWonMajor', 'llWonGiga', 'bMeterBefore'];
 /** The columns the five-reel change added. */
 const FIVE_REEL_COLUMNS = ['bStop4', 'bStop5', 'bRules', 'szFree'];
 
@@ -416,6 +427,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         llWonMini: 0,
         llWonMajor: 0,
         llWonGiga: 0,
+        bMeterBefore: 0,
       });
 
       expect(await repo.spinsOf(character.userId, 10)).toEqual([
@@ -428,6 +440,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
           stops: [0, 17, 31, 4, 9],
           free: [],
           meterFree: [],
+          meterBefore: 0,
           stake: 40,
           payout: 2000,
           jackpot: 0,
@@ -460,11 +473,57 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       const id = await placed(repo, bet(character, { stops: [31, 30, 29, 28, 27], free, meterFree, meterBefore: 29, meterAfter: 1 }));
 
       const [row] = await spinRows(tx);
-      expect({ free: row.szFree, meterFree: row.szMeterFree }).toEqual({ free: slotFreeText(free), meterFree: slotFreeText(meterFree) });
-      const listed = { id, stops: [31, 30, 29, 28, 27], free, meterFree };
+      expect({ free: row.szFree, meterFree: row.szMeterFree, meterBefore: row.bMeterBefore }).toEqual({
+        free: slotFreeText(free),
+        meterFree: slotFreeText(meterFree),
+        meterBefore: 29,
+      });
+      const listed = { id, stops: [31, 30, 29, 28, 27], free, meterFree, meterBefore: 29 };
       expect((await repo.spinsOf(character.userId, 10))[0]).toMatchObject(listed);
       expect((await repo.latest(10))[0]).toMatchObject(listed);
       expect((await repo.bigWins(10))[0]).toMatchObject(listed);
+    }));
+
+  it("keeps the meter a round started with, so the row replays to the payout it was paid", () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      const shelf = SLOT_MACHINES[0];
+      const before = shelf.meterSize - 1;
+      // A real round from fixed stops that fills the meter: the paid spin shows a scatter and wins no free spins.
+      let seed = 7;
+      const draw = (): SlotStops =>
+        Array.from({ length: 5 }, () => {
+          seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+          return seed % 32;
+        }) as SlotStops;
+      let play = slotPlayRound(shelf, before, draw);
+      for (let tries = 0; play.meterFree.length === 0 && tries < 5000; tries++) play = slotPlayRound(shelf, before, draw);
+      expect(play.meterFree.length).toBeGreaterThanOrEqual(8);
+      const stake = 40;
+      const payout = (play.lineStakes * stake) / SLOT_LINE_COUNT;
+
+      await setMeter(tx, character.userId, 'shelf', stake, before);
+      const id = await placed(
+        repo,
+        bet(character, {
+          stops: play.stops,
+          free: play.free,
+          meterFree: play.meterFree,
+          meterBefore: before,
+          meterAfter: play.meterAfter,
+          stake,
+          payout,
+          multiple: Math.min(32_767, Math.floor(payout / stake)),
+        }),
+      );
+
+      const [row] = await spinRows(tx);
+      expect(row.bMeterBefore).toBe(before);
+      expect(await repo.meter(character.userId, 'shelf', stake)).toBe(play.meterAfter);
+      const [listed] = await repo.spinsOf(character.userId, 10);
+      expect(listed).toMatchObject({ id, meterBefore: before, meterFree: play.meterFree });
+      const replay = slotReplayRound(shelf, listed);
+      expect(replay.meterFree).toEqual(play.meterFree);
+      expect(replay.lineStakes).toBe((listed.payout * SLOT_LINE_COUNT) / listed.stake);
     }));
 
   it('moves the wallet by exactly the round: payout less stake', () =>
@@ -600,10 +659,11 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       for (let run = 0; run < 2; run++) await runScript(tx, SPIN_SQL);
       expect(await freeLength(tx)).toBe(800);
       const [row] = await spinRows(tx);
-      expect({ rules: row.bRules, free: row.szFree, meterFree: row.szMeterFree, ...moneyOf(row) }).toEqual({
+      expect({ rules: row.bRules, free: row.szFree, meterFree: row.szMeterFree, meterBefore: row.bMeterBefore, ...moneyOf(row) }).toEqual({
         rules: 2,
         free: '1,2,3,4,5',
         meterFree: '',
+        meterBefore: 0,
         llAdded: 77,
         llJackpot: 0,
         llAddMini: 0,
@@ -795,6 +855,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
           stops: [1, 2, 3, 4, 5],
           free: [],
           meterFree: [],
+          meterBefore: 0,
           stake: 40,
           payout: 80,
           jackpot: 0,
@@ -1257,6 +1318,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
           stops: [3, 17, 30, 8, 21],
           free: [],
           meterFree: [],
+          meterBefore: 0,
           stake: 40,
           payout: 0,
           jackpot: 50_002,
