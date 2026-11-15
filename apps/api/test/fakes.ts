@@ -54,15 +54,16 @@ import {
   type SlotMachineKey,
   type Wallet,
 } from '@4story-portal/shared';
-import type {
-  SlotBetInput,
-  SlotBetOutcome,
-  SlotJackpotTotalsRow,
-  SlotPotRow,
-  SlotSettings,
-  SlotSpinRow,
-  SlotsRepository,
-  SlotTotalsRow,
+import {
+  type SlotBetInput,
+  type SlotBetOutcome,
+  type SlotJackpotTotalsRow,
+  type SlotPotRow,
+  type SlotSettings,
+  type SlotSpinRow,
+  type SlotsRepository,
+  type SlotTotalsRow,
+  SLOT_RULES,
 } from '../src/slots/slots.repository.js';
 import {
   type BetInput,
@@ -806,8 +807,8 @@ export class FakeSlotsRepository implements SlotsRepository {
     machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
     jackpot: { live: true, cap: SLOT_JACKPOT_DEFAULT_CAP },
   };
-  /** machine is a string so a test can plant a spin for a machine the code no longer has. `added` is Bronze. */
-  spinRows: (SlotSpinRow & { multiple: number; added: number })[] = [];
+  /** machine is a string so a test can plant a spin for a machine the code no longer has. `added` is Bronze. `rules` 1 is an old three-reel row. */
+  spinRows: (SlotSpinRow & { multiple: number; added: number; rules?: number })[] = [];
   /** The jackpot's one row, in Bronze. */
   potRow: SlotPotRow = { pot: 0, cap: null };
   /** The jackpot's table is not there: pot() rejects, and so does a bet that adds to it. */
@@ -818,6 +819,11 @@ export class FakeSlotsRepository implements SlotsRepository {
   readonly betCalls: SlotBetInput[] = [];
   /** The slots' own tables reject. The wallets' list is another table and has its own flag (`wallets.failing`). */
   failing = false;
+  /**
+   * The spin table is one from before the five reels: the bet and the lists name columns it lacks and reject,
+   * while the settings, the pot and the totals still read.
+   */
+  columnsMissing = false;
   private nextId = 1;
 
   constructor(readonly wallets: FakeWalletsRepository = new FakeWalletsRepository()) {}
@@ -834,8 +840,17 @@ export class FakeSlotsRepository implements SlotsRepository {
     if (this.failing) throw new Error('Invalid object name TPortalSlotSpin');
   }
 
-  private plain({ multiple: _multiple, added: _added, ...row }: SlotSpinRow & { multiple?: number; added?: number }): SlotSpinRow {
+  private checkColumns(): void {
+    if (this.columnsMissing) throw new Error("Invalid column name 'bStop4'.");
+  }
+
+  private plain({ multiple: _multiple, added: _added, rules: _rules, ...row }: SlotSpinRow & { multiple?: number; added?: number; rules?: number }): SlotSpinRow {
     return row;
+  }
+
+  /** The lists leave out the old three-reel rows; the totals keep them. */
+  private current(): typeof this.spinRows {
+    return this.spinRows.filter((row) => (row.rules ?? SLOT_RULES) === SLOT_RULES);
   }
 
   async settings(): Promise<SlotSettings> {
@@ -871,6 +886,7 @@ export class FakeSlotsRepository implements SlotsRepository {
   async bet(input: SlotBetInput): Promise<SlotBetOutcome> {
     this.check();
     this.betCalls.push(input);
+    this.checkColumns();
     const added = input.add > 0 ? input.add : 0;
     let jackpot = 0;
     let nextPot = this.potRow;
@@ -904,11 +920,13 @@ export class FakeSlotsRepository implements SlotsRepository {
       spunAt: this.now(),
       machine: input.machine,
       stops: input.stops,
+      free: input.free,
       stake: input.stake,
       payout: input.payout,
       jackpot,
       multiple: input.multiple,
       added,
+      rules: SLOT_RULES,
     });
     return { code: BET_OK, id, wallet: moved.wallet, jackpot };
   }
@@ -919,22 +937,26 @@ export class FakeSlotsRepository implements SlotsRepository {
 
   async spinsOf(userId: number, limit: number): Promise<SlotSpinRow[]> {
     this.check();
-    return this.newest(this.spinRows.filter((row) => row.userId === userId), limit);
+    this.checkColumns();
+    return this.newest(this.current().filter((row) => row.userId === userId), limit);
   }
 
   async bigWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
-    return this.newest(this.spinRows.filter((row) => row.multiple >= SLOT_BIG_WIN || row.jackpot > 0), limit);
+    this.checkColumns();
+    return this.newest(this.current().filter((row) => row.multiple >= SLOT_BIG_WIN || row.jackpot > 0), limit);
   }
 
   async jackpotWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
-    return this.newest(this.spinRows.filter((row) => row.jackpot > 0), limit);
+    this.checkColumns();
+    return this.newest(this.current().filter((row) => row.jackpot > 0), limit);
   }
 
   async latest(limit: number): Promise<SlotSpinRow[]> {
     this.check();
-    return this.newest(this.spinRows, limit);
+    this.checkColumns();
+    return this.newest(this.current(), limit);
   }
 
   async totals(): Promise<Record<string, { today: SlotTotalsRow; allTime: SlotTotalsRow }>> {

@@ -94,6 +94,18 @@
   }
 }
 
+/* A coin falling through a big slots win, turning as it falls. */
+@keyframes slot-coin {
+  from {
+    top: -12%;
+    transform: rotateY(0deg);
+  }
+  to {
+    top: 110%;
+    transform: rotateY(720deg);
+  }
+}
+
 @layer base {
   html {
     color-scheme: dark;

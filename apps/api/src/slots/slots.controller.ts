@@ -34,7 +34,7 @@ export class SlotsController {
   @Post('slots/spin')
   @HttpCode(200)
   @UseGuards(AccountThrottlerGuard)
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: 45, ttl: 60_000 } })
   spin(@Body(new ZodValidationPipe(slotSpinRequestSchema)) body: SlotSpinRequest, @CurrentUser() user: SessionUser): Promise<SlotSpinResult> {
     return this.slots.spin(user, body);
   }
