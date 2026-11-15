@@ -1,5 +1,7 @@
 # Slots jackpot: lost rounds build one pot that must be won
 
+Changed on 2026-11-15 by 2026-11-15-slots-cascades-design.md.
+
 What counts as a lost round, and the share it adds, changed on 2026-11-15: see 2026-11-15-slots-modern-design.md.
 
 Date: 2026-11-15. Adds to `2026-11-14-slots-design.md`, which listed a growing jackpot under "Not in

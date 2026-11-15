@@ -1,5 +1,7 @@
 # Modern slots: five reels, 20 win lines, wilds, free spins and sound
 
+Changed on 2026-11-15 by 2026-11-15-slots-cascades-design.md.
+
 Date: 2026-11-15. Replaces the machines of `2026-11-14-slots-design.md` and changes what the jackpot
 of `2026-11-15-slots-jackpot-design.md` counts as a lost round. Everything those two documents say
 that is not changed here still holds.
