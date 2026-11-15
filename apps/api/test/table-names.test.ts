@@ -49,4 +49,5 @@ it('builds bracketed three-part table names from the configured databases', () =
     rouletteSpins: '[TGAME_GSP_TEST].dbo.TPORTALROULETTESPIN',
     slotSpins: '[TGAME_GSP_TEST].dbo.TPORTALSLOTSPIN',
     slotJackpot: '[TGAME_GSP_TEST].dbo.TPORTALSLOTJACKPOT',
+    slotMeters: '[TGAME_GSP_TEST].dbo.TPORTALSLOTMETER',
   }));

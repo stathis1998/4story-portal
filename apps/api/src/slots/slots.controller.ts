@@ -3,12 +3,13 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   type GmSlots,
   type SessionUser,
+  slotDailySchema,
   slotFloorSchema,
-  type SlotJackpotSettingsInput,
-  slotJackpotSettingsSchema,
   type SlotMachineKey,
   type SlotMachineSettingsInput,
   slotMachineSettingsSchema,
+  type SlotPotsSettingsInput,
+  slotPotsSettingsSchema,
   type SlotSpinRequest,
   slotSpinRequestSchema,
   type SlotSpinResult,
@@ -69,14 +70,25 @@ export class SlotsController {
     return this.slots.saveMachine(key as SlotMachineKey, body, { username: user.username, ip: req.ip ?? '' });
   }
 
-  @Put('gm/slots/jackpot')
+  @Put('gm/slots/jackpots')
   @UseGuards(GmGuard, ThrottlerGuard)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  saveJackpot(
-    @Body(new ZodValidationPipe(slotJackpotSettingsSchema)) body: SlotJackpotSettingsInput,
+  savePots(
+    @Body(new ZodValidationPipe(slotPotsSettingsSchema)) body: SlotPotsSettingsInput,
     @CurrentUser() user: SessionUser,
     @Req() req: Request,
   ): Promise<GmSlots> {
-    return this.slots.saveJackpot(body, { username: user.username, ip: req.ip ?? '' });
+    return this.slots.savePots(body, { username: user.username, ip: req.ip ?? '' });
+  }
+
+  @Put('gm/slots/daily')
+  @UseGuards(GmGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  saveDaily(
+    @Body(new ZodValidationPipe(slotDailySchema)) body: { rounds: number },
+    @CurrentUser() user: SessionUser,
+    @Req() req: Request,
+  ): Promise<GmSlots> {
+    return this.slots.saveDaily(body.rounds, { username: user.username, ip: req.ip ?? '' });
   }
 }

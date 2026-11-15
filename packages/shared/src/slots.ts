@@ -188,6 +188,8 @@ export type SlotSpinView = {
   free: SlotStops[];
   /** Each meter free spin's stops in the order played; empty when the meter did not fill. */
   meterFree: SlotStops[];
+  /** The meter's points before the round, which a replay needs to know whether the meter filled. */
+  meterBefore: number;
   /** Whole Silver. */
   stake: number;
   /** The whole round, whole Silver. */
