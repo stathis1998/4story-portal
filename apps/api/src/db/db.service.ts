@@ -56,6 +56,10 @@ export function tableNames(config: AppConfig) {
     quests: `${game}.TQUESTTABLE`,
     questTerms: `${game}.TQUESTTERMTABLE`,
     skillMaintains: `${game}.TSKILLMAINTAINTABLE`,
+    // The game's twins: saves write these and TLogout copies them over the tables above.
+    tempSkills: `${game}.TTEMPSKILLTABLE`,
+    tempSkillMaintains: `${game}.TTEMPSKILLMAINTAINTABLE`,
+    tempItems: `${game}.TTEMPITEMTABLE`,
     hotkeys: `${game}.THOTKEYTABLE`,
     skillChart: `${game}.TSKILLCHART`,
     startSkills: `${game}.TSTARTSKILL`,

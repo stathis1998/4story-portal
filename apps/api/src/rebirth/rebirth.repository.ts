@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import sql from 'mssql';
 import { DbService } from '../db/db.service.js';
 import { settingIsOn } from '../games/wallet-bet.js';
-import { REBIRTH_KEYS, REBIRTH_OK, type RebirthCode, rebirthSql } from './rebirth-sql.js';
+import { REBIRTH_KEYS, REBIRTH_OK, type RebirthCode, rebirthSql, wornItemIds } from './rebirth-sql.js';
 
 export const ANNOUNCE_WAITING = 0,
   ANNOUNCE_SENT = 1,
@@ -93,8 +93,7 @@ export class SqlRebirthRepository implements RebirthRepository {
         `SELECT c.szNAME AS name, c.bLevel AS level,
                 CAST(CASE WHEN EXISTS (SELECT 1 FROM ${t.currentUsers} u WHERE u.dwUserID = @userId AND u.dwCharID = c.dwCharID)
                           THEN 1 ELSE 0 END AS bit) AS online,
-                (SELECT COUNT(*) FROM ${t.characterItems} i
-                 WHERE i.dwOwnerID = c.dwCharID AND i.bOwnerType = 0 AND i.bStorageType = 0 AND i.dwStorageID = 254) AS wornItems,
+                (SELECT COUNT(*) FROM (${wornItemIds(t, 'c.dwCharID')}) w) AS wornItems,
                 ISNULL(r.bRebirth, 0) AS rebirths, ISNULL(r.bStatBonus, 0) AS bonus,
                 c.dwGold AS gold, c.dwSilver AS silver, c.dwCooper AS copper
          FROM ${t.characters} c

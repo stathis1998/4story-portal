@@ -78,6 +78,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       `UPDATE ${t.characters} SET bLevel = 90, dwGold = @gold, dwSilver = @silver, dwCooper = @copper WHERE dwCharID = @charId;
        UPDATE ${t.allCharacters} SET bLevel = 90 WHERE dwCharID = @charId;
        DELETE FROM ${t.characterItems} WHERE dwOwnerID = @charId AND bOwnerType = 0 AND bStorageType = 0 AND dwStorageID = 254;
+       DELETE FROM ${t.tempItems} WHERE dwOwnerID = @charId AND bOwnerType = 0 AND bStorageType = 0 AND dwStorageID = 254;
        DELETE FROM ${t.rebirths} WHERE dwCharID = @charId;
        DELETE FROM ${t.rebirthLog} WHERE dwCharID = @charId;
        DELETE FROM ${t.currentUsers} WHERE dwUserID = @userId OR dwCharID = @charId;
@@ -118,17 +119,29 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       ids(c),
     );
 
-  /** Puts a copy of some item in the character's equipment bag. */
-  const wear = (tx: sql.Transaction, charId: number) =>
+  /** Puts a copy of some item in the character's equipment bag, in TITEMTABLE or in its twin TTEMPITEMTABLE. */
+  const wear = (tx: sql.Transaction, charId: number, table = t.characterItems) =>
     exec(
       tx,
-      `SELECT TOP 1 * INTO #worn FROM ${t.characterItems} ORDER BY dlID;
-       UPDATE #worn SET dlID = (SELECT MAX(dlID) + 1 FROM ${t.characterItems}), bStorageType = 0, dwStorageID = 254,
+      `SELECT TOP 1 * INTO #worn FROM ${table} ORDER BY dlID;
+       UPDATE #worn SET dlID = (SELECT MAX(dlID) + 1 FROM ${table}), bStorageType = 0, dwStorageID = 254,
                         bOwnerType = 0, dwOwnerID = @charId, bItemID = 0;
-       INSERT INTO ${t.characterItems} SELECT * FROM #worn;
+       INSERT INTO ${table} SELECT * FROM #worn;
        DROP TABLE #worn;`,
       { charId },
     );
+
+  const tempSkillRows = (tx: sql.Transaction, table: string, charId: number) =>
+    exec(tx, `SELECT dwCharID, wSkillID, bLevel, dwRemainTick FROM ${table} WHERE dwCharID = @charId ORDER BY wSkillID`, { charId });
+
+  const wornIn = async (tx: sql.Transaction, table: string, charId: number) =>
+    (
+      await exec<{ n: number }>(
+        tx,
+        `SELECT COUNT(*) AS n FROM ${table} WHERE dwOwnerID = @charId AND bOwnerType = 0 AND bStorageType = 0 AND dwStorageID = 254`,
+        { charId },
+      )
+    )[0].n;
 
   const setSkill = (tx: sql.Transaction, charId: number, wSkillID: number, bLevel: number) =>
     exec(
@@ -168,8 +181,9 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
     character: await exec(tx, `SELECT * FROM ${t.characters} WHERE dwCharID = @charId`, ids(c)),
     allCharacter: await exec(tx, `SELECT bLevel, dwEXP FROM ${t.allCharacters} WHERE dwCharID = @charId`, ids(c)),
     skills: await exec(tx, `SELECT wSkillID, bLevel, dwRemainTick FROM ${t.skills} WHERE dwCharID = @charId ORDER BY wSkillID`, ids(c)),
+    tempSkills: await tempSkillRows(tx, t.tempSkills, c.charId),
     hotkeys: await exec(tx, `SELECT * FROM ${t.hotkeys} WHERE dwCharID = @charId ORDER BY bInvenID`, ids(c)),
-    counts: await countRows(tx, [t.skillMaintains, t.quests, t.questTerms, t.levelFreezes], c.charId),
+    counts: await countRows(tx, [t.skillMaintains, t.tempSkillMaintains, t.quests, t.questTerms, t.levelFreezes], c.charId),
     rebirths: await rebirthRows(tx, c.charId),
     log: await logRows(tx, c.charId),
   });
@@ -272,6 +286,53 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       expect(back).toEqual({ dwRemainTick: 0 });
       expect(await skillLevel(tx, character.charId, equip.wSkillID)).toEqual([3]);
       expect(await skillLevel(tx, character.charId, NO_CHART_SKILL)).toEqual([4]);
+    }));
+
+  // TLogout copies TTEMPSKILLTABLE over TSKILLTABLE at every logout, so the twin must hold the new life's skills.
+  it('leaves the twin skill table equal to the skill table', () =>
+    withReady(async (ctx) => {
+      const { tx, character } = ctx;
+      const [raised] = (await startSkillsOf(tx, character.classId)).filter((s) => s.bKind !== 0);
+      const [extra] = await exec<{ wSkillID: number }>(
+        tx,
+        `SELECT TOP 1 c.wID AS wSkillID FROM ${t.skillChart} c
+         WHERE c.bKind <> 0 AND NOT EXISTS (SELECT 1 FROM ${t.startSkills} st WHERE st.bClassID = @classId AND st.wSkillID = c.wID)
+         ORDER BY c.wID`,
+        { classId: character.classId },
+      );
+      await exec(
+        tx,
+        `DELETE FROM ${t.tempSkills} WHERE dwCharID = @charId;
+         INSERT INTO ${t.tempSkills} (dwCharID, wSkillID, bLevel, dwRemainTick)
+         SELECT dwCharID, wSkillID, bLevel, dwRemainTick FROM ${t.skills} WHERE dwCharID = @charId;
+         DELETE FROM ${t.tempSkills} WHERE dwCharID = @charId AND wSkillID IN (@raised, @extra);
+         INSERT INTO ${t.tempSkills} (dwCharID, wSkillID, bLevel, dwRemainTick) VALUES (@charId, @raised, 9, 0), (@charId, @extra, 7, 0);`,
+        { charId: character.charId, raised: raised.wSkillID, extra: extra.wSkillID },
+      );
+      expect(await tempSkillRows(tx, t.tempSkills, character.charId)).not.toEqual(await tempSkillRows(tx, t.skills, character.charId));
+
+      expect(await go(ctx)).toMatchObject({ code: REBIRTH_OK });
+
+      const skills = await tempSkillRows(tx, t.skills, character.charId);
+      expect(skills.length).toBeGreaterThan(0);
+      expect(await tempSkillRows(tx, t.tempSkills, character.charId)).toEqual(skills);
+    }));
+
+  it('deletes the running buffs in the twin buff table too', () =>
+    withReady(async (ctx) => {
+      const { tx, character } = ctx;
+      await exec(
+        tx,
+        `DELETE FROM ${t.tempSkillMaintains} WHERE dwCharID = @charId;
+         INSERT INTO ${t.tempSkillMaintains} (dwCharID, wSkillID, bLevel, dwRemainTick, bAttackType, dwAttackID, bHostType, dwHostID, bAttackCountry, fPosX, fPosY, fPosZ)
+           VALUES (@charId, 300, 1, 60000, 0, @charId, 0, @charId, 0, 0, 0, 0);`,
+        ids(character),
+      );
+      expect(await countRows(tx, [t.tempSkillMaintains], character.charId)).toEqual([1]);
+
+      expect(await go(ctx)).toMatchObject({ code: REBIRTH_OK });
+
+      expect(await countRows(tx, [t.tempSkillMaintains], character.charId)).toEqual([0]);
     }));
 
   it('clears hotkeys of skills no longer learned and keeps item hotkeys', () =>
@@ -398,6 +459,8 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
     ['the character is in the game', REBIRTH_ONLINE, { arrange: ({ tx, character }) => goOnline(tx, character) }],
     ['the character is level 89', REBIRTH_LOW_LEVEL, { arrange: ({ tx, character }) => setLevel(tx, character.charId, 89) }],
     ['something is still worn', REBIRTH_WEARING, { arrange: ({ tx, character }) => wear(tx, character.charId) }],
+    // TLogout leaves the online list before it copies TTEMPITEMTABLE over TITEMTABLE.
+    ['something is worn only in the twin item table', REBIRTH_WEARING, { arrange: ({ tx, character }) => wear(tx, character.charId, t.tempItems) }],
     [
       'the limit is reached',
       REBIRTH_AT_LIMIT,
@@ -446,6 +509,28 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       await wear(tx, character.charId);
       await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 3, 6)`, ids(character));
       expect(await repo.find(character.userId, character.charId)).toMatchObject({ online: true, wornItems: 1, rebirths: 3, bonus: 6 });
+    }));
+
+  it('counts an item worn only in the twin item table', () =>
+    withReady(async ({ repo, tx, character }) => {
+      await wear(tx, character.charId, t.tempItems);
+      expect([await wornIn(tx, t.characterItems, character.charId), await wornIn(tx, t.tempItems, character.charId)]).toEqual([0, 1]);
+
+      expect(await repo.find(character.userId, character.charId)).toMatchObject({ wornItems: 1 });
+    }));
+
+  it('counts an item that is in both item tables once', () =>
+    withReady(async ({ repo, tx, character }) => {
+      await wear(tx, character.charId);
+      await exec(
+        tx,
+        `INSERT INTO ${t.tempItems} SELECT * FROM ${t.characterItems}
+         WHERE dwOwnerID = @charId AND bOwnerType = 0 AND bStorageType = 0 AND dwStorageID = 254`,
+        ids(character),
+      );
+      expect([await wornIn(tx, t.characterItems, character.charId), await wornIn(tx, t.tempItems, character.charId)]).toEqual([1, 1]);
+
+      expect(await repo.find(character.userId, character.charId)).toMatchObject({ wornItems: 1 });
     }));
 
   it("finds nothing through another account's ID", () =>

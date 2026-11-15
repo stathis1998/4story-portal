@@ -1,4 +1,4 @@
-// A rebirth rewrites the character in TCHARTABLE and its skill, hotkey and quest rows directly, which is only
+// A rebirth rewrites the character in TCHARTABLE and its skill (and twin skill), hotkey and quest rows directly, which is only
 // safe while the game does not hold the character: TMapSvr keeps an online character in memory and writes it
 // back when it saves. So the batch takes the same lock on the online list as a bet does (games/wallet-bet.ts).
 
@@ -29,6 +29,16 @@ const WORN = 'bOwnerType = 0 AND bStorageType = 0 AND dwStorageID = 254';
 const HOTKEY_SLOTS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 type Tables = ReturnType<typeof tableNames>;
+
+/**
+ * The IDs of the items `owner` (a SQL expression) wears, from TITEMTABLE and its twin TTEMPITEMTABLE, each ID
+ * once. The twin counts too: TLogout leaves the online list a few statements before it copies the twin over
+ * TITEMTABLE, so for a moment the twin is the only place an item still worn shows. The page and the batch
+ * both use this, so "Nothing worn" agrees with the button.
+ */
+export const wornItemIds = (tables: Tables, owner: string): string =>
+  `SELECT dlID FROM ${tables.characterItems} WHERE dwOwnerID = ${owner} AND ${WORN}
+   UNION SELECT dlID FROM ${tables.tempItems} WHERE dwOwnerID = ${owner} AND ${WORN}`;
 
 /**
  * One batch that checks a rebirth and, when every check passes, resets the character to level 1 and takes the
@@ -80,7 +90,7 @@ BEGIN
   IF @name IS NULL SET @code = ${REBIRTH_NOT_YOURS};
   ELSE IF @online > 0 SET @code = ${REBIRTH_ONLINE};
   ELSE IF @level < ${REBIRTH_LEVEL} SET @code = ${REBIRTH_LOW_LEVEL};
-  ELSE IF EXISTS (SELECT 1 FROM ${tables.characterItems} WHERE dwOwnerID = @charId AND ${WORN}) SET @code = ${REBIRTH_WEARING};
+  ELSE IF EXISTS (${wornItemIds(tables, '@charId')}) SET @code = ${REBIRTH_WEARING};
 END
 IF @code = 0
 BEGIN
@@ -131,9 +141,16 @@ BEGIN
   WHERE st.bClassID = @class
     AND NOT EXISTS (SELECT 1 FROM ${tables.skills} s WHERE s.dwCharID = @charId AND s.wSkillID = st.wSkillID);
 
+  -- The twin that saves write: TLogout copies it over TSKILLTABLE at every logout, even one with no save
+  -- before it, so it must hold the new skills too or the old life's come back.
+  DELETE FROM ${tables.tempSkills} WHERE dwCharID = @charId;
+  INSERT INTO ${tables.tempSkills} (dwCharID, wSkillID, bLevel, dwRemainTick)
+  SELECT dwCharID, wSkillID, bLevel, dwRemainTick FROM ${tables.skills} WHERE dwCharID = @charId;
+
   ${clearHotkeys}
 
   DELETE FROM ${tables.skillMaintains} WHERE dwCharID = @charId;
+  DELETE FROM ${tables.tempSkillMaintains} WHERE dwCharID = @charId;
   DELETE FROM ${tables.quests} WHERE dwCharID = @charId;
   DELETE FROM ${tables.questTerms} WHERE dwCharID = @charId;
   DELETE FROM ${tables.levelFreezes} WHERE dwCharID = @charId;
