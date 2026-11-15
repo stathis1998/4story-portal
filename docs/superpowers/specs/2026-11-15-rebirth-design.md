@@ -1,6 +1,8 @@
 # Rebirth: back to level 1 with a lasting stat bonus
 
-Date: 2026-11-15. Not built. Sections marked *(default)* are calls made while writing this, not
+Date: 2026-11-15.
+Status: built on feat/rebirth and feature/rebirth-bonus, not applied to live, not built.
+Sections marked *(default)* are calls made while writing this, not
 decisions by the owner; the three marked *(owner)* are.
 
 ## Why
