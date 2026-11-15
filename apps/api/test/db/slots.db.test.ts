@@ -489,15 +489,19 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       const shelf = SLOT_MACHINES[0];
       const before = shelf.meterSize - 1;
       // A real round from fixed stops that fills the meter: the paid spin shows a scatter and wins no free spins.
+      // A 32-bit LCG in exact integer arithmetic; its high bits make the stops.
       let seed = 7;
       const draw = (): SlotStops =>
         Array.from({ length: 5 }, () => {
-          seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
-          return seed % 32;
+          seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+          return (seed >>> 16) % 32;
         }) as SlotStops;
       let play = slotPlayRound(shelf, before, draw);
       for (let tries = 0; play.meterFree.length === 0 && tries < 5000; tries++) play = slotPlayRound(shelf, before, draw);
       expect(play.meterFree.length).toBeGreaterThanOrEqual(8);
+      // Every recorded spin different, so a replay that took them in another order would show it.
+      const recorded = [play.stops, ...play.free, ...play.meterFree].map((stops) => stops.join(','));
+      expect(new Set(recorded).size).toBe(recorded.length);
       const stake = 40;
       const payout = (play.lineStakes * stake) / SLOT_LINE_COUNT;
 
@@ -1169,13 +1173,16 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
   it.each([
     ['from before the five reels', [...FIVE_REEL_COLUMNS, ...NEW_COLUMNS]],
     ['without this change', NEW_COLUMNS],
-  ])('refuses the bet and moves nothing on a table %s, and still reads the rest', async (_, columns) => {
+  ])('refuses the bet and moves nothing on a database %s, and still reads the rest', async (_, columns) => {
     const before = await outside();
     let refused = false;
     let kept = false;
 
     const outcome = await withLiveRepo(async ({ repo, tx, character }) => {
+      // Such a database has neither this change's columns, nor the daily index, nor the meter table.
       await dropColumns(tx, columns);
+      await new sql.Request(tx).query(`DROP INDEX IX_TPORTALSLOTSPIN_USER_TIME ON ${db.tables.slotSpins}`);
+      await new sql.Request(tx).query(`DROP TABLE ${db.tables.slotMeters}`);
       // A pooled connection can still have XACT_ABORT on from an earlier test's bet; then even a refused read would
       // end the transaction.
       await new sql.Request(tx).query('SET XACT_ABORT OFF');
@@ -1187,9 +1194,12 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await repo.pots()).toHaveLength(3);
       expect(await repo.totals()).toEqual({});
       expect(await repo.roundsToday(character.userId)).toBe(0);
-      expect(await repo.meter(character.userId, 'shelf', 40)).toBe(0);
+      // The meters cannot be read; the service reads them through its fallbacks.
+      await expect(repo.meter(character.userId, 'shelf', 40)).rejects.toThrow(/Invalid object name/);
+      await expect(repo.meters(character.userId)).rejects.toThrow(/Invalid object name/);
 
-      await expect(repo.bet(bet(character, { ...lost(), meterAfter: 1 }))).rejects.toThrow(/Invalid column name/);
+      // Which of the missing pieces the server names first is its own choice; nothing moves either way.
+      await expect(repo.bet(bet(character, { ...lost(), meterAfter: 1 }))).rejects.toThrow(/Invalid column name|Invalid object name|Index .* does not exist/);
       refused = true;
       let wallet: Wallet;
       try {
@@ -1201,7 +1211,6 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       kept = true;
       expect(wallet).toEqual(START);
       expect(await allPots(tx)).toEqual(EMPTY_POTS);
-      expect(await meterRows(tx)).toEqual([]);
       expect(await spinCount(tx)).toBe(0);
     }).then(
       () => null,

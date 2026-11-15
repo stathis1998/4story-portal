@@ -189,11 +189,13 @@ function potSettings(values: Map<string, string>): SlotSettings['pots'] {
 }
 
 /**
- * The account's rounds since the database's midnight, every rules number, on the account-and-time index. Binds @userId.
+ * The account's rounds since the database's midnight, every rules number. Binds @userId.
  * Rows of every rules number count, so the limit cannot be dodged across a change of rules.
+ * The bet's count is held to the account-and-time index; the page's read is not, so a database from before that index
+ * still gives the page its count (the bet there is refused anyway, on the new columns).
  */
-const roundsTodaySql = (spins: string) =>
-  `SELECT @played = COUNT(*) FROM ${spins} WITH (INDEX(IX_TPORTALSLOTSPIN_USER_TIME))
+const roundsTodaySql = (spins: string, onIndex: boolean) =>
+  `SELECT @played = COUNT(*) FROM ${spins}${onIndex ? ' WITH (INDEX(IX_TPORTALSLOTSPIN_USER_TIME))' : ''}
   WHERE dwUserID = @userId AND dSpun >= CAST(CAST(GETDATE() AS DATE) AS DATETIME)`;
 
 /**
@@ -209,7 +211,7 @@ const roundsTodaySql = (spins: string) =>
  */
 const checkStep = (spins: string, meters: string) => `DECLARE @played INT, @points INT;
   IF @daily IS NULL OR @meterBefore IS NULL OR @meterAfter IS NULL THROW 50000, 'A round needs its daily limit and its meter', 1;
-  ${roundsTodaySql(spins)};
+  ${roundsTodaySql(spins, true)};
   IF @played >= @daily SET @code = ${SLOT_DAILY_REFUSED};
   ELSE
   BEGIN
@@ -473,7 +475,7 @@ SELECT @wonMini AS mini, @wonMajor AS major, @wonGiga AS giga;`;
   async roundsToday(userId: number): Promise<number> {
     const result = await this.request()
       .input('userId', sql.Int, userId)
-      .query<{ played: number }>(`DECLARE @played INT; ${roundsTodaySql(this.db.tables.slotSpins)}; SELECT @played AS played;`);
+      .query<{ played: number }>(`DECLARE @played INT; ${roundsTodaySql(this.db.tables.slotSpins, false)}; SELECT @played AS played;`);
     return result.recordset[0].played;
   }
 
