@@ -403,6 +403,51 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await potOf(tx)).toEqual({ pot: 284 + 2784, cap: 20_000_000 });
     }));
 
+  it('does not overflow at a 10,000 Gold cap', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // On the floor: the roll's side is just under what a BIGINT holds, so this one only guards the rule.
+      await setPot(tx, 1_000_000_000, 10_000_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 999_999_999 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 1_000_002_784, cap: 10_000_000_000 });
+
+      // An add far past any stake makes (to - from) x 10^9 pass the BIGINT limit; only the DECIMAL sum gets here.
+      expect(await repo.bet(bet(character, { ...LOST, add: 9_500_000_000, roll: 999_999_999 }))).toMatchObject({ code: BET_OK, jackpot: 10_500_002 });
+      expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
+    }));
+
+  // A pot table that is not there is only found when the pot step runs, after the checks. The error (208) rolls
+  // back the whole transaction, the caller's included, so nothing is left open on the connection; the wallet and
+  // spins are read again through the pool, outside it.
+  it('rolls everything back when the pot table is missing', async () => {
+    // The same character withRepo picks. The spin table may exist only inside the tests' transactions.
+    const outside = async () => ({
+      wallet: (
+        await db.pool
+          .request()
+          .query<Wallet>(`SELECT TOP 1 dwGold AS gold, dwSilver AS silver, dwCooper AS copper FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`)
+      ).recordset[0],
+      spins: (
+        await db.pool
+          .request()
+          .query<{ n: number }>(`IF OBJECT_ID('${db.tables.slotSpins}', 'U') IS NULL SELECT -1 AS n ELSE SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)
+      ).recordset[0].n,
+    });
+    const before = await outside();
+
+    // The helper then fails to roll back a transaction that is already gone; that is the proof it was rolled back.
+    let refused = false;
+    await expect(
+      withLiveRepo(async ({ repo, tx, character }) => {
+        await new sql.Request(tx).query(`DROP TABLE ${db.tables.slotJackpot}`);
+        await expect(repo.bet(bet(character, LOST))).rejects.toThrow(/Invalid object name/);
+        refused = true;
+      }),
+    ).rejects.toThrow('Transaction has been aborted');
+    expect(refused).toBe(true);
+
+    expect(await outside()).toEqual(before);
+  });
+
   it('a refused spin leaves the pot alone', () =>
     withLiveRepo(async ({ repo, tx, character }) => {
       await goOnline(tx, character.userId, character.charId);
