@@ -11,8 +11,9 @@ export const REBIRTH_DEFAULT_SETTINGS: RebirthSettings = { live: false, priceGol
 export const rebirthSettingsSchema: z.ZodType<RebirthSettings> = z
   .object({
     live: z.boolean(),
+    // 0 is allowed only while closed; the refinement below demands a price once live.
     priceGold: z.number().int().min(0).max(100_000),
-    percent: z.number().int().min(1).max(100),
+    percent: z.number().int().min(1).max(10),
     limit: z.number().int().min(1).max(20),
   })
   .superRefine((s, ctx) => {

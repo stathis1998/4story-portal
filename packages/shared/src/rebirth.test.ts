@@ -26,6 +26,7 @@ describe('rebirth rules', () => {
     [{ live: true, priceGold: 5, percent: 10, limit: 11 }, false],
     [{ live: true, priceGold: 5, percent: 10, limit: 10 }, true],
     [{ live: true, priceGold: 5, percent: 0, limit: 10 }, false],
+    [{ live: true, priceGold: 5, percent: 11, limit: 5 }, false],
     [{ live: true, priceGold: 5, percent: 2, limit: 21 }, false],
     [{ live: true, priceGold: 5.5, percent: 2, limit: 10 }, false],
   ])('settings %j valid: %s', (input, ok) => expect(rebirthSettingsSchema.safeParse(input).success).toBe(ok));
