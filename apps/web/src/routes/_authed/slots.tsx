@@ -257,11 +257,11 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     })
 
   return (
-    // On a phone Spin has to be on screen when the page opens (360 x 560): the tagline goes, the gambling sentence
-    // moves under the machine (by order, so it is still read first), and the gaps are tighter. The side padding leaves
-    // the 324 px cabinet room on a 360 px screen. From sm up it is a block.
+    // On a phone Spin has to be on screen when the page opens (360 x 560): the tagline goes, the gambling sentence and
+    // the jackpot move under the machine (by order, so they are still read first), and the gaps are tighter. The side
+    // padding leaves the 324 px cabinet room on a 360 px screen. From sm up it is a block.
     <main className="mx-auto flex max-w-4xl flex-col px-2 pt-2 pb-4 sm:block sm:px-4 sm:py-6 md:py-10">
-      <h1 className="mb-2 text-2xl sm:mb-0 sm:text-4xl">Slots</h1>
+      <h1 className="text-2xl sm:text-4xl">Slots</h1>
       <p className="mt-1 hidden text-muted sm:block">Three machines, one pull at a time.</p>
       <p className="order-1 mt-3 text-sm text-muted sm:mt-1 sm:mb-6">This is real gambling with your character's money. Each machine shows what it pays back.</p>
 

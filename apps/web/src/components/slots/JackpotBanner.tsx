@@ -9,7 +9,8 @@ type Props = {
 
 /**
  * The shared pot. On a phone it is the label, the pot, the cap and the bar, so Spin stays on the first screen; the
- * explanation and the last winner show from sm up.
+ * explanation and the last winner show from sm up. Even so it does not fit above five reels on a 360 x 560 screen,
+ * so on a phone it is drawn under the machine (by order, so it is still read first).
  */
 export function JackpotBanner({ jackpot, won }: Props) {
   const { live, pot, cap, floor, last } = jackpot
@@ -19,7 +20,7 @@ export function JackpotBanner({ jackpot, won }: Props) {
     <section
       aria-label="Jackpot"
       data-won={won ? 'true' : undefined}
-      className="mt-2 rounded-xs border border-line bg-surface p-3 motion-safe:data-[won=true]:animate-[jackpot-won_1.2s_ease-in-out_3] sm:mt-0 sm:mb-4 sm:p-4"
+      className="order-1 mt-2 rounded-xs border border-line bg-surface p-3 motion-safe:data-[won=true]:animate-[jackpot-won_1.2s_ease-in-out_3] sm:order-none sm:mt-0 sm:mb-4 sm:p-4"
     >
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-xs font-bold tracking-wider text-muted uppercase">Jackpot</span>

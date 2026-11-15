@@ -1586,8 +1586,10 @@ describe('slots', () => {
       expect(bar).toHaveAttribute('aria-valuenow', '31420')
       expect(bar).toHaveAttribute('aria-valuemin', '0')
       expect(bar).toHaveAttribute('aria-valuemax', '50000')
-      // Above the machines; the long lines go on a phone so that Spin stays on the first screen.
+      // Above the machines; on a phone the long lines go and it is drawn under the machine, so that Spin stays on the
+      // first screen.
       expect(banner().compareDocumentPosition(screen.getByRole('tablist', { name: 'Machine' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(banner()).toHaveClass('order-1', 'sm:order-none')
       expect(region.getByText(/^Every lost round adds/)).toHaveClass('hidden', 'sm:block')
       expect(region.getByText(/^Last won by/)).toHaveClass('hidden', 'sm:block')
     })
