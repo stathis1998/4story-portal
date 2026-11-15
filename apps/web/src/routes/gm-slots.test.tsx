@@ -263,4 +263,201 @@ describe('GM slots page', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the slot machines.')
   })
+
+  describe('jackpot', () => {
+    const jackpot = (overrides: Partial<GmSlots['jackpot']> = {}): GmSlots['jackpot'] => ({
+      live: true,
+      setCap: 50,
+      running: { pot: 12_345, cap: 50_000, floor: 5000 },
+      added: 20_000,
+      paid: 7000,
+      drops: 2,
+      wins: [],
+      ...overrides,
+    })
+    const jackpotSection = () => section('Jackpot')
+    const capField = 'Cap for the next jackpot, in Gold'
+
+    it('shows the switch, the saved cap, the pot and the totals', async () => {
+      mockApi(base({}, state({ jackpot: jackpot() })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      expect(box.getByRole('switch', { name: 'Jackpot on' })).toBeChecked()
+      expect(box.getByText('Lost rounds add to the pot.')).toBeInTheDocument()
+      expect(box.getByRole('spinbutton', { name: capField })).toHaveValue(50)
+      expect(box.getByText('Can drop from 5 Gold, must drop before 50 Gold.')).toBeInTheDocument()
+      expect(box.getByText('Pot now').nextElementSibling).toHaveTextContent('12 Gold 345 Silver')
+      expect(box.getByText('Must drop before 50 Gold.')).toBeInTheDocument()
+      expect(box.getByText('Added').nextElementSibling).toHaveTextContent('20 Gold')
+      expect(box.getByText('Paid out').nextElementSibling).toHaveTextContent('7 Gold')
+      expect(box.getByText('Drops').nextElementSibling).toHaveTextContent('2')
+    })
+
+    it('says what an off jackpot does', async () => {
+      mockApi(base({}, state({ jackpot: jackpot({ live: false }) })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      expect(box.getByRole('switch', { name: 'Jackpot on' })).not.toBeChecked()
+      expect(box.getByText('The pot is kept. Lost rounds add nothing and it cannot drop.')).toBeInTheDocument()
+    })
+
+    it('switches off, sending the saved cap and not what is typed', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ live: false }) })) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      await user.clear(box.getByRole('spinbutton', { name: capField }))
+      await user.type(box.getByRole('spinbutton', { name: capField }), '9')
+      await user.click(box.getByRole('switch', { name: 'Jackpot on' }))
+
+      await waitFor(() => expect(screen.getByRole('switch', { name: 'Jackpot on' })).not.toBeChecked())
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: false, cap: 50 }])
+    })
+
+    it('saves a new cap, sending the saved switch', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ setCap: 80 }) })) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      const field = box.getByRole('spinbutton', { name: capField })
+      await user.clear(field)
+      await user.type(field, '80')
+      await user.click(box.getByRole('button', { name: 'Save cap' }))
+
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: true, cap: 80 }]))
+      await waitFor(() => expect(field).toHaveValue(80))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['0', 'From 1 to 10,000 Gold'],
+      ['10001', 'From 1 to 10,000 Gold'],
+      ['1.5', 'Enter a whole number'],
+      ['abc', 'Enter a whole number'],
+      ['', 'Enter a whole number'],
+    ])('does not send a cap of %j', async (typed, message) => {
+      const fetchMock = mockApi(base({}, state({ jackpot: jackpot() })))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      const field = box.getByRole('spinbutton', { name: capField })
+      await user.clear(field)
+      if (typed) await user.type(field, typed)
+      await user.click(box.getByRole('button', { name: 'Save cap' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(message)
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([])
+    })
+
+    it('sends the edge caps 1 and 10000', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot() })) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      const field = box.getByRole('spinbutton', { name: capField })
+      for (const [typed, count] of [
+        ['1', 1],
+        ['10000', 2],
+      ] as const) {
+        await user.clear(field)
+        await user.type(field, typed)
+        await user.click(box.getByRole('button', { name: 'Save cap' }))
+        await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toHaveLength(count))
+      }
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([
+        { live: true, cap: 1 },
+        { live: true, cap: 10_000 },
+      ])
+    })
+
+    it('shows the range the typed cap gives, and none while it is not a whole number in range', async () => {
+      mockApi(base({}, state({ jackpot: jackpot() })))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      const field = box.getByRole('spinbutton', { name: capField })
+      await user.clear(field)
+      await user.type(field, '80')
+      expect(box.getByText('Can drop from 8 Gold, must drop before 80 Gold.')).toBeInTheDocument()
+      await user.clear(field)
+      await user.type(field, '0')
+      expect(box.queryByText(/Can drop from/)).not.toBeInTheDocument()
+    })
+
+    it('shows both caps when the running jackpot keeps an older one', async () => {
+      mockApi(base({}, state({ jackpot: jackpot({ setCap: 80, running: { pot: 1000, cap: 50_000, floor: 5000 } }) })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      expect(box.getByText('This jackpot must drop before 50 Gold. The next one: 80 Gold.')).toBeInTheDocument()
+      expect(box.queryByText('Must drop before 50 Gold.')).not.toBeInTheDocument()
+    })
+
+    it('says so when the pot cannot be read, and the switch and cap still work', async () => {
+      const fetchMock = mockApi(
+        base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ running: null, live: false }) })) }, state({ jackpot: jackpot({ running: null }) })),
+      )
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotSection()
+      expect(box.getByText("The jackpot's table is not in this database yet.")).toBeInTheDocument()
+      expect(box.queryByText('Pot now')).not.toBeInTheDocument()
+      await user.click(box.getByRole('switch', { name: 'Jackpot on' }))
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: false, cap: 50 }]))
+      await user.clear(box.getByRole('spinbutton', { name: capField }))
+      await user.type(box.getByRole('spinbutton', { name: capField }), '70')
+      await user.click(box.getByRole('button', { name: 'Save cap' }))
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toHaveLength(2))
+    })
+
+    it('lists the drops', async () => {
+      const wins = [spin({ id: 9, at: '2026-11-14T09:05:00.000Z', character: 'Moosey', machine: 'hoard', stake: 200, payout: 50_000, jackpot: 50_000 })]
+      mockApi(base({}, state({ jackpot: jackpot({ wins }), latest: [] })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const table = (await jackpotSection()).getByRole('table', { name: 'Jackpot drops' })
+      expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['When', 'Character', 'Machine', 'Won'])
+      expect(within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))).toEqual([
+        ['14 Nov, 09:05', 'Moosey', "Dragon's Hoard", '50 Gold'],
+      ])
+    })
+
+    it('says so when nobody has won the jackpot', async () => {
+      mockApi(base({}, state({ jackpot: jackpot() })))
+      renderRoute('/gm/slots', { me: gm })
+
+      expect((await jackpotSection()).getByText('Nobody has won the jackpot yet.')).toBeInTheDocument()
+    })
+
+    it('shows why a jackpot save failed', async () => {
+      mockApi(base({ 'PUT /gm/slots/jackpot': () => json(403, { statusCode: 403, message: 'Not allowed' }) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      await user.click((await jackpotSection()).getByRole('switch', { name: 'Jackpot on' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed')
+    })
+
+    it('shows what a machine sent to the jackpot, and takes it out of the house result', async () => {
+      const current = state()
+      current.machines[1] = machine({ key: 'armoury', stakes: [25, 50, 100], today: { spins: 5, staked: 1000, paid: 900, added: 40 } })
+      mockApi(base({}, current))
+      renderRoute('/gm/slots', { me: gm })
+
+      const today = within((await section('The Armoury')).getByRole('region', { name: 'Today' }))
+      expect(today.getByText('To the jackpot').nextElementSibling).toHaveTextContent('40 Silver')
+      expect(today.getByText('House result').nextElementSibling).toHaveTextContent('60 Silver')
+    })
+
+    it('marks a jackpot round in the latest spins', async () => {
+      mockApi(base({}, state({ latest: [spin({ payout: 50_002, jackpot: 50_002 })] })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const table = await screen.findByRole('table', { name: 'Latest spins' })
+      expect(within(table).getAllByRole('row')[1]).toHaveTextContent('Jackpot 50 Gold 2 Silver')
+    })
+  })
 })
