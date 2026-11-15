@@ -206,6 +206,24 @@ before the jackpot existed are not carried into it.
 Player-facing amounts stay in whole Silver, as everywhere else in the slots. Only the pot itself and
 what each round adds are kept to the Bronze.
 
+## Known limit: what a GM can still do to a running pot
+
+Found in the final review on 2026-11-15, and left for the owner to decide. Nothing in the code
+prevents it today.
+
+- **Stakes.** A GM can raise a machine's stakes to as much as 100 Gold, and a GM can also play. A
+  round's chance of winning the pot follows what it adds, so a lost 100 Gold round on Dragon's
+  Hoard adds 4 Gold 340 Silver: with the pot at 40 Gold under a 50 Gold cap, that one lost round has
+  about a 43% chance of winning it. At the usual top stake of 200 Silver the same would take over a
+  thousand lost rounds. A GM could raise the stakes, spin a few times and put them back.
+- **The switch.** A GM can pause the jackpot while other players are close to winning it, and
+  switch it on again when it suits them.
+
+Both actions write a row to the GM audit log, and the spins themselves are on the GM page. That is
+the only control, which is what this design rejected for the cap. The ways to close it are to make
+a stake change apply from the next jackpot, as a cap change does, or to limit how much of one round
+counts toward the drop.
+
 ## Approaches considered
 
 **How the jackpot is won** (the owner chose)
