@@ -1,5 +1,7 @@
 # Slots: three classic machines that take an offline character's money
 
+The machines and rules here were replaced on 2026-11-15: see 2026-11-15-slots-modern-design.md.
+
 Date: 2026-11-14.
 
 ## Why
