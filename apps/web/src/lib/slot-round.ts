@@ -67,3 +67,10 @@ export function roundListLine(machine: SlotMachine, spin: SlotSpinView): string 
   const free = spin.free.length > 0 ? ` with ${spin.free.length} free spins` : '';
   return `${machine.name}: staked ${silverText(spin.stake)}, won ${won}${free}`;
 }
+
+/** A big wins entry: "Kael won 12 Gold 500 Silver on The Armoury on a stake of 40 Silver, with 8 free spins". */
+export function bigWinLine(machine: SlotMachine, spin: SlotSpinView): string {
+  if (spin.jackpot > 0) return `${spin.character} won the jackpot, ${silverText(spin.jackpot)}`;
+  const free = spin.free.length > 0 ? `, with ${spin.free.length} free spins` : '';
+  return `${spin.character} won ${silverText(spin.payout)} on ${machine.name} on a stake of ${silverText(spin.stake)}${free}`;
+}

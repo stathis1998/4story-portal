@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { slotRoundPayout, slotSpin, type SlotSpinView } from '@4story-portal/shared';
 import { BOTTOM, TOP, at, showing } from '../test/slot-fixture';
-import { roundLine, roundListLine, roundSpins, winTier, wonTiles } from './slot-round';
+import { bigWinLine, roundLine, roundListLine, roundSpins, winTier, wonTiles } from './slot-round';
 
 // Window 0 pays 10 line stakes, window 1 pays 40, window 2 pays nothing.
 const machine = showing([TOP, 'BBBCD', BOTTOM], [TOP, 'BBBBD', BOTTOM], [TOP, 'CDEFG', BOTTOM]);
@@ -72,4 +72,16 @@ describe('roundListLine', () => {
     ['free spins', view({ payout: 1200, free: Array.from({ length: 8 }, () => at(1)) }),
       "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins"],
   ])('says a list entry: %s', (_name, v, line) => expect(roundListLine(named, v)).toBe(line));
+});
+
+describe('bigWinLine', () => {
+  const named = { ...machine, name: "Tranus's Shelf" };
+  it.each([
+    ['a win', view({ payout: 2400 }), "Tester won 2 Gold 400 Silver on Tranus's Shelf on a stake of 40 Silver"],
+    ['a win with free spins', view({ payout: 12500, free: Array.from({ length: 12 }, () => at(1)) }),
+      "Tester won 12 Gold 500 Silver on Tranus's Shelf on a stake of 40 Silver, with 12 free spins"],
+    ['the jackpot', view({ payout: 0, jackpot: 31420 }), 'Tester won the jackpot, 31 Gold 420 Silver'],
+    ['the jackpot after free spins', view({ payout: 0, jackpot: 31420, free: Array.from({ length: 8 }, () => at(2)) }),
+      'Tester won the jackpot, 31 Gold 420 Silver'],
+  ])('says a big win: %s', (_name, v, line) => expect(bigWinLine(named, v)).toBe(line));
 });

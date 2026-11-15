@@ -14,7 +14,7 @@ import type {
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { REEL_BLURS } from '../lib/reel-blur'
-import { roundLine, roundListLine, roundSpins, winTier, wonTiles } from '../lib/slot-round'
+import { bigWinLine, roundLine, roundListLine, roundSpins, winTier, wonTiles } from '../lib/slot-round'
 import type { SlotSounds } from '../lib/slot-sounds'
 import { reelTimes, slotsQueryOptions } from '../lib/slots'
 import { setSlotSoundsForTest } from '../lib/use-slot-round'
@@ -1696,7 +1696,8 @@ describe('slots', () => {
 
     const big = within(screen.getByRole('region', { name: 'Big wins' })).getAllByRole('listitem')
     expect(big).toHaveLength(2)
-    expect(big[0]).toHaveTextContent(`Kael won 12 Gold 500 Silver on ${armoury.name}`)
+    expect(big[0].firstElementChild).toHaveTextContent(`Kael won 12 Gold 500 Silver on ${armoury.name} on a stake of 40 Silver`)
+    expect(big[0].firstElementChild?.textContent).toBe(bigWinLine(armoury, bigWins[0]))
     expect(big[0]).toHaveTextContent('13 Nov, 23:59')
     expect(big[1]).toHaveTextContent('Mounara won the jackpot, 50 Gold 2 Silver')
   })

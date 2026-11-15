@@ -13,7 +13,7 @@ import { cabinetLine, Reels } from '../../components/slots/Reels'
 import { WinLines } from '../../components/slots/WinLines'
 import { WinShow } from '../../components/slots/WinShow'
 import { Tabs } from '../../components/Tabs'
-import { roundLine, roundListLine, roundSpins } from '../../lib/slot-round'
+import { bigWinLine, roundLine, roundListLine, roundSpins } from '../../lib/slot-round'
 import { slotsErrorMessage, slotsQueryOptions, spinSlots } from '../../lib/slots'
 import { useSlotRound, useSlotSounds } from '../../lib/use-slot-round'
 import { reducedMotion, useChosenCharacter, useHeldSpin } from '../../lib/wallet-game'
@@ -439,9 +439,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           title="Big wins"
           rounds={known(view.bigWins)}
           empty="Nobody has had a big win yet."
-          line={(entry, of) =>
-            entry.jackpot > 0 ? `${entry.character} won the jackpot, ${silverText(entry.jackpot)}` : `${entry.character} won ${silverText(entry.payout)} on ${of.name}`
-          }
+          line={(entry, of) => bigWinLine(of, entry)}
         />
       </div>
     </main>
