@@ -86,6 +86,7 @@ function Profile({ profile }: { profile: CharacterProfile }) {
         </div>
         <p className="mt-1 text-muted">
           Level {profile.level} {profile.className}, {profile.race}, {profile.country}
+          {profile.rebirth > 0 && <span className="ml-2 text-sm font-bold text-accent-text">Rebirth {profile.rebirth}</span>}
         </p>
         {profile.progress !== null && (
           <div className="mt-3 max-w-md">

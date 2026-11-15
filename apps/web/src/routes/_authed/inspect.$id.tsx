@@ -27,6 +27,7 @@ function InspectPage() {
             <h1 className="text-4xl">{data.name}</h1>
             <p className="mt-1 text-muted">
               Level {data.level} {data.className}, {data.race}, {data.country}
+              {data.rebirth > 0 && <span className="ml-2 text-sm font-bold text-accent-text">Rebirth {data.rebirth}</span>}
             </p>
           </header>
           <section className="rounded-xs border border-line bg-surface p-5">

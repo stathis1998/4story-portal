@@ -33,6 +33,7 @@ import { Route as AuthedGmAchievementsRouteImport } from './routes/_authed/gm/ac
 import { Route as AuthedGmEventsRouteImport } from './routes/_authed/gm/events'
 import { Route as AuthedGmLoginsRouteImport } from './routes/_authed/gm/logins'
 import { Route as AuthedGmMailRouteImport } from './routes/_authed/gm/mail'
+import { Route as AuthedGmRebirthRouteImport } from './routes/_authed/gm/rebirth'
 import { Route as AuthedGmRouletteRouteImport } from './routes/_authed/gm/roulette'
 import { Route as AuthedGmSlotsRouteImport } from './routes/_authed/gm/slots'
 import { Route as AuthedGmTeleportRouteImport } from './routes/_authed/gm/teleport'
@@ -159,6 +160,11 @@ const AuthedGmMailRoute = AuthedGmMailRouteImport.update({
   path: '/gm/mail',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedGmRebirthRoute = AuthedGmRebirthRouteImport.update({
+  id: '/gm/rebirth',
+  path: '/gm/rebirth',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedGmRouletteRoute = AuthedGmRouletteRouteImport.update({
   id: '/gm/roulette',
   path: '/gm/roulette',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
+  '/gm/rebirth': typeof AuthedGmRebirthRoute
   '/gm/roulette': typeof AuthedGmRouletteRoute
   '/gm/slots': typeof AuthedGmSlotsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/gm/events': typeof AuthedGmEventsRoute
   '/gm/logins': typeof AuthedGmLoginsRoute
   '/gm/mail': typeof AuthedGmMailRoute
+  '/gm/rebirth': typeof AuthedGmRebirthRoute
   '/gm/roulette': typeof AuthedGmRouletteRoute
   '/gm/slots': typeof AuthedGmSlotsRoute
   '/gm/teleport': typeof AuthedGmTeleportRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/_authed/gm/events': typeof AuthedGmEventsRoute
   '/_authed/gm/logins': typeof AuthedGmLoginsRoute
   '/_authed/gm/mail': typeof AuthedGmMailRoute
+  '/_authed/gm/rebirth': typeof AuthedGmRebirthRoute
   '/_authed/gm/roulette': typeof AuthedGmRouletteRoute
   '/_authed/gm/slots': typeof AuthedGmSlotsRoute
   '/_authed/gm/teleport': typeof AuthedGmTeleportRoute
@@ -311,6 +320,7 @@ export interface FileRouteTypes {
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
+    | '/gm/rebirth'
     | '/gm/roulette'
     | '/gm/slots'
     | '/gm/teleport'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/gm/events'
     | '/gm/logins'
     | '/gm/mail'
+    | '/gm/rebirth'
     | '/gm/roulette'
     | '/gm/slots'
     | '/gm/teleport'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/_authed/gm/events'
     | '/_authed/gm/logins'
     | '/_authed/gm/mail'
+    | '/_authed/gm/rebirth'
     | '/_authed/gm/roulette'
     | '/_authed/gm/slots'
     | '/_authed/gm/teleport'
@@ -559,6 +571,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedGmMailRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/gm/rebirth': {
+      id: '/_authed/gm/rebirth'
+      path: '/gm/rebirth'
+      fullPath: '/gm/rebirth'
+      preLoaderRoute: typeof AuthedGmRebirthRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/gm/roulette': {
       id: '/_authed/gm/roulette'
       path: '/gm/roulette'
@@ -625,6 +644,7 @@ interface AuthedRouteChildren {
   AuthedGmEventsRoute: typeof AuthedGmEventsRoute
   AuthedGmLoginsRoute: typeof AuthedGmLoginsRoute
   AuthedGmMailRoute: typeof AuthedGmMailRoute
+  AuthedGmRebirthRoute: typeof AuthedGmRebirthRoute
   AuthedGmRouletteRoute: typeof AuthedGmRouletteRoute
   AuthedGmSlotsRoute: typeof AuthedGmSlotsRoute
   AuthedGmTeleportRoute: typeof AuthedGmTeleportRoute
@@ -654,6 +674,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedGmEventsRoute: AuthedGmEventsRoute,
   AuthedGmLoginsRoute: AuthedGmLoginsRoute,
   AuthedGmMailRoute: AuthedGmMailRoute,
+  AuthedGmRebirthRoute: AuthedGmRebirthRoute,
   AuthedGmRouletteRoute: AuthedGmRouletteRoute,
   AuthedGmSlotsRoute: AuthedGmSlotsRoute,
   AuthedGmTeleportRoute: AuthedGmTeleportRoute,

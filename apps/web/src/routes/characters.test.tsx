@@ -7,6 +7,18 @@ import { renderRoute } from '../test/render-route'
 const moose = { userId: 1, username: 'moose', isGm: false }
 
 describe('/characters', () => {
+  it('shows the rebirth number beside the level, and nothing in the first life', async () => {
+    mockApi({
+      'GET /characters': () =>
+        json(200, [character({ id: 1, slot: 0, name: 'First', rebirth: 2 }), character({ id: 2, slot: 1, name: 'Second', rebirth: 0 })]),
+    })
+    renderRoute('/characters', { me: moose })
+
+    await screen.findByRole('heading', { name: 'First' })
+    expect(screen.getAllByText('Rebirth 2')).toHaveLength(1)
+    expect(screen.queryByText(/Rebirth 0/)).not.toBeInTheDocument()
+  })
+
   it('shows a loading skeleton while characters load', async () => {
     mockApi({ 'GET /characters': () => new Promise<Response>(() => {}) })
     renderRoute('/characters', { me: moose })

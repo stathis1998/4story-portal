@@ -20,7 +20,7 @@ type Props = {
 }
 
 export function CharacterCard({ character, stats, linked = false }: Props) {
-  const { id, name, level, className, race, country, money, mapId, lastLogoutAt } = character
+  const { id, name, level, rebirth, className, race, country, money, mapId, lastLogoutAt } = character
 
   return (
     <article className="flex flex-col gap-4 rounded-xs border border-l-[3px] border-line border-l-accent bg-surface p-5 transition hover:bg-surface-raised">
@@ -39,9 +39,12 @@ export function CharacterCard({ character, stats, linked = false }: Props) {
             <span>{className}</span> · <span>{race}</span>
           </p>
         </div>
-        <span className="shrink-0 rounded-xs border border-accent px-2 py-0.5 font-display text-sm tracking-wider text-accent-text">
-          Lv. {level}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="rounded-xs border border-accent px-2 py-0.5 font-display text-sm tracking-wider text-accent-text">
+            Lv. {level}
+          </span>
+          {rebirth > 0 && <span className="text-xs font-bold tracking-wider text-accent-text">Rebirth {rebirth}</span>}
+        </div>
       </header>
 
       {stats && (

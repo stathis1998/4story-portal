@@ -1,5 +1,5 @@
 import type { CharacterInspect, CharacterSearchResult, Leaderboard } from '@4story-portal/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { gearItem, tooltip } from '../test/gear'
 import { json, mockApi } from '../test/mock-api'
@@ -54,6 +54,18 @@ describe('inspect page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Rival', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Level 60 Warrior, Human, Derion')).toBeInTheDocument()
+  })
+
+  it('shows the rebirth number beside the level, and nothing in the first life', async () => {
+    mockApi(route(inspected({ rebirth: 2 })))
+    renderRoute('/inspect/2', { me })
+    expect(await screen.findByText('Rebirth 2')).toBeInTheDocument()
+    cleanup()
+
+    mockApi(route(inspected({ rebirth: 0 })))
+    renderRoute('/inspect/2', { me })
+    await screen.findByRole('heading', { name: 'Rival', level: 1 })
+    expect(screen.queryByText(/^Rebirth \d/)).not.toBeInTheDocument()
   })
 
   it('offers a way back to the Leaderboard', async () => {
