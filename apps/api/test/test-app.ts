@@ -17,6 +17,8 @@ import { DbService } from '../src/db/db.service.js';
 import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
 import { PortalStore } from '../src/store/portal-store.js';
 import { ANNOUNCER_TIMING } from '../src/wheel/wheel-announcer.js';
+import { REBIRTH_ANNOUNCER_TIMING } from '../src/rebirth/rebirth-announcer.js';
+import { REBIRTH_REPOSITORY } from '../src/rebirth/rebirth.repository.js';
 import { ROULETTE_REPOSITORY } from '../src/roulette/roulette.repository.js';
 import { SLOTS_REPOSITORY } from '../src/slots/slots.repository.js';
 import { WALLETS_REPOSITORY } from '../src/games/wallets.repository.js';
@@ -29,6 +31,7 @@ import {
   FakeControlClient,
   FakeGmRepository,
   FakeMailRepository,
+  FakeRebirthRepository,
   FakeStatsRepository,
   FakeVendorsRepository,
   FakeRouletteRepository,
@@ -52,6 +55,7 @@ export type TestAppOverrides = {
   weapons?: { source: WeaponClientSource; cache?: ModelCache };
   wheel?: FakeWheelRepository;
   roulette?: FakeRouletteRepository;
+  rebirth?: FakeRebirthRepository;
   slots?: FakeSlotsRepository;
   /** The wallets the games list. Defaults to those of the roulette or slots fake handed in, so the list matches what they pay from. */
   wallets?: FakeWalletsRepository;
@@ -98,11 +102,15 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     .useValue(overrides.roulette ?? new FakeRouletteRepository())
     .overrideProvider(WALLETS_REPOSITORY)
     .useValue(overrides.wallets ?? overrides.roulette?.wallets ?? overrides.slots?.wallets ?? new FakeWalletsRepository())
+    .overrideProvider(REBIRTH_REPOSITORY)
+    .useValue(overrides.rebirth ?? new FakeRebirthRepository())
     .overrideProvider(SLOTS_REPOSITORY)
     .useValue(overrides.slots ?? new FakeSlotsRepository())
     // No timer in tests: they call the announcer's tick() themselves.
     .overrideProvider(ANNOUNCER_TIMING)
     .useValue({ intervalMs: 0, delaySeconds: 15, maxAgeSeconds: 600 })
+    .overrideProvider(REBIRTH_ANNOUNCER_TIMING)
+    .useValue({ intervalMs: 0, delaySeconds: 0, maxAgeSeconds: 600 })
     .overrideProvider(PortalStore)
     .useValue(overrides.store ?? new PortalStore(':memory:'))
     .overrideProvider(WEAPON_CLIENT_SOURCE)

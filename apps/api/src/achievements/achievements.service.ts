@@ -20,23 +20,28 @@ import type {
 import { className } from '../characters/character-codes.js';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { itemIcons } from '../gm/game-icons.generated.js';
+import { REBIRTH_REPOSITORY, type RebirthLogRow, type RebirthRepository } from '../rebirth/rebirth.repository.js';
+import type { CharacterStatsRow } from '../stats/stats-rules.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
 import { AchievementAwarder, rewardKey, shownAs } from './achievement-awarder.js';
 import {
   ACCOUNT_ACHIEVEMENTS,
   ACCOUNT_LEVELS_TOTAL,
   type AchievementFamily,
+  awardLife,
   CHARACTER_ACHIEVEMENTS,
   CHARACTER_LEVELS_TOTAL,
+  type CharacterFamily,
+  FIRST_LIFE,
   formatValue,
   levelReached,
+  lifeValue,
 } from './achievement-rules.js';
 import {
   ACHIEVEMENTS_REPOSITORY,
   type AchievementsRepository,
   ANNOUNCE_WAITING,
   type AwardRow,
-  FIRST_LIFE,
   NO_CHARACTER,
   type RewardRow,
 } from './achievements.repository.js';
@@ -49,7 +54,7 @@ type Standing = { name: string; reached: number };
 /** One subject's own view of an achievement: what it has counted, and what it has been awarded. */
 type Own = { value: number; reached: number; earnedAt: (level: number) => string | null };
 
-const subjectKey = (userId: number, charId: number, achievementId: string) => `${userId}:${charId}:${achievementId}`;
+const subjectKey = (userId: number, charId: number, achievementId: string, life: number) => `${userId}:${charId}:${achievementId}:${life}`;
 
 // Shapes what the pages show: levels, rewards, the news feed and the GM's settings.
 @Injectable()
@@ -61,6 +66,7 @@ export class AchievementsService {
     private readonly stats: StatsService,
     private readonly control: ControlClient,
     private readonly awarder: AchievementAwarder,
+    @Inject(REBIRTH_REPOSITORY) private readonly rebirths: RebirthRepository,
   ) {}
 
   async overview(user: SessionUser): Promise<AchievementsOverview> {
@@ -72,45 +78,47 @@ export class AchievementsService {
     ]);
     const mine = stats.accounts.get(user.userId);
 
-    // The highest level each subject has been awarded in its current life, and when.
+    // The highest level each subject has been awarded in each life, and when.
     const awarded = new Map<string, number>();
     const earned = new Map<string, string>();
     for (const award of awards) {
-      if (award.rebirth !== FIRST_LIFE) continue;
-      const key = subjectKey(award.userId, award.charId, award.achievementId);
+      const key = subjectKey(award.userId, award.charId, award.achievementId, award.rebirth);
       awarded.set(key, Math.max(awarded.get(key) ?? 0, award.level));
       earned.set(`${key}:${award.level}`, award.earnedAt.toISOString());
     }
-    // An awarded level stays, even when the number behind it has dropped again.
-    const reached = (userId: number, charId: number, family: AchievementFamily, value: number) =>
-      Math.max(levelReached(family, value), awarded.get(subjectKey(userId, charId, family.id)) ?? 0);
-    const own = (userId: number, charId: number, family: AchievementFamily, value: number): Own => ({
+    // An awarded level stays, even when the number behind it has dropped again. Only the awards of the life
+    // the achievement counts in now: FIRST_LIFE for an account achievement or one paid once.
+    const reached = (userId: number, charId: number, family: AchievementFamily, value: number, life: number) =>
+      Math.max(levelReached(family, value), awarded.get(subjectKey(userId, charId, family.id, life)) ?? 0);
+    const own = (userId: number, charId: number, family: AchievementFamily, value: number, life: number): Own => ({
       value,
-      reached: reached(userId, charId, family, value),
-      earnedAt: (level) => earned.get(`${subjectKey(userId, charId, family.id)}:${level}`) ?? null,
+      reached: reached(userId, charId, family, value, life),
+      earnedAt: (level) => earned.get(`${subjectKey(userId, charId, family.id, life)}:${level}`) ?? null,
     });
+    const characterOwn = (family: CharacterFamily, character: CharacterStatsRow): Own =>
+      own(character.row.userId, character.row.id, family, lifeValue(family, character), awardLife(family, character));
 
     // Account achievements are measured against the ranked accounts, character ones against their characters.
     const contenders = ranked.flatMap((account) => account.characters.filter(({ row }) => !row.banned));
     const accountStandings = new Map<string, Standing[]>(
       ACCOUNT_ACHIEVEMENTS.map((family) => [
         family.id,
-        ranked.map((account) => ({ name: shownAs(account), reached: reached(account.userId, NO_CHARACTER, family, family.value(account)) })),
+        ranked.map((account) => ({
+          name: shownAs(account),
+          reached: reached(account.userId, NO_CHARACTER, family, family.value(account), FIRST_LIFE),
+        })),
       ]),
     );
     const characterStandings = new Map<string, Standing[]>(
       CHARACTER_ACHIEVEMENTS.map((family) => [
         family.id,
-        contenders.map((character) => ({
-          name: character.row.name,
-          reached: reached(character.row.userId, character.row.id, family, family.value(character)),
-        })),
+        contenders.map((character) => ({ name: character.row.name, reached: characterOwn(family, character).reached })),
       ]),
     );
 
     const account = group(
       ACCOUNT_ACHIEVEMENTS.map((family) =>
-        view(family, own(user.userId, NO_CHARACTER, family, mine ? family.value(mine) : 0), accountStandings.get(family.id)!, null),
+        view(family, own(user.userId, NO_CHARACTER, family, mine ? family.value(mine) : 0, FIRST_LIFE), accountStandings.get(family.id)!, null),
       ),
       ACCOUNT_LEVELS_TOTAL,
     );
@@ -123,9 +131,7 @@ export class AchievementsService {
         level: character.row.level,
         className: className(character.row.classCode),
         ...group(
-          CHARACTER_ACHIEVEMENTS.map((family) =>
-            view(family, own(user.userId, character.row.id, family, family.value(character)), characterStandings.get(family.id)!, rewards),
-          ),
+          CHARACTER_ACHIEVEMENTS.map((family) => view(family, characterOwn(family, character), characterStandings.get(family.id)!, rewards)),
           CHARACTER_LEVELS_TOTAL,
         ),
       }));
@@ -133,14 +139,23 @@ export class AchievementsService {
     return { account, characters, live };
   }
 
+  /** The newest awards and rebirths together. A rebirth's id is its log id made negative, so the two never share one. */
   async news(user: SessionUser): Promise<News> {
-    const awards = await this.awards();
-    return {
-      serverNow: serverNow().toISOString(),
-      items: awards
+    const [awards, rebirths] = await Promise.all([this.awards(), this.recentRebirths()]);
+    const items = [
+      ...awards
         .slice(-NEWS_ITEMS)
         .reverse()
-        .map((award) => ({ id: award.id, at: award.earnedAt.toISOString(), text: award.text, mine: award.userId === user.userId })),
+        .map((award) => ({ id: award.id, at: award.earnedAt, text: award.text, mine: award.userId === user.userId })),
+      ...rebirths.map((row) => ({ id: -row.id, at: row.at, text: row.text, mine: row.userId === user.userId })),
+    ];
+    return {
+      serverNow: serverNow().toISOString(),
+      // A stable sort: each list is already newest first, so equal dates keep that order.
+      items: items
+        .sort((a, b) => b.at.getTime() - a.at.getTime())
+        .slice(0, NEWS_ITEMS)
+        .map((item) => ({ ...item, at: item.at.toISOString() })),
     };
   }
 
@@ -235,6 +250,11 @@ export class AchievementsService {
 
   private awards(): Promise<AwardRow[]> {
     return this.readOr('awards', () => this.repo.awards(), []);
+  }
+
+  /** Empty while the rebirth tables are not in this game database. */
+  private recentRebirths(): Promise<RebirthLogRow[]> {
+    return this.readOr('rebirth log', () => this.rebirths.recent(NEWS_ITEMS), []);
   }
 
   private live(): Promise<boolean> {

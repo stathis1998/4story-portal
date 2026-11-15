@@ -45,6 +45,12 @@ import {
 import {
   BRONZE_PER_GOLD,
   BRONZE_PER_SILVER,
+  REBIRTH_DEFAULT_SETTINGS,
+  type RebirthSettings,
+  REBIRTH_LEVEL,
+  rebirthBonus,
+  rebirthIsOpen,
+  rebirthPriceGold,
   ROULETTE_DEFAULT_LIMITS,
   SLOT_BIG_WIN,
   SLOT_JACKPOT_DEFAULT_CAP,
@@ -75,6 +81,26 @@ import {
 import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR, type BetCode, type BetOutcome } from '../src/games/wallet-bet.js';
 import type { WalletCharacterRow, WalletsRepository } from '../src/games/wallets.repository.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
+import {
+  REBIRTH_AT_LIMIT,
+  REBIRTH_CLOSED,
+  REBIRTH_LOW_LEVEL,
+  REBIRTH_NOT_YOURS,
+  REBIRTH_OK,
+  REBIRTH_ONLINE,
+  REBIRTH_POOR,
+  REBIRTH_PRICE_CHANGED,
+  REBIRTH_WEARING,
+} from '../src/rebirth/rebirth-sql.js';
+import {
+  ANNOUNCE_SENT as REBIRTH_ANNOUNCE_SENT,
+  ANNOUNCE_WAITING as REBIRTH_ANNOUNCE_WAITING,
+  type RebirthCharacterRow,
+  type RebirthInput,
+  type RebirthLogRow,
+  type RebirthOutcome,
+  type RebirthRepository,
+} from '../src/rebirth/rebirth.repository.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
 export function characterRow(overrides: Partial<CharacterRow> = {}): CharacterRow {
@@ -92,6 +118,7 @@ export function characterRow(overrides: Partial<CharacterRow> = {}): CharacterRo
     wMapID: 0,
     dCreateDate: null,
     dLogoutDate: null,
+    rebirth: 0,
     ...overrides,
   };
 }
@@ -984,5 +1011,124 @@ export class FakeSlotsRepository implements SlotsRepository {
       paid: this.spinRows.reduce((total, row) => total + row.jackpot, 0),
       drops: this.spinRows.filter((row) => row.jackpot > 0).length,
     };
+  }
+}
+
+// In-memory stand-in for the rebirth settings, TCHARREBIRTHTABLE and its log. Its rebirth() only checks
+// the nine outcomes the SQL batch has, in its order.
+export class FakeRebirthRepository implements RebirthRepository {
+  settingsRow: RebirthSettings = { ...REBIRTH_DEFAULT_SETTINGS };
+  /** The characters find() and rebirth() see, with the account each belongs to. */
+  characters: (RebirthCharacterRow & { userId: number; charId: number })[] = [];
+  /** Oldest first, as written. ageSeconds is worked out from `now` when read. */
+  logRows: RebirthLogRow[] = [];
+  /** Everything rebirth() was asked for, including calls that changed nothing. */
+  readonly rebirthCalls: RebirthInput[] = [];
+  /** The database's clock: stamps new rebirths and ages old ones. */
+  now: () => Date = () => new Date();
+  /** Every call rejects, as before the tables exist. */
+  failing = false;
+
+  private check(): void {
+    if (this.failing) throw new Error('Invalid object name TCHARREBIRTHLOGTABLE');
+  }
+
+  private aged(row: RebirthLogRow): RebirthLogRow {
+    return { ...row, ageSeconds: Math.floor((this.now().getTime() - row.at.getTime()) / 1000) };
+  }
+
+  async find(userId: number, charId: number): Promise<RebirthCharacterRow | null> {
+    this.check();
+    const row = this.characters.find((c) => c.charId === charId && c.userId === userId);
+    if (!row) return null;
+    const { userId: _owner, charId: _id, ...character } = row;
+    return character;
+  }
+
+  async rebirth(input: RebirthInput): Promise<RebirthOutcome> {
+    this.check();
+    this.rebirthCalls.push(input);
+    const settings = this.settingsRow;
+    if (!rebirthIsOpen(settings)) return { code: REBIRTH_CLOSED };
+    const row = this.characters.find((c) => c.charId === input.charId && c.userId === input.userId);
+    if (!row) return { code: REBIRTH_NOT_YOURS };
+    if (row.online) return { code: REBIRTH_ONLINE };
+    if (row.level < REBIRTH_LEVEL) return { code: REBIRTH_LOW_LEVEL };
+    if (row.wornItems > 0) return { code: REBIRTH_WEARING };
+    if (row.rebirths >= settings.limit) return { code: REBIRTH_AT_LIMIT };
+    const rebirth = row.rebirths + 1;
+    const priceGold = rebirthPriceGold(rebirth, settings.priceGold);
+    if (input.expectedPriceGold !== priceGold) return { code: REBIRTH_PRICE_CHANGED };
+    const held = row.gold * BRONZE_PER_GOLD + row.silver * BRONZE_PER_SILVER + row.copper;
+    if (held < priceGold * BRONZE_PER_GOLD) return { code: REBIRTH_POOR };
+    const left = held - priceGold * BRONZE_PER_GOLD;
+    const bonus = rebirthBonus(rebirth, settings);
+    Object.assign(row, {
+      level: 1,
+      rebirths: rebirth,
+      bonus,
+      gold: Math.floor(left / BRONZE_PER_GOLD),
+      silver: Math.floor((left % BRONZE_PER_GOLD) / BRONZE_PER_SILVER),
+      copper: left % BRONZE_PER_SILVER,
+    });
+    const id = Math.max(0, ...this.logRows.map((entry) => entry.id)) + 1;
+    this.logRows.push({
+      id,
+      userId: input.userId,
+      charId: input.charId,
+      name: row.name,
+      rebirth,
+      bonus,
+      priceGold,
+      at: this.now(),
+      ageSeconds: 0,
+      text: input.text.replace('{name}', row.name).replace('{rebirth}', String(rebirth)),
+      announced: REBIRTH_ANNOUNCE_WAITING,
+    });
+    return { code: REBIRTH_OK, id, name: row.name, rebirth, bonus, priceGold, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
+  }
+
+  async settings(): Promise<RebirthSettings> {
+    this.check();
+    return { ...this.settingsRow };
+  }
+
+  async saveSettings(settings: RebirthSettings): Promise<void> {
+    this.check();
+    this.settingsRow = { ...settings };
+    for (const row of this.characters) if (row.rebirths > 0) row.bonus = rebirthBonus(row.rebirths, settings);
+  }
+
+  async recent(limit: number): Promise<RebirthLogRow[]> {
+    this.check();
+    return [...this.logRows].sort((a, b) => b.id - a.id).slice(0, limit).map((row) => this.aged(row));
+  }
+
+  async count(): Promise<number> {
+    this.check();
+    return this.characters.filter((row) => row.rebirths > 0).length;
+  }
+
+  async waitingAnnouncements(): Promise<RebirthLogRow[]> {
+    this.check();
+    return this.logRows
+      .filter((row) => row.announced === REBIRTH_ANNOUNCE_WAITING)
+      .sort((a, b) => a.id - b.id)
+      .slice(0, 50)
+      .map((row) => this.aged(row));
+  }
+
+  async claimAnnouncement(id: number): Promise<boolean> {
+    this.check();
+    const row = this.logRows.find((entry) => entry.id === id);
+    if (!row || row.announced !== REBIRTH_ANNOUNCE_WAITING) return false;
+    row.announced = REBIRTH_ANNOUNCE_SENT;
+    return true;
+  }
+
+  async markAnnounced(id: number, state: number): Promise<void> {
+    this.check();
+    const row = this.logRows.find((entry) => entry.id === id);
+    if (row) row.announced = state;
   }
 }

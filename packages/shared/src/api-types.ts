@@ -10,6 +10,8 @@ export type Character = {
   slot: number;
   name: string;
   level: number;
+  /** How many times the character has been reborn. 0 in the first life. */
+  rebirth: number;
   className: string;
   race: string;
   country: string;

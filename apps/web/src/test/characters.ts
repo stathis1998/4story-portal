@@ -6,6 +6,7 @@ export function character(overrides: Partial<Character> = {}): Character {
     slot: 0,
     name: 'Moosey',
     level: 45,
+    rebirth: 0,
     className: 'Wizard',
     race: 'Human',
     country: 'Defugel',

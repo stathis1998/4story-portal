@@ -8,7 +8,7 @@ export type AwardRow = {
   userId: number;
   /** The character that earned it. 0 for an account achievement. */
   charId: number;
-  /** Which life of the character it was earned in. 0 until characters can be reborn. */
+  /** Which life of the character it was earned in, or FIRST_LIFE for an achievement paid once (and an account one). */
   rebirth: number;
   achievementId: string;
   level: number;
@@ -27,8 +27,7 @@ export const ANNOUNCE_SKIPPED = 2;
 
 /** An account achievement belongs to no character. */
 export const NO_CHARACTER = 0;
-/** The life every character is in until rebirth exists. */
-export const FIRST_LIFE = 0;
+export { FIRST_LIFE } from './achievement-rules.js';
 
 export type RewardItemRow = { itemId: number; name: string; stack: number };
 

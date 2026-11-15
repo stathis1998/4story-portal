@@ -22,6 +22,7 @@ describe('toCharacter', () => {
           bSlot: 2,
           szNAME: 'Moosey',
           bLevel: 45,
+          rebirth: 3,
           dwGold: 1234,
           dwSilver: 56,
           dwCooper: 78,
@@ -35,6 +36,7 @@ describe('toCharacter', () => {
       slot: 2,
       name: 'Moosey',
       level: 45,
+      rebirth: 3,
       className: 'Wizard',
       race: 'Human',
       country: 'Defugel',
@@ -54,4 +56,6 @@ describe('toCharacter', () => {
       createdAt: null,
       lastLogoutAt: null,
     }));
+
+  it('is in the first life without a rebirth', () => expect(toCharacter(characterRow()).rebirth).toBe(0));
 });

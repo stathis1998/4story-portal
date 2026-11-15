@@ -8,7 +8,7 @@ import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
 import { type RawGearRow, toGearRow } from '../src/stats/stats.repository.js';
 import { PortalStore } from '../src/store/portal-store.js';
 import { FakeAccountsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
-import { gearDefaults } from './fixtures.js';
+import { firstLife, gearDefaults } from './fixtures.js';
 import { createTestApp } from './test-app.js';
 
 const MOOSE = 100;
@@ -30,6 +30,7 @@ const character = (overrides: Partial<CharacterRow>): CharacterRow => ({
   gold: 12345,
   createdAt: new Date('2026-01-01T00:00:00Z'),
   banned: false,
+  ...firstLife,
   ...overrides,
 });
 
@@ -92,8 +93,8 @@ describe('inspecting characters', () => {
   describe('GET /characters/:id/inspect', () => {
     it('shows another player only their public details', async () => {
       const { body } = await player.get('/api/characters/2/inspect').expect(200);
-      expect(Object.keys(body).sort()).toEqual(['className', 'country', 'gear', 'id', 'level', 'name', 'race']);
-      expect(body).toMatchObject({ id: 2, name: 'Rival', level: 60 });
+      expect(Object.keys(body).sort()).toEqual(['className', 'country', 'gear', 'id', 'level', 'name', 'race', 'rebirth']);
+      expect(body).toMatchObject({ id: 2, name: 'Rival', level: 60, rebirth: 0 });
     });
 
     it('builds the in-game tooltip for each item, sorted by slot', async () => {

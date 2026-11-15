@@ -17,6 +17,8 @@ export type CharacterRow = {
   wMapID: number;
   dCreateDate: Date | null;
   dLogoutDate: Date | null;
+  /** From TCHARREBIRTHTABLE: 0 in the first life. */
+  rebirth: number;
 };
 
 export type LevelFreezeRow = {
@@ -52,15 +54,17 @@ export class SqlCharactersRepository implements CharactersRepository {
   constructor(private readonly db: DbService) {}
 
   async listByUser(userId: number): Promise<CharacterRow[]> {
+    const { characters, rebirths } = this.db.tables;
     const result = await this.db.pool
       .request()
       .input('userId', sql.Int, userId)
       .query<CharacterRow>(
-        `SELECT dwCharID, bSlot, szNAME, bLevel, bClass, bRace, bCountry, dwGold, dwSilver, dwCooper,
-                wMapID, dCreateDate, dLogoutDate
-         FROM ${this.db.tables.characters}
-         WHERE dwUserID = @userId AND bDelete = 0
-         ORDER BY bSlot`,
+        `SELECT c.dwCharID, c.bSlot, c.szNAME, c.bLevel, c.bClass, c.bRace, c.bCountry, c.dwGold, c.dwSilver, c.dwCooper,
+                c.wMapID, c.dCreateDate, c.dLogoutDate, ISNULL(r.bRebirth, 0) AS rebirth
+         FROM ${characters} c
+         LEFT JOIN ${rebirths} r ON r.dwCharID = c.dwCharID
+         WHERE c.dwUserID = @userId AND c.bDelete = 0
+         ORDER BY c.bSlot`,
       );
     return result.recordset;
   }

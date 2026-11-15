@@ -11,6 +11,7 @@ const profile: CharacterProfile = {
   id: 1,
   name: 'Kaelith',
   level: 40,
+  rebirth: 0,
   className: 'Wizard',
   race: 'Human',
   country: 'Defugel',

@@ -13,6 +13,7 @@ import { StoreModule } from './store/store.module.js';
 import { WeaponsModule } from './weapons/weapons.module.js';
 import { RouletteModule } from './roulette/roulette.module.js';
 import { SlotsModule } from './slots/slots.module.js';
+import { RebirthModule } from './rebirth/rebirth.module.js';
 import { WheelModule } from './wheel/wheel.module.js';
 
 @Module({
@@ -33,6 +34,7 @@ import { WheelModule } from './wheel/wheel.module.js';
     AchievementsModule,
     WeaponsModule,
     WheelModule,
+    RebirthModule,
     RouletteModule,
     SlotsModule,
     StoreModule,

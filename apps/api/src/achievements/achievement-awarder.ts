@@ -2,15 +2,23 @@ import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } f
 import { achievementLevelName } from '@4story-portal/shared';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
-import type { AccountStatsRow } from '../stats/stats-rules.js';
-import { ACCOUNT_ACHIEVEMENTS, type AchievementFamily, CHARACTER_ACHIEVEMENTS, levelReached } from './achievement-rules.js';
+import type { AccountStatsRow, CharacterStatsRow } from '../stats/stats-rules.js';
+import {
+  ACCOUNT_ACHIEVEMENTS,
+  type AchievementFamily,
+  awardLife,
+  CHARACTER_ACHIEVEMENTS,
+  FIRST_LIFE,
+  levelReached,
+  lifeValue,
+  REBIRTH_SETTLE_SECONDS,
+} from './achievement-rules.js';
 import {
   ACHIEVEMENTS_REPOSITORY,
   type AchievementsRepository,
   ANNOUNCE_SKIPPED,
   ANNOUNCE_WAITING,
   AWARD_SWITCHED_OFF,
-  FIRST_LIFE,
   NO_CHARACTER,
 } from './achievements.repository.js';
 
@@ -36,8 +44,11 @@ const REWARD_NOTE = ' Your reward is attached.';
 export type TickResult = { awarded: number; announced: number };
 const NOTHING: TickResult = { awarded: 0, announced: 0 };
 
-/** A level someone has reached and not been awarded. `charId` is NO_CHARACTER for an account achievement. */
-type Due = { userId: number; charId: number; name: string; family: AchievementFamily; level: number };
+/** A level someone has reached and not been awarded, in the life it is recorded under. `charId` is NO_CHARACTER for an account achievement. */
+type Due = { userId: number; charId: number; name: string; family: AchievementFamily; level: number; rebirth: number };
+
+/** Reborn less than REBIRTH_SETTLE_SECONDS ago, by the database's clock. */
+const settling = ({ row }: CharacterStatsRow) => row.rebirthAgeSeconds !== null && row.rebirthAgeSeconds < REBIRTH_SETTLE_SECONDS;
 
 export const awardKey = (userId: number, charId: number, achievementId: string, level: number, rebirth: number) =>
   `${userId}:${charId}:${achievementId}:${level}:${rebirth}`;
@@ -117,10 +128,10 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
     const given = new Set(awards.map((award) => awardKey(award.userId, award.charId, award.achievementId, award.level, award.rebirth)));
 
     const due: Due[] = [];
-    const add = (userId: number, charId: number, name: string, family: AchievementFamily, value: number) => {
+    const add = (userId: number, charId: number, name: string, family: AchievementFamily, value: number, rebirth: number) => {
       const reached = levelReached(family, value);
       for (let level = 1; level <= reached; level++) {
-        if (!given.has(awardKey(userId, charId, family.id, level, FIRST_LIFE))) due.push({ userId, charId, name, family, level });
+        if (!given.has(awardKey(userId, charId, family.id, level, rebirth))) due.push({ userId, charId, name, family, level, rebirth });
       }
     };
     for (const account of stats.accounts.values()) {
@@ -128,9 +139,13 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
       // An account with only banned characters earns nothing.
       if (playing.length === 0) continue;
       const name = shownAs(account);
-      for (const family of ACCOUNT_ACHIEVEMENTS) add(account.userId, NO_CHARACTER, name, family, family.value(account));
+      for (const family of ACCOUNT_ACHIEVEMENTS) add(account.userId, NO_CHARACTER, name, family, family.value(account), FIRST_LIFE);
       for (const character of playing) {
-        for (const family of CHARACTER_ACHIEVEMENTS) add(account.userId, character.row.id, character.row.name, family, family.value(character));
+        // Just reborn: the numbers may still be the old life's.
+        if (settling(character)) continue;
+        for (const family of CHARACTER_ACHIEVEMENTS) {
+          add(account.userId, character.row.id, character.row.name, family, lifeValue(family, character), awardLife(family, character));
+        }
       }
     }
     // Level 1 of everything before level 2 of anything, so a backlog reads in order.
@@ -138,7 +153,7 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
 
     let awarded = 0;
     const batch = due.slice(0, this.timing.maxPerTick);
-    for (const { userId, charId, name: who, family, level } of batch) {
+    for (const { userId, charId, name: who, family, level, rebirth } of batch) {
       const name = achievementLevelName(family.name, level, family.levels.length);
       const goal = family.goal(family.levels[level - 1]);
       let id: number;
@@ -148,7 +163,7 @@ export class AchievementAwarder implements OnModuleInit, OnModuleDestroy {
         id = await this.repo.award({
           userId,
           charId,
-          rebirth: FIRST_LIFE,
+          rebirth,
           achievementId: family.id,
           level,
           sender: SENDER,

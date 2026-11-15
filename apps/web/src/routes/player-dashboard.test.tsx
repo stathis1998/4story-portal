@@ -1,5 +1,5 @@
 import type { ActiveEvents, CharacterProfile, HallOfFame, NewsItem, PlayerOverview } from '@4story-portal/shared'
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { accountGroup, achievement, achievementsOverview, characterGroup, simple } from '../test/achievements'
 import { character } from '../test/characters'
@@ -337,6 +337,7 @@ describe('character page', () => {
     id: 1,
     name: 'Kaelith',
     level: 50,
+    rebirth: 0,
     className: 'Warrior',
     race: 'Human',
     country: 'Defugel',
@@ -359,6 +360,18 @@ describe('character page', () => {
   })
 
   const route = (body: unknown, status = 200) => ({ 'GET /characters/1/profile': () => json(status, body) })
+
+  it('shows the rebirth number beside the level, and nothing in the first life', async () => {
+    mockApi(route(profile({ rebirth: 2 })))
+    renderRoute('/characters/1', { me })
+    expect(await screen.findByText('Rebirth 2')).toBeInTheDocument()
+    cleanup()
+
+    mockApi(route(profile({ rebirth: 0 })))
+    renderRoute('/characters/1', { me })
+    await screen.findByRole('heading', { name: 'Kaelith' })
+    expect(screen.queryByText(/^Rebirth \d/)).not.toBeInTheDocument()
+  })
 
   it('shows the character and its records', async () => {
     mockApi(route(profile()))

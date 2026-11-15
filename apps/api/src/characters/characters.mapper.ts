@@ -8,6 +8,7 @@ export function toCharacter(row: CharacterRow): Character {
     slot: row.bSlot,
     name: row.szNAME,
     level: row.bLevel,
+    rebirth: row.rebirth,
     className: className(row.bClass),
     race: raceName(row.bRace),
     country: countryName(row.bCountry),

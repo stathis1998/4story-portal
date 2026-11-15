@@ -25,7 +25,16 @@ type Family<Scope extends AchievementScope, Subject> = {
   format?: (value: number) => string;
 };
 
-export type CharacterFamily = Family<'character', CharacterStatsRow>;
+/**
+ * What a character's rebirth does to an achievement:
+ * - `restarts`: the number starts over by itself (the rebirth resets it), and each life earns the levels again.
+ * - `since`: a counter. Each life counts from the number stored at the rebirth, and earns the levels again.
+ * - `once`: something the character keeps, or a record that can't be counted from a date. Each level pays
+ *   once, in whichever life it is reached: paying it again would hand the reward straight back.
+ */
+export type RebirthBehaviour = 'restarts' | 'since' | 'once';
+
+export type CharacterFamily = Family<'character', CharacterStatsRow> & { rebirth: RebirthBehaviour };
 export type AccountFamily = Family<'account', AccountStatsRow>;
 export type AchievementFamily = CharacterFamily | AccountFamily;
 
@@ -55,6 +64,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'level',
     name: 'Adventurer',
+    rebirth: 'restarts',
     category: 'progress',
     levels: [20, 40, 60, 80, 90],
     value: ({ row }) => row.level,
@@ -63,6 +73,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'skills',
     name: 'Scholar',
+    rebirth: 'restarts',
     category: 'progress',
     // A level 89 character had 134 learned and 238 points unspent a week into the 2026 season.
     levels: [50, 100, 150, 200, 250],
@@ -74,6 +85,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'kills',
     name: 'Slayer',
+    rebirth: 'since',
     category: 'combat',
     levels: [1_000, 10_000, 50_000, 250_000, 1_000_000],
     value: (c) => c.kills,
@@ -82,6 +94,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'damage',
     name: 'Heavy Hitter',
+    rebirth: 'since',
     category: 'combat',
     levels: [1_000_000, 10_000_000, 100_000_000, 1_000_000_000, 5_000_000_000],
     value: (c) => c.damageDealt,
@@ -91,6 +104,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'damage-taken',
     name: 'Punching Bag',
+    rebirth: 'since',
     category: 'combat',
     levels: [100_000, 500_000, 2_500_000, 10_000_000, 50_000_000],
     value: (c) => c.damageTaken,
@@ -100,6 +114,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'healing',
     name: 'Lifeline',
+    rebirth: 'since',
     category: 'combat',
     levels: [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000],
     value: (c) => c.healDone,
@@ -109,6 +124,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'bestiary',
     name: 'Explorer',
+    rebirth: 'once',
     category: 'combat',
     levels: [20, 50, 100, 150, 250],
     value: (c) => c.monsterTypes,
@@ -117,6 +133,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'nemesis',
     name: 'Nemesis',
+    rebirth: 'once',
     category: 'combat',
     levels: [500, 2_500, 10_000, 25_000, 100_000],
     value: (c) => c.topMonsterKills,
@@ -125,6 +142,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'duels',
     name: 'Duellist',
+    rebirth: 'since',
     category: 'combat',
     levels: [1, 10, 25, 50, 100],
     value: (c) => c.duelWins,
@@ -135,6 +153,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'upgrade',
     name: 'Master Smith',
+    rebirth: 'once',
     category: 'gear',
     levels: [18, 20, 22, 23, 24],
     value: (c) => c.highestUpgrade,
@@ -144,6 +163,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'upgrade-successes',
     name: 'Steady Hand',
+    rebirth: 'since',
     category: 'gear',
     levels: [25, 100, 300, 1_000, 3_000],
     value: (c) => c.upgradesSucceeded,
@@ -152,6 +172,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'gem-successes',
     name: 'Gem Cutter',
+    rebirth: 'since',
     category: 'gear',
     levels: [50, 250, 1_000, 5_000, 20_000],
     value: (c) => c.gemSuccesses,
@@ -160,6 +181,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'gem-level',
     name: 'Brilliant',
+    rebirth: 'once',
     category: 'gear',
     levels: [1, 2, 3, 4, 5],
     value: (c) => Math.max(0, ...c.gear.map((item) => item.gem)),
@@ -168,6 +190,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'glowing',
     name: 'Radiant',
+    rebirth: 'once',
     category: 'gear',
     levels: [1, 3, 5, 8, 11],
     value: (c) => c.gear.filter((item) => item.upgrade >= GLOW_FROM_UPGRADE).length,
@@ -176,6 +199,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'equipped',
     name: 'Fully Geared',
+    rebirth: 'once',
     category: 'gear',
     levels: [6, 11, 15, 17, 19],
     value: (c) => c.gear.length,
@@ -186,6 +210,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'gold-held',
     name: 'Hoarder',
+    rebirth: 'once',
     category: 'wealth',
     levels: [100, 500, 2_000, 5_000, 10_000],
     value: ({ row }) => row.gold,
@@ -194,6 +219,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'gold-looted',
     name: 'Looter',
+    rebirth: 'since',
     category: 'wealth',
     levels: [100, 1_000, 5_000, 20_000, 50_000],
     value: (c) => gold(c.copperLooted),
@@ -202,6 +228,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'gold-spent',
     name: 'Big Spender',
+    rebirth: 'since',
     category: 'wealth',
     levels: [100, 1_000, 5_000, 25_000, 100_000],
     value: (c) => gold(c.copperSpent),
@@ -210,6 +237,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'lottery-plays',
     name: 'Gambler',
+    rebirth: 'since',
     category: 'wealth',
     levels: [10, 50, 250, 1_000, 5_000],
     value: (c) => c.lotteriesWon + c.lotteriesLost,
@@ -218,6 +246,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'lottery-wins',
     name: 'Lucky',
+    rebirth: 'since',
     category: 'wealth',
     levels: [1, 10, 50, 200, 500],
     value: (c) => c.lotteriesWon,
@@ -226,6 +255,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'lottery-gold',
     name: 'Jackpot',
+    rebirth: 'since',
     category: 'wealth',
     levels: [100, 1_000, 5_000, 20_000, 50_000],
     value: (c) => gold(c.lotteryCopperWon),
@@ -236,6 +266,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'titles',
     name: 'Titled',
+    rebirth: 'once',
     category: 'collection',
     levels: [3, 6, 10, 15, 25],
     value: (c) => c.titles.length,
@@ -244,6 +275,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'companions',
     name: 'Pack Leader',
+    rebirth: 'once',
     category: 'collection',
     levels: [1, 2, 3, 4, 5],
     value: (c) => c.companions.length,
@@ -252,6 +284,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'companion-level',
     name: 'Beast Master',
+    rebirth: 'once',
     category: 'collection',
     levels: [10, 20],
     value: (c) => c.companionLevel,
@@ -262,6 +295,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'friends',
     name: 'Good Company',
+    rebirth: 'once',
     category: 'social',
     levels: [1, 2, 4, 6, 10],
     value: (c) => c.friends,
@@ -270,6 +304,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'guild-member',
     name: 'Guild Member',
+    rebirth: 'once',
     category: 'social',
     levels: [1],
     value: (c) => (c.inGuild ? 1 : 0),
@@ -278,6 +313,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'guild-leader',
     name: 'Guild Leader',
+    rebirth: 'once',
     category: 'social',
     levels: [1],
     value: (c) => (c.leadsGuild ? 1 : 0),
@@ -288,6 +324,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'upgrade-fails',
     name: 'Cursed Anvil',
+    rebirth: 'since',
     category: 'misfortune',
     levels: [10, 100, 500, 2_000, 10_000],
     value: (c) => c.upgradesFailed,
@@ -296,6 +333,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'setbacks',
     name: 'Two Steps Back',
+    rebirth: 'since',
     category: 'misfortune',
     levels: [10, 50, 200, 1_000, 5_000],
     value: (c) => c.upgradeSetbacks,
@@ -304,6 +342,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'destroyed',
     name: 'Heartbreak',
+    rebirth: 'since',
     category: 'misfortune',
     levels: [1, 3, 10, 25, 50],
     value: (c) => c.itemsDestroyed,
@@ -312,6 +351,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'lottery-losses',
     name: 'Unlucky',
+    rebirth: 'since',
     category: 'misfortune',
     levels: [10, 100, 500, 2_000, 10_000],
     value: (c) => c.lotteriesLost,
@@ -320,6 +360,7 @@ export const CHARACTER_ACHIEVEMENTS: readonly CharacterFamily[] = [
   character({
     id: 'lose-streak',
     name: 'Cold Streak',
+    rebirth: 'once',
     category: 'misfortune',
     levels: [10, 20, 35, 50, 75],
     value: (c) => c.longestLoseStreak,
@@ -406,9 +447,26 @@ export const levelReached = (family: Pick<AchievementFamily, 'levels'>, value: n
 
 export const formatValue = (family: Pick<AchievementFamily, 'format'>, value: number): string => (family.format ?? grouped)(value);
 
-/** Every character achievement level this character's stats reach right now. */
+/** The life every character starts in, and the one a `once` achievement and every account achievement are awarded under. */
+export const FIRST_LIFE = 0;
+
+/** How long the awarder leaves a character alone after its rebirth, so numbers read just before it are never paid in the new life. */
+export const REBIRTH_SETTLE_SECONDS = 120;
+
+/** The number an achievement counts in the character's current life. */
+export const lifeValue = (family: CharacterFamily, c: CharacterStatsRow): number =>
+  family.rebirth === 'since' ? Math.max(0, family.value(c) - (c.row.baseline[family.id] ?? 0)) : family.value(c);
+
+/** The life an award of this achievement is recorded under. */
+export const awardLife = (family: CharacterFamily, c: CharacterStatsRow): number => (family.rebirth === 'once' ? FIRST_LIFE : c.row.rebirth);
+
+/** What a rebirth stores: the number behind every counter, which the new life counts from. */
+export const baselineOf = (c: CharacterStatsRow): Record<string, number> =>
+  Object.fromEntries(CHARACTER_ACHIEVEMENTS.filter((family) => family.rebirth === 'since').map((family) => [family.id, family.value(c)]));
+
+/** Every character achievement level this character's stats reach right now, in its current life. */
 export const characterLevelsDone = (subject: CharacterStatsRow): number =>
-  CHARACTER_ACHIEVEMENTS.reduce((total, family) => total + levelReached(family, family.value(subject)), 0);
+  CHARACTER_ACHIEVEMENTS.reduce((total, family) => total + levelReached(family, lifeValue(family, subject)), 0);
 
 /** Every account achievement level the account's stats reach right now. */
 export const accountLevelsDone = (subject: AccountStatsRow): number =>

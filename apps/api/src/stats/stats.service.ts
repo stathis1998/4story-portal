@@ -22,7 +22,7 @@ import { className, countryName, raceName } from '../characters/character-codes.
 import { itemIcons } from '../gm/game-icons.generated.js';
 import { tooltipCharts } from '../gm/game-tooltips.generated.js';
 import { buildItemTooltip, type OptionRule } from './item-tooltip.js';
-import { levelsDone } from '../achievements/achievement-rules.js';
+import { baselineOf, levelsDone } from '../achievements/achievement-rules.js';
 import { PortalStore, StoreUnavailableError } from '../store/portal-store.js';
 import {
   type AccountStatsRow,
@@ -89,8 +89,21 @@ const hours = (minutes: number) => Math.round(minutes / 6) / 10;
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const itemName = (itemId: number, name: string | null) => (name && name !== '_' ? name : `Item #${itemId}`);
 
+// Levels never reach this, so every rebirth ranks above any level of the life before it.
+const LEVELS_PER_REBIRTH = 1000;
+const rebirthAndLevel = (value: number) => {
+  const rebirth = Math.floor(value / LEVELS_PER_REBIRTH);
+  const level = value % LEVELS_PER_REBIRTH;
+  return rebirth > 0 ? `Rebirth ${rebirth}, Lv. ${level}` : `Lv. ${level}`;
+};
+
 const CHARACTER_CATEGORIES: Category[] = [
-  { id: 'level', label: 'Highest level', value: (c) => c.row.level, display: (v) => `Lv. ${v}` },
+  {
+    id: 'level',
+    label: 'Highest level',
+    value: (c) => c.row.rebirth * LEVELS_PER_REBIRTH + c.row.level,
+    display: rebirthAndLevel,
+  },
   { id: 'hours', label: 'Most hours', value: (c) => c.minutesPlayed, display: (v) => `${hours(v)} h` },
   { id: 'streak', label: 'Longest streak', value: (c) => c.longestStreak, display: (v) => plural(v, 'day') },
   {
@@ -191,6 +204,7 @@ export class StatsService {
       id: row.id,
       name: row.name,
       level: row.level,
+      rebirth: row.rebirth,
       className: className(row.classCode),
       race: raceName(row.raceCode),
       country: countryName(row.countryCode),
@@ -224,6 +238,7 @@ export class StatsService {
       id: row.id,
       name: row.name,
       level: row.level,
+      rebirth: row.rebirth,
       className: className(row.classCode),
       race: raceName(row.raceCode),
       country: countryName(row.countryCode),
@@ -335,6 +350,18 @@ export class StatsService {
   async achievementStats(): Promise<{ stats: ComputedStats; ranked: AccountStatsRow[] }> {
     const snapshot = await this.snapshot();
     return { stats: snapshot.stats, ranked: this.rankedAccounts(snapshot) };
+  }
+
+  /** The character's baseline from a load that bypasses the cache. Null if the character isn't found. */
+  async freshBaseline(charId: number): Promise<Record<string, number> | null> {
+    const rows = await this.repo.loadRows();
+    const character = computeStats(rows, serverToday()).characters.get(charId);
+    return character ? baselineOf(character) : null;
+  }
+
+  /** Forgets the cached snapshot, so the next page load reads the database. */
+  dropCache(): void {
+    this.cache = null;
   }
 
   setHideGms(hideGms: boolean, changedBy: string): HallOfFameSettings {
