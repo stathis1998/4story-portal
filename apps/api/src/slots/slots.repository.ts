@@ -142,7 +142,9 @@ const potStep = (jackpot: string) => `IF @add IS NULL OR @roll IS NULL OR @add >
   END
   ELSE UPDATE ${jackpot} SET llPot = @pot, llCap = @cap WHERE bID = 1`;
 
-type RawSpin = Omit<SlotSpinRow, 'stops' | 'free'> & { stop1: number; stop2: number; stop3: number; stop4: number; stop5: number; free: string };
+/** The money is BIGINT, so strings from the driver. */
+type RawSpin = Omit<SlotSpinRow, 'stops' | 'free' | 'stake' | 'payout' | 'jackpot'> &
+  Record<'stake' | 'payout' | 'jackpot', string> & { stop1: number; stop2: number; stop3: number; stop4: number; stop5: number; free: string };
 type RawTotals = { machine: string } & Record<'spins' | 'todaySpins', number> &
   Record<'staked' | 'paid' | 'added' | 'todayStaked' | 'todayPaid' | 'todayAdded', string>;
 
@@ -277,16 +279,17 @@ export class SqlSlotsRepository implements SlotsRepository {
       .query<RawSpin>(
         `SELECT TOP (@top) dwID AS id, dwUserID AS userId, szCharName AS character, dSpun AS spunAt, szMachine AS machine,
                 bStop1 AS stop1, bStop2 AS stop2, bStop3 AS stop3, bStop4 AS stop4, bStop5 AS stop5, szFree AS free,
-                CAST(llStake / ${SILVER} AS INT) AS stake, CAST(llPayout / ${SILVER} AS INT) AS payout,
-                CAST(llJackpot / ${SILVER} AS INT) AS jackpot
+                CAST(llStake / ${SILVER} AS BIGINT) AS stake, CAST(llPayout / ${SILVER} AS BIGINT) AS payout,
+                CAST(llJackpot / ${SILVER} AS BIGINT) AS jackpot
          FROM ${this.db.tables.slotSpins}
          WHERE bRules = ${SLOT_RULES} AND (${where})
          ORDER BY dwID DESC`,
       );
     // A row whose free spins cannot be read is left out, like one whose stops are out of range.
-    return result.recordset.flatMap(({ stop1, stop2, stop3, stop4, stop5, free, ...row }): SlotSpinRow[] => {
+    return result.recordset.flatMap(({ stop1, stop2, stop3, stop4, stop5, free, stake, payout, jackpot, ...row }): SlotSpinRow[] => {
       const spins = parseSlotFree(free);
-      return spins ? [{ ...row, stops: [stop1, stop2, stop3, stop4, stop5], free: spins }] : [];
+      const money = { stake: Number(stake), payout: Number(payout), jackpot: Number(jackpot) };
+      return spins ? [{ ...row, ...money, stops: [stop1, stop2, stop3, stop4, stop5], free: spins }] : [];
     });
   }
 
