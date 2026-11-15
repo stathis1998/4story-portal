@@ -819,6 +819,11 @@ export class FakeSlotsRepository implements SlotsRepository {
   readonly betCalls: SlotBetInput[] = [];
   /** The slots' own tables reject. The wallets' list is another table and has its own flag (`wallets.failing`). */
   failing = false;
+  /**
+   * The spin table is one from before the five reels: the bet and the lists name columns it lacks and reject,
+   * while the settings, the pot and the totals still read.
+   */
+  columnsMissing = false;
   private nextId = 1;
 
   constructor(readonly wallets: FakeWalletsRepository = new FakeWalletsRepository()) {}
@@ -833,6 +838,10 @@ export class FakeSlotsRepository implements SlotsRepository {
 
   private check(): void {
     if (this.failing) throw new Error('Invalid object name TPortalSlotSpin');
+  }
+
+  private checkColumns(): void {
+    if (this.columnsMissing) throw new Error("Invalid column name 'bStop4'.");
   }
 
   private plain({ multiple: _multiple, added: _added, rules: _rules, ...row }: SlotSpinRow & { multiple?: number; added?: number; rules?: number }): SlotSpinRow {
@@ -877,6 +886,7 @@ export class FakeSlotsRepository implements SlotsRepository {
   async bet(input: SlotBetInput): Promise<SlotBetOutcome> {
     this.check();
     this.betCalls.push(input);
+    this.checkColumns();
     const added = input.add > 0 ? input.add : 0;
     let jackpot = 0;
     let nextPot = this.potRow;
@@ -927,21 +937,25 @@ export class FakeSlotsRepository implements SlotsRepository {
 
   async spinsOf(userId: number, limit: number): Promise<SlotSpinRow[]> {
     this.check();
+    this.checkColumns();
     return this.newest(this.current().filter((row) => row.userId === userId), limit);
   }
 
   async bigWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
+    this.checkColumns();
     return this.newest(this.current().filter((row) => row.multiple >= SLOT_BIG_WIN || row.jackpot > 0), limit);
   }
 
   async jackpotWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
+    this.checkColumns();
     return this.newest(this.current().filter((row) => row.jackpot > 0), limit);
   }
 
   async latest(limit: number): Promise<SlotSpinRow[]> {
     this.check();
+    this.checkColumns();
     return this.newest(this.current(), limit);
   }
 

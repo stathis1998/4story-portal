@@ -434,13 +434,18 @@ describe('/api/slots', () => {
       untouched();
     });
 
-    it('refuses a spin with nothing taken when the columns are not there', async () => {
-      slots.failing = true;
+    it('refuses a spin with nothing taken when the columns are not there, and still opens the page', async () => {
+      // The new API on a spin table from before the five reels: the settings read, the bet and the lists do not.
+      slots.columnsMissing = true;
       draws(...paying);
       const res = await spin({ stake: 20 }).expect(503);
       expect(res.body.message).toBe('Slots are not available right now');
-      expect(slots.betCalls).toEqual([]);
+      expect(slots.betCalls).toHaveLength(1);
+      expect(slots.spinRows).toEqual([]);
       untouched();
+      const page = await player.get('/api/slots').expect(200);
+      expect(page.body).toMatchObject({ live: true, machines: STARTING, mine: [], bigWins: [] });
+      expect(page.body.characters.map((c: { name: string }) => c.name)).toEqual(['Mounara', 'Busy']);
     });
 
     it('serves the page without characters when the wallets cannot be read', async () => {
