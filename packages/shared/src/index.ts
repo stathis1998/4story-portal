@@ -7,6 +7,7 @@ export * from './gm-events.js';
 export * from './gm-mail.js';
 export * from './player-stats.js';
 export * from './roulette.js';
+export * from './rebirth.js';
 export * from './slot-figures.js';
 export * from './slot-machines.js';
 export * from './slot-rules.js';
