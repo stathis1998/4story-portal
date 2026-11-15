@@ -35,7 +35,7 @@ const state = (overrides: Partial<GmSlots> = {}): GmSlots => ({
     machine({ key: 'armoury', stakes: [40, 60, 100] }),
     machine({ key: 'hoard', stakes: [60, 100, 200] }),
   ],
-    latest: [spin(), spin({ id: 2, at: '2026-11-13T21:30:00.000Z', character: 'Mounara', machine: 'armoury', stops: [1, 1, 1, 1, 1], stake: 100, payout: 0 })],
+  latest: [spin(), spin({ id: 2, at: '2026-11-13T21:30:00.000Z', character: 'Mounara', machine: 'armoury', stops: [1, 1, 1, 1, 1], stake: 100, payout: 0 })],
   jackpot: { live: true, setCap: 50, running: null, added: 0, paid: 0, drops: 0, wins: [] },
   ...overrides,
 })
@@ -180,6 +180,21 @@ describe('GM slots page', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Enter a whole number')
     expect(middle).toHaveAttribute('aria-invalid', 'true')
+    expect(sentBodies(fetchMock, 'PUT /gm/slots/machines/armoury')).toEqual([])
+  })
+
+  it('tells a stake past what a number holds with the form message', async () => {
+    const fetchMock = mockApi(base())
+    const { user } = renderRoute('/gm/slots', { me: gm })
+
+    const armoury = await section('The Armoury')
+    const highest = armoury.getByRole('spinbutton', { name: 'Highest stake' })
+    await user.clear(highest)
+    await user.type(highest, '99999999999999999999')
+    await user.click(armoury.getByRole('button', { name: 'Save stakes' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter three different stakes in multiples of 20 Silver, lowest first')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(sentBodies(fetchMock, 'PUT /gm/slots/machines/armoury')).toEqual([])
   })
 

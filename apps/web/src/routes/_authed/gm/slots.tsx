@@ -5,7 +5,6 @@ import {
   type SlotMachine,
   SLOT_JACKPOT_MAX_CAP,
   SLOT_JACKPOT_MIN_CAP,
-  SLOT_MAX_STAKE,
   SLOT_MIN_STAKE,
   type SlotStakes,
   type SlotTotals,
@@ -335,11 +334,9 @@ function MachineSection({ state, rules }: { state: GmSlotMachine; rules: SlotMac
         }
         return
       }
-      for (const issue of parsed.error.issues) {
-        const index = issue.path[1]
-        if (typeof index === 'number') errors[index] ??= `From ${SLOT_MIN_STAKE} to ${SLOT_MAX_STAKE.toLocaleString('en-US')} Silver`
-        else setFormError((current) => current ?? issue.message)
-      }
+      // The schema has one message for every way three whole stakes can be wrong, and the form shows it as it stands.
+      // A stake past what a number holds also fails on its own; that issue's wording is not the GM's.
+      setFormError(parsed.error.issues.find((issue) => issue.path.length === 1)?.message ?? parsed.error.issues[0].message)
     }
     setFieldErrors(errors)
   }
@@ -475,7 +472,8 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
                   <td className="px-3 py-2 font-bold">{spin.character}</td>
                   <td className="px-3 py-2">{rules.name}</td>
                   <td className="px-3 py-2">{silverText(spin.stake)}</td>
-                  <td className="px-3 py-2">{spin.jackpot > 0 ? `Jackpot ${silverText(spin.jackpot)}` : silverText(spin.payout)}
+                  <td className="px-3 py-2">
+                    {spin.jackpot > 0 ? `Jackpot ${silverText(spin.jackpot)}` : silverText(spin.payout)}
                     {/* A round is the paid spin and its free spins: the paid amount is all of it. */}
                     {spin.free.length > 0 && ` with ${spin.free.length} free spins`}
                   </td>
