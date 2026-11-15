@@ -133,7 +133,8 @@ const lineIds = (spin: RoundSpin) => spin.outcome.lines.map((win) => win.line)
 
 /**
  * The show of a round on the slots page. `start` it with the answer to a spin; `onDone` runs once the whole round
- * has been shown (or skipped), and never after unmount.
+ * has been shown, however it ended (by itself, by a press, by Skip, or at once with reduce motion), and never after
+ * unmount.
  */
 export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
   const [show, setShow] = useState<RoundShow>(IDLE)
@@ -430,11 +431,8 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
   }
 
   /** A press of Spin, or the space bar, while a round shows: it stops the reels, or ends what is showing. */
-  function press(): boolean {
-    const r = round.current
-    r?.press?.()
-    // True when this press ended the round.
-    return r !== null && round.current !== r
+  function press() {
+    round.current?.press?.()
   }
 
   /** "Skip to the total": the reels on the last free spin and the round over, at once. */

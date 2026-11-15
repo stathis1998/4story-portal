@@ -167,6 +167,8 @@ const spinButton = () => within(panel()).getByRole('button', { name: /^(Spin|Sto
 const loaded = () => screen.findByRole('button', { name: 'Spin' })
 /** Spin back after a round: it has been shown to its end. */
 const settled = loaded
+/** Spin ready again after the pause that follows every round, on the real clock. */
+const ready = () => waitFor(() => expect(spinButton()).not.toHaveAttribute('aria-disabled'))
 const tab = (name: string) => screen.getByRole('tab', { name })
 const tabNames = () => within(screen.getByRole('tablist', { name: 'Machine' })).getAllByRole('tab').map((t) => t.textContent)
 const stake = (name: string) => screen.getByRole('radio', { name })
@@ -248,13 +250,15 @@ function run(ms: number, each?: () => void) {
   }
 }
 
-/** Moves the clock until the round has been shown and Spin is back. */
+/** Moves the clock until the round has been shown and Spin is back, past the pause after the round. */
 function playOut(each?: () => void) {
-  for (let t = 0; t < 120_000 && spinButton().textContent !== 'Spin'; t += 200) {
+  const back = () => spinButton().textContent === 'Spin' && !spinButton().hasAttribute('aria-disabled')
+  for (let t = 0; t < 120_000 && !back(); t += 200) {
     advance(200)
     each?.()
   }
   expect(spinButton()).toHaveTextContent('Spin')
+  expect(spinButton()).not.toHaveAttribute('aria-disabled')
 }
 
 /** Every text `read` gives over a run, in order, each once. */
@@ -584,6 +588,7 @@ describe('slots', () => {
     expect(spinButton()).toHaveTextContent('Spin')
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
 
+    await ready()
     fireEvent.keyDown(document.body, { key: ' ' })
     await screen.findByRole('img', { name: reelsName(LINES) })
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
@@ -1356,6 +1361,7 @@ describe('slots', () => {
 
       // A lost round has no sound of its own.
       calls.length = 0
+      await ready()
       await user.click(spinButton())
       expect(await within(status()).findByText(lineOf(lost.spin))).toBeInTheDocument()
       expect(calls).toEqual(['unlock', 'press'])
@@ -1520,18 +1526,105 @@ describe('slots', () => {
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
       })
 
-      it('a round that ends by itself leaves Spin ready at once', async () => {
+      it('a round that ends by itself leaves Spin resting for 400 ms: a press 200 ms later sends nothing, one after sends the next', async () => {
         const { user, fetchMock } = open(state(), server(lost, lines))
         await loaded()
         animate()
         await user.click(spinButton())
         await screen.findByRole('img', { name: 'Reels, spinning' })
-        playOut()
+        // To the very frame the round ends.
+        for (let t = 0; t < 20_000 && spinButton().textContent !== 'Spin'; t += 10) advance(10)
+        expect(spinButton()).toHaveTextContent('Spin')
+        expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
+        // Not the native switch: the focus stays on Spin.
+        expect(spinButton()).toBeEnabled()
 
+        advance(200)
+        fireEvent.click(spinButton())
+        fireEvent.keyDown(document.body, { key: ' ' })
+        expect(spinButton()).toHaveTextContent('Spin')
+        expect(reels()).toHaveAccessibleName(reelsName(BLANK))
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+
+        advance(250)
+        expect(spinButton()).not.toHaveAttribute('aria-disabled')
         fireEvent.click(spinButton())
         await screen.findByRole('img', { name: 'Reels, spinning' })
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
+      })
+
+      it('a lost round stopped while the reels turn: a second press 250 ms later sends nothing', async () => {
+        const { user, fetchMock } = open(state(), server(lost, lines))
+        await loaded()
+        animate()
+        await user.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        advance(300)
+        expect(spinButton()).toHaveTextContent('Stop')
+
+        // Stop only stops the reels; the lost round then ends by itself as they settle.
+        fireEvent.click(spinButton())
+        advance(250)
+        expect(spinButton()).toHaveTextContent('Spin')
+        fireEvent.click(spinButton())
+        expect(reels()).toHaveAccessibleName(reelsName(BLANK))
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+
+        advance(400)
+        fireEvent.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+        playOut()
+      })
+
+      it('with reduce motion, a press just after the result sends nothing; one after 400 ms sends the next', async () => {
+        const { fetchMock } = open(state(), server(lost, lines))
+        await loaded()
+        fireEvent.click(spinButton())
+        await screen.findByRole('img', { name: reelsName(BLANK) })
+        await settled()
+        expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
+
+        fireEvent.click(spinButton())
+        fireEvent.keyDown(document.body, { key: ' ' })
+        expect(reels()).toHaveAccessibleName(reelsName(BLANK))
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+
+        await ready()
+        fireEvent.click(spinButton())
+        expect(await screen.findByRole('img', { name: reelsName(LINES) })).toBeInTheDocument()
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+      })
+
+      it('leaving the page during the pause leaves no frame waiting', async () => {
+        const { user } = open(state(), server(lost))
+        await loaded()
+        animate()
+        await user.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        for (let t = 0; t < 20_000 && spinButton().textContent !== 'Spin'; t += 10) advance(10)
+        expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
+        expect(vi.getTimerCount()).toBeGreaterThan(0)
+
+        cleanup()
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('a refused spin leaves Spin ready at once', async () => {
+        let spins = 0
+        const { fetchMock } = open(state(), {
+          'POST /slots/spin': () => (spins++ === 0 ? json(503, { statusCode: 503, message: 'Slots are not available right now' }) : json(200, lost)),
+        })
+        await loaded()
+        fireEvent.click(spinButton())
+        await waitFor(() => expect(calls).toContain('refused'))
+        await settled()
+        expect(spinButton()).not.toHaveAttribute('aria-disabled')
+
+        fireEvent.click(spinButton())
+        expect(await screen.findByRole('img', { name: reelsName(BLANK) })).toBeInTheDocument()
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
       })
     })
   })

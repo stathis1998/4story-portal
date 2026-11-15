@@ -31,7 +31,7 @@ const labelText = 'text-xs font-bold tracking-wider text-muted uppercase'
 const cardFrame = 'rounded-xs border border-line bg-surface'
 const card = `${cardFrame} p-4 sm:p-5`
 const LAST_ROUNDS = 10
-/** After a press that ended a round, how long Spin waits before it sends again: a double click is one wish. */
+/** After every round's end, how long Spin waits before it sends again: a double click is one wish. */
 const END_PAUSE_MS = 400
 
 /** What the browser remembers under `key`, if it lets us. */
@@ -86,7 +86,17 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const view = held.view ?? current
   const { busy, sending, shown, send } = held
   const sounds = useSlotSounds()
-  const round = useSlotRound(sounds, () => held.reveal())
+  // Until when Spin and the space bar send nothing. A press aimed at "Stop" can land just after the round ended,
+  // by itself or by an earlier press, and a double click is one wish: so every round's end, however it came, starts
+  // the pause. A time, read on the same clock as the show.
+  const quietUntil = useRef(0)
+  // Spin looks not ready for as long as the pause lasts.
+  const [resting, setResting] = useState(false)
+  const round = useSlotRound(sounds, () => {
+    quietUntil.current = performance.now() + END_PAUSE_MS
+    setResting(true)
+    held.reveal()
+  })
   const show = round.show
   // The character whose money is at stake.
   const { character, playable: characterFree, choose } = useChosenCharacter(view.characters, CHARACTER_KEY)
@@ -104,8 +114,18 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const pickerId = useId()
   const playArea = useRef<HTMLDivElement>(null)
   const stakeGroup = useRef<HTMLDivElement>(null)
-  // Until when Spin and the space bar send nothing, after a press ended a round. A time, so no timer is left behind.
-  const quietUntil = useRef(0)
+
+  // Spin ready again once the pause is over: looked at on each frame, so it keeps time with the show.
+  useEffect(() => {
+    if (!resting) return
+    let frame = 0
+    const look = () => {
+      if (performance.now() >= quietUntil.current) setResting(false)
+      else frame = requestAnimationFrame(look)
+    }
+    frame = requestAnimationFrame(look)
+    return () => cancelAnimationFrame(frame)
+  }, [resting])
 
   const machine = slotMachine(machineKey ?? '') ?? SLOT_MACHINES[0]
   const settings = settingsOf(view, machine)
@@ -143,17 +163,13 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   // Told with the result, when the round has been shown, like the wallet.
   const wonJackpot = shown !== null && !busy && shown.spin.jackpot > 0
 
-  /** A press that ended a round: the next one of a quick pair, meant as "stop" too, must not stake money. */
-  function endedByPress() {
-    quietUntil.current = performance.now() + END_PAUSE_MS
-  }
-
   async function onSpin() {
     // While a round is on screen a press stops its reels or ends what is showing: it never sends another spin.
     if (busy) {
-      if (round.press()) endedByPress()
+      round.press()
       return
     }
+    // Just after a round's end a press is still the player's "Stop": it must not stake money.
     if (performance.now() < quietUntil.current) return
     // A second press finds the page already busy: React applies a press's state before the next one.
     if (!character || !canSpin || stake === null) return
@@ -347,7 +363,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
             <Button
               onClick={() => void onSpin()}
               disabled={!canSpin && !showing}
-              className="min-h-12 w-full max-w-xs flex-1 text-base tracking-widest uppercase"
+              // Resting after a round: shown not ready, but not switched off, so the focus stays on it.
+              aria-disabled={resting || undefined}
+              className="min-h-12 w-full max-w-xs flex-1 text-base tracking-widest uppercase aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             >
               {showing ? 'Stop' : busy ? 'Spinning...' : 'Spin'}
             </Button>
@@ -377,10 +395,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  round.skip()
-                  endedByPress()
-                }}
+                onClick={round.skip}
               >
                 Skip to the total
               </Button>
