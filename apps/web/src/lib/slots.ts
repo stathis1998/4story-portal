@@ -1,12 +1,12 @@
 import { SLOT_REEL_STOPS } from '@4story-portal/shared'
-import type { GmSlots, SlotMachineKey, SlotJackpotSettingsInput, SlotMachineSettingsInput, SlotSpinRequest, SlotSpinResult, SlotStops, SlotsState } from '@4story-portal/shared'
+import type { GmSlots, SlotMachineKey, SlotMachineSettingsInput, SlotPotsSettingsInput, SlotSpinRequest, SlotSpinResult, SlotStops, SlotsState } from '@4story-portal/shared'
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from './api'
 
 export const slotsQueryOptions = queryOptions({
   queryKey: ['slots'],
   queryFn: () => apiFetch<SlotsState>('/slots'),
-  // Picks up a GM opening or closing the floor or a machine, or changing a stake. It also keeps the pot up with the other players.
+  // Picks up a GM opening or closing the floor or a machine, or changing a stake. It also keeps the pots up with the other players.
   refetchInterval: 15_000,
 })
 
@@ -22,7 +22,8 @@ export const gmSlotsQueryOptions = queryOptions({
 type SlotsSave =
   | { kind: 'floor'; live: boolean }
   | { kind: 'machine'; key: SlotMachineKey; settings: SlotMachineSettingsInput }
-  | { kind: 'jackpot'; settings: SlotJackpotSettingsInput }
+  | { kind: 'jackpots'; settings: SlotPotsSettingsInput }
+  | { kind: 'daily'; rounds: number }
 
 /** Each save answers with the whole GM state, so it replaces what the page shows without a refetch. */
 export function useSaveSlots() {
@@ -31,7 +32,8 @@ export function useSaveSlots() {
     mutationKey: ['gm', 'slots', 'save'],
     mutationFn: (save: SlotsSave) => {
       if (save.kind === 'floor') return apiFetch<GmSlots>('/gm/slots/floor', { method: 'PUT', body: JSON.stringify({ live: save.live }) })
-      if (save.kind === 'jackpot') return apiFetch<GmSlots>('/gm/slots/jackpot', { method: 'PUT', body: JSON.stringify(save.settings) })
+      if (save.kind === 'jackpots') return apiFetch<GmSlots>('/gm/slots/jackpots', { method: 'PUT', body: JSON.stringify(save.settings) })
+      if (save.kind === 'daily') return apiFetch<GmSlots>('/gm/slots/daily', { method: 'PUT', body: JSON.stringify({ rounds: save.rounds }) })
       return apiFetch<GmSlots>(`/gm/slots/machines/${save.key}`, { method: 'PUT', body: JSON.stringify(save.settings) })
     },
     onSuccess: async (state) => {

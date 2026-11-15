@@ -1,5 +1,5 @@
-import { SLOT_MACHINES, silverText, slotMachine, walletSilver } from '@4story-portal/shared'
-import type { SlotMachine, SlotMachineKey, SlotMachineState, SlotSpinResult, SlotSpinView, SlotsState } from '@4story-portal/shared'
+import { SLOT_MACHINES, SLOT_POTS, silverText, slotMachine, walletSilver } from '@4story-portal/shared'
+import type { SlotMachine, SlotMachineKey, SlotMachineState, SlotPot, SlotSpinResult, SlotSpinView, SlotsState } from '@4story-portal/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
@@ -7,7 +7,8 @@ import type { Ref } from 'react'
 import { Button } from '../../components/Button'
 import { FormMessage } from '../../components/FormMessage'
 import { WalletCharacterPicker, WalletCoins } from '../../components/games/WalletCharacterPicker'
-import { JackpotBanner } from '../../components/slots/JackpotBanner'
+import { JackpotMeters } from '../../components/slots/JackpotMeters'
+import { MeterBar } from '../../components/slots/MeterBar'
 import { PayTable } from '../../components/slots/PayTable'
 import { cabinetLine, Reels } from '../../components/slots/Reels'
 import { WinLines } from '../../components/slots/WinLines'
@@ -33,6 +34,8 @@ const card = `${cardFrame} p-4 sm:p-5`
 const LAST_ROUNDS = 10
 /** After every round's end, how long Spin waits before it sends again: a double click is one wish. */
 const END_PAUSE_MS = 400
+/** From this many rounds left today, the page says how many. */
+const DAILY_WARNING = 200
 
 /** What the browser remembers under `key`, if it lets us. */
 function remembered(key: string): string | null {
@@ -162,13 +165,21 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   if (stake !== null && !watched[machine.key]) setWatched((current) => ({ ...current, [machine.key]: true }))
   const money = character ? walletSilver(character.wallet) : null
   const inGame = character?.online === true
-  const canSpin = view.live && settings.live && characterFree && money !== null && stake !== null && money >= stake && !busy
+  // The rounds the account has left today, all machines together.
+  const roundsLeft = Math.max(0, view.daily.limit - view.daily.played)
+  const canSpin = view.live && settings.live && roundsLeft > 0 && characterFree && money !== null && stake !== null && money >= stake && !busy
   // The answer is in and its round is on screen: Spin now hurries it along.
   const showing = busy && !sending
   // The show belongs to the machine it was played on.
   const ours = show.machine === machine.key
   // Told with the result, when the round has been shown, like the wallet.
-  const wonJackpot = shown !== null && !busy && shown.spin.jackpot > 0
+  const wonPots: SlotPot[] = shown !== null && !busy ? SLOT_POTS.filter((pot) => shown.spin.pots[pot] > 0) : []
+  // The meter for this machine and stake: arriving point by point while a round shows it, then as the state has it.
+  // The answer's own meter stands in if the state could not read the meters back.
+  const storedMeter =
+    view.meters.find((entry) => entry.machine === machine.key && entry.stake === stake)?.points ??
+    (shown && !busy && shown.meter.machine === machine.key && shown.meter.stake === stake ? shown.meter.points : 0)
+  const meterPoints = ours && show.meter !== null ? show.meter : storedMeter
 
   async function onSpin() {
     // While a round is on screen a press stops its reels or ends what is showing: it never sends another spin.
@@ -260,7 +271,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     ? 'The slots are not open yet. Have a look at the machines: they open soon.'
     : !settings.live
       ? 'This machine is closed. Try another one.'
-      : view.characters.length === 0
+      : roundsLeft === 0 && !busy
+        ? `You have played today's ${view.daily.limit.toLocaleString('en-US')} rounds. The slots open again for you tomorrow.`
+        : view.characters.length === 0
         ? 'You have no characters yet.'
         : allOnline
           ? 'Log out of the game to play: your characters are all in it.'
@@ -288,7 +301,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
       <p className="mt-1 hidden text-muted sm:block">Three machines, one pull at a time.</p>
       <p className="order-1 mt-3 text-sm text-muted sm:mt-1 sm:mb-6">This is real gambling with your character's money. Each machine shows what it pays back.</p>
 
-      {view.jackpot && <JackpotBanner jackpot={view.jackpot} won={wonJackpot} />}
+      <JackpotMeters jackpots={view.jackpots} won={wonPots} />
 
       <Tabs
         label="Machine"
@@ -336,33 +349,42 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           <Reels
             key={machine.key}
             machine={machine}
-            rest={show.ends[machine.key] ?? machine.rest}
+            rest={show.ends[machine.key]?.stops ?? machine.rest}
             spin={ours ? show.reel : null}
+            // Back on a machine played earlier, the reels show the step its last round ended on.
+            step={ours ? show.step : (show.ends[machine.key]?.step ?? null)}
             animate={show.animate}
+            stepTimes={show.stepTimes}
             lit={ours ? show.lit : []}
             stopNow={show.stopNow}
             onReelStopped={round.onReelStopped}
             onStopped={round.onStopped}
+            onStepLanded={round.onStepLanded}
           >
             {ours && (
               <>
                 <WinLines lines={show.lines} colour={cabinetLine(machine.key)} />
-                <WinShow banner={show.banner} win={show.win} />
+                <WinShow banner={show.banner} win={show.win} times={show.times} />
               </>
             )}
           </Reels>
 
-          {/* On a phone the Win figure takes its own line, always there, so nothing moves when a win comes. */}
+          {/* On a phone the meter and the Win figure share one line under the stakes, always there, so nothing moves
+              when a win comes and Spin stays where it was. */}
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
             <StakePicker ref={stakeGroup} stakes={settings.stakes} value={stake} money={money} disabled={busy} onChange={pickStake} />
-            <dl className="flex h-6 min-w-44 items-baseline justify-center gap-2">
-              {ours && show.win !== null && (
-                <>
-                  <dt className={labelText}>Win</dt>
-                  <dd className="font-bold text-accent-text tabular-nums">{silverText(show.win)}</dd>
-                </>
-              )}
-            </dl>
+            <div className="flex h-6 items-center justify-center gap-4">
+              <MeterBar points={meterPoints} size={machine.meterSize} />
+              {/* Smaller on a phone, so even "7,500 Gold 999 Silver" fits beside the meter on a 360 px screen. */}
+              <dl className="flex min-w-40 items-baseline justify-center gap-2">
+                {ours && show.win !== null && (
+                  <>
+                    <dt className={labelText}>Win</dt>
+                    <dd className="text-sm font-bold whitespace-nowrap text-accent-text tabular-nums sm:text-base">{silverText(show.win)}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
           </div>
 
           {/* The two switches sit beside Spin, so they do not push it down on a phone. */}
@@ -383,6 +405,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
             <Switch label="Quick spin" on={quick} onChange={switchQuick} />
             <Switch label="Sound" on={soundOn} onChange={switchSound} />
           </div>
+          {roundsLeft <= DAILY_WARNING && (
+            <p className="-mt-1 text-center text-xs text-muted sm:-mt-2">{roundsLeft === 1 ? '1 round left today' : `${roundsLeft} rounds left today`}</p>
+          )}
 
           <FormMessage message={problem} />
 
@@ -396,7 +421,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
                 <>
                   {lastRound && <p className={`text-lg ${cheered ? 'font-bold text-accent-text' : ''}`}>{roundLine(lastRound, roundSpins(machine, lastRound))}</p>}
                   {stakeNote && <p className="text-muted">{stakeNote}</p>}
-                  {note && <p className="text-muted">{note}</p>}
+                  {/* A refusal that says it already is not said twice. */}
+                  {note && note !== problem && <p className="text-muted">{note}</p>}
                   {!lastRound && !note && !stakeNote && <p className="text-muted">Pick a stake, then press Spin.</p>}
                 </>
               )}
@@ -423,7 +449,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           </h2>
           <div className="mt-3">
             {/* With no stake chosen, what the lowest pays. */}
-            <PayTable machine={machine} stake={stake ?? lowest} stakes={settings.stakes} jackpotLive={view.jackpot?.live === true} />
+            <PayTable machine={machine} stake={stake ?? lowest} stakes={settings.stakes} jackpotLive={view.jackpots.some((pot) => pot.live)} />
           </div>
         </section>
 

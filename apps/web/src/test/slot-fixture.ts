@@ -5,8 +5,16 @@ import type { SlotMachine, SlotStep, SlotStops } from '@4story-portal/shared';
  * The first stops, counting up from [0, 0, 0, 0, 0] with the last reel fastest, whose spin `want` accepts. So a test
  * can ask a real machine for "a spin that wins 8 free spins" and stay right whatever its strips are. `want` also gets
  * the stops it is looking at, to read their window; it must not change them.
+ *
+ * `spread` looks at every stop combination too, but in a scattered order, so a real machine whose first strip
+ * positions all show scatters, say, does not make the search run through millions of chains first.
  */
-export function stopsWhere(machine: SlotMachine, want: (out: SlotStep & { scatters: number }, stops: SlotStops) => boolean): SlotStops {
+export function stopsWhere(
+  machine: SlotMachine,
+  want: (out: SlotStep & { scatters: number }, stops: SlotStops) => boolean,
+  { spread = false }: { spread?: boolean } = {},
+): SlotStops {
+  if (spread) return spreadWhere(machine, want);
   const stops: SlotStops = [0, 0, 0, 0, 0];
   for (;;) {
     const chain = slotChain(machine, stops);
@@ -16,6 +24,18 @@ export function stopsWhere(machine: SlotMachine, want: (out: SlotStep & { scatte
     if (reel < 0) throw new Error('No stops satisfy that');
     stops[reel]++;
   }
+}
+
+/** Every combination once: i -> (odd x i + c) mod 32^5 is one-to-one, read as five base-32 digits. */
+function spreadWhere(machine: SlotMachine, want: (out: SlotStep & { scatters: number }, stops: SlotStops) => boolean): SlotStops {
+  const all = SLOT_REEL_STOPS ** 5;
+  for (let i = 0; i < all; i++) {
+    const x = (Math.imul(i, 0x2c9277b5) + 0x1b873593) & (all - 1);
+    const stops = [0, 1, 2, 3, 4].map((reel) => Math.floor(x / SLOT_REEL_STOPS ** (4 - reel)) % SLOT_REEL_STOPS) as SlotStops;
+    const chain = slotChain(machine, stops);
+    if (want({ ...chain.steps[0], scatters: chain.scatters }, stops)) return stops;
+  }
+  throw new Error('No stops satisfy that');
 }
 
 /** Filler rows that can never start or continue a win. */
