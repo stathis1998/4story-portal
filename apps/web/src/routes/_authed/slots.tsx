@@ -357,8 +357,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
 
           <FormMessage message={problem} />
 
-          {/* Room for a two-line result on a phone, so the area does not grow past the screen when the round ends. */}
-          <div className="flex min-h-20 flex-col items-center justify-center gap-1 text-center sm:min-h-14">
+          {/* Room for a two-line result on a phone, so the area does not grow past the screen when the round ends. From sm
+              up, room for a line and "Skip to the total": it comes after the round has been brought into view. */}
+          <div className="flex min-h-20 flex-col items-center justify-center gap-1 text-center sm:min-h-16">
             <div role="status" className="flex flex-col items-center gap-1">
               {busy ? (
                 <p className="text-muted">{show.free ? `Free spin ${show.free.spin} of ${show.free.of}` : 'Good luck...'}</p>
