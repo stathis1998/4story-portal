@@ -83,6 +83,17 @@
   }
 }
 
+/* The slots jackpot banner, for the moment its pot drops on the player's own spin. */
+@keyframes jackpot-won {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 18px 2px var(--accent);
+  }
+}
+
 @layer base {
   html {
     color-scheme: dark;

@@ -6,8 +6,8 @@ import { ApiError, apiFetch } from './api'
 export const slotsQueryOptions = queryOptions({
   queryKey: ['slots'],
   queryFn: () => apiFetch<SlotsState>('/slots'),
-  // Picks up a GM opening or closing the floor or a machine, or changing a stake.
-  refetchInterval: 60_000,
+  // Picks up a GM opening or closing the floor or a machine, or changing a stake. It also keeps the pot up with the other players.
+  refetchInterval: 15_000,
 })
 
 export const spinSlots = (request: SlotSpinRequest) =>

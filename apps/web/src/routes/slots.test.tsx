@@ -1,9 +1,9 @@
 import { SLOT_MACHINES } from '@4story-portal/shared'
-import type { SlotMachineState, SlotSpinResult, SlotSpinView, SlotStakes, SlotsState, Wallet, WalletCharacter } from '@4story-portal/shared'
+import type { SlotJackpot, SlotMachineState, SlotSpinResult, SlotSpinView, SlotStakes, SlotsState, Wallet, WalletCharacter } from '@4story-portal/shared'
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { REEL_BLURS } from '../lib/reel-blur'
-import { SLOT_REEL_SECONDS, SLOT_SPIN_SECONDS } from '../lib/slots'
+import { SLOT_REEL_SECONDS, SLOT_SPIN_SECONDS, slotsQueryOptions } from '../lib/slots'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
 
@@ -56,6 +56,21 @@ const result = (spin: SlotSpinView, wallet: Wallet, mine: SlotSpinView[] = [spin
 const jackpot = result(spinOf(), { gold: 10, silver: 200, copper: 0 })
 const lost = result(spinOf({ stops: [12, 8, 12], payout: 0 }), { gold: 5, silver: 200, copper: 0 })
 const lucky = result(spinOf({ stops: [0, 0, 1], payout: 100 }), { gold: 5, silver: 300, copper: 0 })
+
+const pot: SlotJackpot = {
+  live: true,
+  pot: 31_420,
+  cap: 50_000,
+  floor: 5_000,
+  last: { character: 'Moosey', amount: 27_310, at: '2026-11-12T09:00:00.000Z' },
+}
+/** A drop of the whole pot by Mounara, who is left with 55 Gold 202 Silver. */
+const drop = result(spinOf({ stops: [12, 8, 12], payout: 0, jackpot: 50_002 }), { gold: 55, silver: 202, copper: 0 })
+const dropped: SlotJackpot = { ...pot, pot: 0, last: { character: 'Mounara', amount: 50_002, at: '2026-11-15T10:05:00.000Z' } }
+const dropState = { ...drop, state: { ...drop.state, jackpot: dropped } }
+const banner = () => screen.getByRole('region', { name: 'Jackpot' })
+const pays = () => within(screen.getByRole('region', { name: 'What it pays' }))
+const JACKPOT_LINE = 'With the jackpot, the slots pay back everything staked, over time.'
 
 const open = (current: SlotsState = state(), extra: Parameters<typeof mockApi>[0] = {}) => {
   const fetchMock = mockApi({ 'GET /slots': () => json(200, current), ...extra })
@@ -861,5 +876,155 @@ describe('slots', () => {
     expect(stake('50 Silver')).toBeChecked()
     expect(spinButton()).toBeDisabled()
     expect(status()).toHaveTextContent('Not enough money in that wallet for this stake.')
+  })
+
+  describe('the jackpot', () => {
+    it('shows the jackpot above the machines', async () => {
+      open(state({ jackpot: pot }))
+      await loaded()
+
+      const region = within(banner())
+      expect(region.getByText('31 Gold 420 Silver')).toBeInTheDocument()
+      expect(region.getByText('Must be won before 50 Gold')).toBeInTheDocument()
+      expect(region.getByText('Every lost round adds to it, on any machine. It can drop from 5 Gold.')).toBeInTheDocument()
+      expect(region.getByText('Last won by Moosey: 27 Gold 310 Silver.')).toBeInTheDocument()
+      const bar = region.getByRole('progressbar', { name: 'Jackpot' })
+      expect(bar).toHaveAttribute('aria-valuenow', '31420')
+      expect(bar).toHaveAttribute('aria-valuemin', '0')
+      expect(bar).toHaveAttribute('aria-valuemax', '50000')
+      // Above the machines; the long lines go on a phone so that Spin stays on the first screen.
+      expect(banner().compareDocumentPosition(screen.getByRole('tablist', { name: 'Machine' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(region.getByText(/^Every lost round adds/)).toHaveClass('hidden', 'sm:block')
+      expect(region.getByText(/^Last won by/)).toHaveClass('hidden', 'sm:block')
+    })
+
+    it('has no banner when the jackpot cannot be read', async () => {
+      open(state({ jackpot: null }))
+      await loaded()
+
+      expect(screen.queryByRole('region', { name: 'Jackpot' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+      expect(pays().queryByText(/jackpot/)).not.toBeInTheDocument()
+    })
+
+    it('says the jackpot is paused', async () => {
+      open(state({ jackpot: { ...pot, live: false } }))
+      await loaded()
+
+      expect(within(banner()).getByText('The jackpot is paused.')).toBeInTheDocument()
+      expect(within(banner()).queryByText(/Must be won before/)).not.toBeInTheDocument()
+      expect(pays().queryByText(/jackpot/)).not.toBeInTheDocument()
+    })
+
+    it('shows an unfed pot as 0 Silver under the cap set', async () => {
+      open(state({ jackpot: { ...pot, pot: 0, last: null } }))
+      await loaded()
+
+      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
+      expect(within(banner()).getByText('Must be won before 50 Gold')).toBeInTheDocument()
+      expect(within(banner()).queryByText(/Last won by/)).not.toBeInTheDocument()
+    })
+
+    it('never shows the bar past full', async () => {
+      open(state({ jackpot: { ...pot, pot: 60_000 } }))
+      await loaded()
+
+      expect(within(banner()).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50000')
+    })
+
+    it('follows a pot someone else won between two polls', async () => {
+      let current = state({ jackpot: pot })
+      const { user, queryClient } = open(current, { 'GET /slots': () => json(200, current), 'POST /slots/spin': () => json(200, lost) })
+      await loaded()
+
+      current = state({ jackpot: dropped })
+      await poll(queryClient)
+
+      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
+      expect(within(banner()).getByText('Last won by Mounara: 50 Gold 2 Silver.')).toBeInTheDocument()
+      await user.click(spinButton())
+      expect(await screen.findByRole('img', { name: /^Reels: / })).toBeInTheDocument()
+    })
+
+    it('holds the pot still until the last reel stops, on a lost round', async () => {
+      const grown = { ...lost, state: { ...lost.state, jackpot: { ...pot, pot: 31_423 } } }
+      let spun = false
+      const { user } = open(state({ jackpot: pot }), {
+        'GET /slots': () => json(200, spun ? grown.state : state({ jackpot: pot })),
+        'POST /slots/spin': () => {
+          spun = true
+          return json(200, grown)
+        },
+      })
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(600))
+      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000))
+      expect(await within(banner()).findByText('31 Gold 423 Silver')).toBeInTheDocument()
+    })
+
+    it('tells a jackpot only when the last reel stops', async () => {
+      let spun = false
+      const { user, queryClient } = open(state({ jackpot: pot }), {
+        'GET /slots': () => json(200, spun ? dropState.state : state({ jackpot: pot })),
+        'POST /slots/spin': () => {
+          spun = true
+          return json(200, dropState)
+        },
+      })
+      await loaded()
+      await user.click(stake('50 Silver'))
+      animate()
+
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      // A poll that brings the drop in mid-spin does not give it away.
+      await poll(queryClient)
+
+      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
+      expect(within(banner()).queryByText(/Last won by Mounara/)).not.toBeInTheDocument()
+      expect(banner()).not.toHaveAttribute('data-won')
+      expect(wallet()).toBe('5 Gold 200 Silver')
+      expect(status()).toHaveTextContent('Good luck...')
+
+      act(() => vi.advanceTimersByTime(SLOT_SPIN_SECONDS * 1000 + 100))
+
+      expect(status()).toHaveTextContent('Jackpot. This round made it drop. You won 50 Gold 2 Silver on a stake of 50 Silver.')
+      expect(wallet()).toBe('55 Gold 202 Silver')
+      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
+      expect(banner()).toHaveAttribute('data-won', 'true')
+      expect(within(banner()).getByText('Last won by Mounara: 50 Gold 2 Silver.')).toBeInTheDocument()
+    })
+
+    it('lists a jackpot round in the last spins and the big wins', async () => {
+      const win = spinOf({ stops: [12, 8, 12], payout: 0, jackpot: 50_002 })
+      open(state({ jackpot: pot, mine: [win], bigWins: [win] }))
+      await loaded()
+
+      const mine = within(screen.getByRole('region', { name: 'Your last spins' })).getAllByRole('listitem')
+      expect(spoken(mine[0].firstElementChild!)).toContain('staked 50 Silver, won the jackpot, 50 Gold 2 Silver')
+      const big = within(screen.getByRole('region', { name: 'Big wins' })).getAllByRole('listitem')
+      expect(big[0]).toHaveTextContent('Mounara won the jackpot, 50 Gold 2 Silver')
+    })
+
+    it('says what a lost round adds, per machine', async () => {
+      const { user } = open(state({ jackpot: pot }))
+      await loaded()
+
+      for (const [name, share] of [["Tranus's Shelf", '5.6'], ['The Armoury', '5.2'], ["Dragon's Hoard", '4.3']] as const) {
+        await user.click(tab(name))
+        expect(pays().getByText(`A lost round on this machine adds ${share}% of its stake to the jackpot. ${JACKPOT_LINE}`)).toBeInTheDocument()
+      }
+    })
+
+    it('reads the state every 15 seconds', () => {
+      expect(slotsQueryOptions.refetchInterval).toBe(15_000)
+    })
   })
 })
