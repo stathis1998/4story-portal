@@ -17,6 +17,7 @@ import { DbService } from '../src/db/db.service.js';
 import { STATS_REPOSITORY } from '../src/stats/stats.repository.js';
 import { PortalStore } from '../src/store/portal-store.js';
 import { ANNOUNCER_TIMING } from '../src/wheel/wheel-announcer.js';
+import { REBIRTH_ANNOUNCER_TIMING } from '../src/rebirth/rebirth-announcer.js';
 import { REBIRTH_REPOSITORY } from '../src/rebirth/rebirth.repository.js';
 import { ROULETTE_REPOSITORY } from '../src/roulette/roulette.repository.js';
 import { SLOTS_REPOSITORY } from '../src/slots/slots.repository.js';
@@ -108,6 +109,8 @@ export async function createTestApp(overrides: TestAppOverrides = {}): Promise<I
     // No timer in tests: they call the announcer's tick() themselves.
     .overrideProvider(ANNOUNCER_TIMING)
     .useValue({ intervalMs: 0, delaySeconds: 15, maxAgeSeconds: 600 })
+    .overrideProvider(REBIRTH_ANNOUNCER_TIMING)
+    .useValue({ intervalMs: 0, delaySeconds: 0, maxAgeSeconds: 600 })
     .overrideProvider(PortalStore)
     .useValue(overrides.store ?? new PortalStore(':memory:'))
     .overrideProvider(WEAPON_CLIENT_SOURCE)

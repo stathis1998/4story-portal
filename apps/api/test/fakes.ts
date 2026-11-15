@@ -47,7 +47,9 @@ import {
   BRONZE_PER_SILVER,
   REBIRTH_DEFAULT_SETTINGS,
   type RebirthSettings,
+  REBIRTH_LEVEL,
   rebirthBonus,
+  rebirthIsOpen,
   rebirthPriceGold,
   ROULETTE_DEFAULT_LIMITS,
   SLOT_BIG_WIN,
@@ -79,7 +81,17 @@ import {
 import { BET_CLOSED, BET_NOT_YOURS, BET_OK, BET_ONLINE, BET_POOR, type BetCode, type BetOutcome } from '../src/games/wallet-bet.js';
 import type { WalletCharacterRow, WalletsRepository } from '../src/games/wallets.repository.js';
 import { type ControlEvent, EVENT_KIND, type EventKind } from '../src/control/control-protocol.js';
-import { REBIRTH_NOT_YOURS, REBIRTH_OK } from '../src/rebirth/rebirth-sql.js';
+import {
+  REBIRTH_AT_LIMIT,
+  REBIRTH_CLOSED,
+  REBIRTH_LOW_LEVEL,
+  REBIRTH_NOT_YOURS,
+  REBIRTH_OK,
+  REBIRTH_ONLINE,
+  REBIRTH_POOR,
+  REBIRTH_PRICE_CHANGED,
+  REBIRTH_WEARING,
+} from '../src/rebirth/rebirth-sql.js';
 import {
   ANNOUNCE_SENT as REBIRTH_ANNOUNCE_SENT,
   ANNOUNCE_WAITING as REBIRTH_ANNOUNCE_WAITING,
@@ -1003,7 +1015,7 @@ export class FakeSlotsRepository implements SlotsRepository {
 }
 
 // In-memory stand-in for the rebirth settings, TCHARREBIRTHTABLE and its log. Its rebirth() only checks
-// the character is the account's: the batch's other checks are not played here.
+// the nine outcomes the SQL batch has, in its order.
 export class FakeRebirthRepository implements RebirthRepository {
   settingsRow: RebirthSettings = { ...REBIRTH_DEFAULT_SETTINGS };
   /** The characters find() and rebirth() see, with the account each belongs to. */
@@ -1036,12 +1048,29 @@ export class FakeRebirthRepository implements RebirthRepository {
   async rebirth(input: RebirthInput): Promise<RebirthOutcome> {
     this.check();
     this.rebirthCalls.push(input);
+    const settings = this.settingsRow;
+    if (!rebirthIsOpen(settings)) return { code: REBIRTH_CLOSED };
     const row = this.characters.find((c) => c.charId === input.charId && c.userId === input.userId);
     if (!row) return { code: REBIRTH_NOT_YOURS };
+    if (row.online) return { code: REBIRTH_ONLINE };
+    if (row.level < REBIRTH_LEVEL) return { code: REBIRTH_LOW_LEVEL };
+    if (row.wornItems > 0) return { code: REBIRTH_WEARING };
+    if (row.rebirths >= settings.limit) return { code: REBIRTH_AT_LIMIT };
     const rebirth = row.rebirths + 1;
-    const bonus = rebirthBonus(rebirth, this.settingsRow);
-    const priceGold = rebirthPriceGold(rebirth, this.settingsRow.priceGold);
-    Object.assign(row, { level: 1, rebirths: rebirth, bonus, gold: row.gold - priceGold });
+    const priceGold = rebirthPriceGold(rebirth, settings.priceGold);
+    if (input.expectedPriceGold !== priceGold) return { code: REBIRTH_PRICE_CHANGED };
+    const held = row.gold * BRONZE_PER_GOLD + row.silver * BRONZE_PER_SILVER + row.copper;
+    if (held < priceGold * BRONZE_PER_GOLD) return { code: REBIRTH_POOR };
+    const left = held - priceGold * BRONZE_PER_GOLD;
+    const bonus = rebirthBonus(rebirth, settings);
+    Object.assign(row, {
+      level: 1,
+      rebirths: rebirth,
+      bonus,
+      gold: Math.floor(left / BRONZE_PER_GOLD),
+      silver: Math.floor((left % BRONZE_PER_GOLD) / BRONZE_PER_SILVER),
+      copper: left % BRONZE_PER_SILVER,
+    });
     const id = Math.max(0, ...this.logRows.map((entry) => entry.id)) + 1;
     this.logRows.push({
       id,
@@ -1053,7 +1082,7 @@ export class FakeRebirthRepository implements RebirthRepository {
       priceGold,
       at: this.now(),
       ageSeconds: 0,
-      text: input.text,
+      text: input.text.replace('{name}', row.name).replace('{rebirth}', String(rebirth)),
       announced: REBIRTH_ANNOUNCE_WAITING,
     });
     return { code: REBIRTH_OK, id, name: row.name, rebirth, bonus, priceGold, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
