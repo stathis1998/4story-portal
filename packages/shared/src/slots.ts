@@ -45,18 +45,21 @@ export const SLOT_DAILY_DEFAULT = 1_500;
 export const SLOT_DAILY_MIN = 100;
 export const SLOT_DAILY_MAX = 10_000;
 export type SlotStops = [number, number, number, number, number];
-/** All windows of the machine, counted (see slot-count.ts). */
+/** All windows of the machine, each played through its chain, counted (see slot-count.ts). */
 export type SlotCounts = {
-  /** The sum, over every window and all 20 lines, of the line's prize in line stakes. */
-  linePaid: number;
-  /** Windows where no line pays. */
-  blank: number;
-  /** Windows showing exactly 3, 4 and 5 scatters. */
-  scatters: [number, number, number];
-  /** Of those, the windows where no line pays. */
-  blankScatters: [number, number, number];
-  /** The most the 20 lines of one window pay together, in line stakes. */
+  /** Windows by scatters in the chain's last window: 0, 1, 2, 3, 4, 5 or more. */
+  last: [number, number, number, number, number, number];
+  /** Of those, the windows whose chain pays nothing. */
+  blankLast: [number, number, number, number, number, number];
+  /** Windows by winning steps W (0..12) and whether the last window shows 3+ scatters (r 0/1): index W * 2 + r. */
+  free: number[];
+  /** Line stakes of step j (0..11) summed over windows with W winning steps and retrigger r: index (W * 2 + r) * 12 + j. */
+  steps: number[];
+  /** The most one paid spin's chain pays, line stakes. */
   best: number;
+  /** The longest chain met, and how many windows reached SLOT_CHAIN_MAX. */
+  longest: number;
+  capped: number;
 };
 export type SlotMachine = {
   key: SlotMachineKey;

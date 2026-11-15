@@ -29,7 +29,7 @@ function machineOf(reels: readonly string[], meterSize = 30): SlotMachine {
     stakes: [20, 40, 60],
     meterSize,
     // Placeholders: nothing here reads the counts.
-    counts: { linePaid: 0, blank: 0, scatters: [0, 0, 0], blankScatters: [0, 0, 0], best: 0 },
+    counts: { last: [0, 0, 0, 0, 0, 0], blankLast: [0, 0, 0, 0, 0, 0], free: [], steps: [], best: 0, longest: 0, capped: 0 },
     rest: [0, 0, 0, 0, 0],
   };
 }
