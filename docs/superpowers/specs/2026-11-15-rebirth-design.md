@@ -52,7 +52,8 @@ The button opens a confirmation that lists what is reset and what is kept.
    `games/wallet-bet.ts`. It is not a stored procedure, because it touches the global database
    (`TCURRENTUSER`, `TALLCHARTABLE`), whose name differs between live and the test copies. In one
    transaction it locks the account's rows in `TCURRENTUSER`, checks the switch, ownership, offline,
-   level 90, nothing in the equipment bag (inventory 254), the rebirth limit, the price the player
+   level 90, nothing in the equipment bag (inventory 254, in `TITEMTABLE` or its twin
+   `TTEMPITEMTABLE`), the rebirth limit, the price the player
    was shown and the wallet, then writes everything in the table below and returns a code.
 2. **Game database, two new tables.**
    - `TCHARREBIRTHTABLE (dwCharID PK, bRebirth, bStatBonus, dUpdate)`: the current state. The map
@@ -77,10 +78,15 @@ The button opens a confirmation that lists what is reset and what is kept.
 | `TSKILLTABLE` | made equal to a new character's: class skills back to their `TSTARTSKILL` level, other learned skills removed, equip skills (kind 0) untouched, no gold payback |
 | `THOTKEYTABLE` | slots pointing at a skill that is no longer learned are cleared, item slots stay |
 | `TSKILLMAINTAINTABLE` | the character's rows deleted |
+| `TTEMPSKILLTABLE`, `TTEMPSKILLMAINTAINTABLE` | the twins that saves write: skills made equal to the new `TSKILLTABLE` rows, running buffs deleted. `TLogout` copies the skill twin over `TSKILLTABLE` at every logout, even one with no save before it, so without this the old life's skills come back |
 | `TQUESTTABLE`, `TQUESTTERMTABLE` | the character's rows deleted (a new character has none) |
 | `TCHARLEVELFREEZETABLE` | the character's row deleted |
 | `TALLCHARTABLE` (global database) | level and EXP (`TLogout` would also fix it at the next logout) |
 | `TCHARREBIRTHTABLE`, `TCHARREBIRTHLOGTABLE` | count plus one, new bonus, log row |
+
+The worn check also reads `TTEMPITEMTABLE`: `TLogout` removes the `TCURRENTUSER` row a few
+statements before it copies that twin over `TITEMTABLE`, so for a moment an item still worn shows
+only there. The page counts worn items the same way, each item once.
 
 Guild rank points need nothing: the code in `TSaveChar` that tied them to the level is commented out.
 
