@@ -10,9 +10,16 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
+  BRONZE_PER_SILVER,
+  type GmSlotJackpot,
   type GmSlotMachine,
   type GmSlots,
   type SessionUser,
+  SLOT_JACKPOT_DEFAULT_CAP,
+  slotJackpotAdd,
+  type SlotJackpot,
+  type SlotJackpotSettingsInput,
+  SLOT_JACKPOT_ROLLS,
   SLOT_MACHINES,
   SLOT_REEL_STOPS,
   slotMachine,
@@ -30,7 +37,7 @@ import {
 import { GM_REPOSITORY, type GmRepository } from '../gm/gm.repository.js';
 import { BET_CLOSED, BET_NOT_YOURS, BET_ONLINE, BET_POOR } from '../games/wallet-bet.js';
 import { WALLETS_REPOSITORY, type WalletCharacterRow, walletCharacterView, type WalletsRepository } from '../games/wallets.repository.js';
-import { SLOTS_REPOSITORY, type SlotSettings, type SlotsRepository, type SlotSpinRow, type SlotTotalsRow } from './slots.repository.js';
+import { SLOTS_REPOSITORY, type SlotPotRow, type SlotSettings, type SlotsRepository, type SlotSpinRow, type SlotTotalsRow } from './slots.repository.js';
 
 type Actor = { username: string; ip: string };
 
@@ -44,8 +51,13 @@ const CLOSED_FLOOR = 'The slots are not open yet';
 const CLOSED: SlotSettings = {
   live: false,
   machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
+  jackpot: { live: true, cap: SLOT_JACKPOT_DEFAULT_CAP },
 };
-const NO_TOTALS: SlotTotalsRow = { spins: 0, staked: 0, paid: 0 };
+const NO_TOTALS: SlotTotalsRow = { spins: 0, staked: 0, paid: 0, added: 0 };
+const NO_POT: SlotPotRow | null = null;
+/** One Gold is this many Silver. */
+const SILVER_PER_GOLD = 1000;
+const JACKPOT_WINS = 10;
 
 @Injectable()
 export class SlotsService {
@@ -62,11 +74,13 @@ export class SlotsService {
   async state(user: SessionUser): Promise<SlotsState> {
     // The page still opens when the tables can't be read (before they are added to the game database,
     // say): it shows a closed floor with the starting stakes and nothing on it.
-    const [settings, characters, mine, bigWins] = await Promise.all([
+    const [settings, characters, mine, bigWins, pot, lastWin] = await Promise.all([
       this.readOr('settings', () => this.repo.settings(), CLOSED),
       this.readOr<WalletCharacterRow[]>("account's characters", () => this.wallets.characters(user.userId), []),
       this.readOr<SlotSpinRow[]>("account's spins", () => this.repo.spinsOf(user.userId, MINE), []),
       this.readOr<SlotSpinRow[]>('big wins', () => this.repo.bigWins(BIG_WINS), []),
+      this.readOr<SlotPotRow | null>('jackpot', () => this.repo.pot(), NO_POT),
+      this.readOr<SlotSpinRow[]>('latest jackpot win', () => this.repo.jackpotWins(1), []),
     ]);
     return {
       live: settings.live,
@@ -74,6 +88,7 @@ export class SlotsService {
       characters: characters.map(walletCharacterView),
       mine: spinViews(mine),
       bigWins: spinViews(bigWins),
+      jackpot: pot ? jackpotView(settings, pot, lastWin[0]) : null,
     };
   }
 
@@ -92,8 +107,22 @@ export class SlotsService {
     const { multiple } = slotPrize(machine, stops);
     const stake = request.stake;
     const payout = stake * multiple;
+    // Only a round that pays nothing feeds the pot, and only then is the jackpot's number drawn, after the stops.
+    const add = multiple === 0 && settings.jackpot.live ? slotJackpotAdd(machine, stake) : 0;
+    const roll = add > 0 ? this.random(SLOT_JACKPOT_ROLLS) : 0;
     const outcome = await this.write(() =>
-      this.repo.bet({ userId: user.userId, charId: request.characterId, machine: machine.key, stops, stake, payout, multiple }),
+      this.repo.bet({
+        userId: user.userId,
+        charId: request.characterId,
+        machine: machine.key,
+        stops,
+        stake,
+        payout,
+        multiple,
+        add,
+        cap: settings.jackpot.cap,
+        roll,
+      }),
     );
 
     switch (outcome.code) {
@@ -116,15 +145,19 @@ export class SlotsService {
       stops,
       stake,
       payout,
+      jackpot: outcome.jackpot,
     };
     return { spin, wallet: outcome.wallet, state };
   }
 
   async gmState(): Promise<GmSlots> {
-    const [settings, totals, latest] = await Promise.all([
+    const [settings, totals, latest, pot, jackpotTotals, wins] = await Promise.all([
       this.readOr('settings', () => this.repo.settings(), CLOSED),
       this.readOr('totals', () => this.repo.totals(), {} as Awaited<ReturnType<SlotsRepository['totals']>>),
       this.readOr<SlotSpinRow[]>('latest spins', () => this.repo.latest(LATEST), []),
+      this.readOr<SlotPotRow | null>('jackpot', () => this.repo.pot(), NO_POT),
+      this.readOr('jackpot totals', () => this.repo.jackpotTotals(), { added: 0, paid: 0, drops: 0 }),
+      this.readOr<SlotSpinRow[]>('jackpot wins', () => this.repo.jackpotWins(JACKPOT_WINS), []),
     ]);
     return {
       live: settings.live,
@@ -136,7 +169,22 @@ export class SlotsService {
         }),
       ),
       latest: spinViews(latest),
+      jackpot: {
+        live: settings.jackpot.live,
+        setCap: settings.jackpot.cap,
+        running: pot ? potView(settings, pot) : null,
+        added: Math.floor(jackpotTotals.added / BRONZE_PER_SILVER),
+        paid: jackpotTotals.paid,
+        drops: jackpotTotals.drops,
+        wins: spinViews(wins),
+      } satisfies GmSlotJackpot,
     };
+  }
+
+  async saveJackpot(settings: SlotJackpotSettingsInput, actor: Actor): Promise<GmSlots> {
+    await this.write(() => this.repo.saveJackpot(settings, actor.username));
+    await this.audit(`JACKPOT ${onOff(settings.live)} cap ${settings.cap}`, actor);
+    return this.gmState();
   }
 
   async saveFloor(live: boolean, actor: Actor): Promise<GmSlots> {
@@ -186,7 +234,19 @@ const onOff = (live: boolean) => (live ? 'on' : 'off');
 const machineStates = (settings: SlotSettings): SlotMachineState[] =>
   SLOT_MACHINES.map((m) => ({ key: m.key, live: settings.machines[m.key].live, stakes: [...settings.machines[m.key].stakes] }));
 
-const totalsView = (row: SlotTotalsRow = NO_TOTALS): SlotTotals => ({ spins: row.spins, staked: row.staked, paid: row.paid });
+const totalsView = (row: SlotTotalsRow = NO_TOTALS): SlotTotals => ({ spins: row.spins, staked: row.staked, paid: row.paid, added: row.added });
+
+/** Whole Silver. The pot's own cap while it has one; the cap set now only while it has none. */
+const potView = (settings: SlotSettings, pot: SlotPotRow) => {
+  const cap = pot.cap === null ? settings.jackpot.cap * SILVER_PER_GOLD : Math.floor(pot.cap / BRONZE_PER_SILVER);
+  return { pot: Math.floor(pot.pot / BRONZE_PER_SILVER), cap, floor: Math.floor(cap / 10) };
+};
+
+const jackpotView = (settings: SlotSettings, pot: SlotPotRow, last: SlotSpinRow | undefined): SlotJackpot => ({
+  live: settings.jackpot.live,
+  ...potView(settings, pot),
+  last: last ? { character: last.character, amount: last.jackpot, at: last.spunAt.toISOString() } : null,
+});
 
 const stopsInRange = (stops: SlotStops) => stops.length === 3 && stops.every((s) => Number.isInteger(s) && s >= 0 && s < SLOT_REEL_STOPS);
 
@@ -204,6 +264,7 @@ const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
         stops: [...row.stops] as SlotStops,
         stake: row.stake,
         payout: row.payout,
+        jackpot: row.jackpot,
       },
     ];
   });

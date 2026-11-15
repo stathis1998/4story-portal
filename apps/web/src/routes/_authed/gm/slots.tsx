@@ -1,12 +1,16 @@
 import {
+  type GmSlotJackpot,
   type GmSlotMachine,
   type GmSlots,
   type SlotMachine,
+  SLOT_JACKPOT_MAX_CAP,
+  SLOT_JACKPOT_MIN_CAP,
   SLOT_MAX_STAKE,
   SLOT_MIN_STAKE,
   type SlotStakes,
   type SlotTotals,
   silverText,
+  slotJackpotSettingsSchema,
   slotLargestWin,
   slotMachine,
   slotMachineSettingsSchema,
@@ -43,9 +47,9 @@ type Typed = [string, string, string]
 
 const WHOLE = /^\d+$/
 
-/** The house's side of the machine: what it took less what it paid, with a minus sign when it is down. */
+/** The house's side of the machine: what it took less what it paid and what it sent to the jackpot, with a minus sign when it is down. */
 const houseResult = (totals: SlotTotals) => {
-  const result = totals.staked - totals.paid
+  const result = totals.staked - totals.paid - totals.added
   return result < 0 ? `-${silverText(-result)}` : silverText(result)
 }
 
@@ -113,6 +117,8 @@ function GmSlotsPage() {
               <FormMessage message={error} />
             </section>
 
+            <JackpotSection jackpot={data.jackpot} />
+
             {data.machines.map((state) => {
               const rules = slotMachine(state.key)
               return rules ? <MachineSection key={state.key} state={state} rules={rules} /> : null
@@ -123,6 +129,164 @@ function GmSlotsPage() {
         )}
       </div>
     </main>
+  )
+}
+
+function JackpotSection({ jackpot }: { jackpot: GmSlotJackpot }) {
+  const save = useSaveSlots()
+  const headingId = useId()
+  const fieldId = useId()
+  /** What is typed in the cap field, or null while it shows the saved cap. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const [fieldError, setFieldError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const typed = draft ?? String(jackpot.setCap)
+  const typedCap = WHOLE.test(typed.trim()) ? Number(typed) : null
+  const { running } = jackpot
+
+  async function toggleLive() {
+    setError(null)
+    // The saved cap, never the field's: a half-typed number is not a save.
+    try {
+      await save.mutateAsync({ kind: 'jackpot', settings: { live: !jackpot.live, cap: jackpot.setCap } })
+    } catch (err) {
+      setError(slotsErrorMessage(err))
+    }
+  }
+
+  async function saveCap(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    if (typedCap === null) {
+      setFieldError('Enter a whole number')
+      return
+    }
+    const parsed = slotJackpotSettingsSchema.safeParse({ live: jackpot.live, cap: typedCap })
+    if (!parsed.success) {
+      setFieldError(`From ${SLOT_JACKPOT_MIN_CAP} to ${SLOT_JACKPOT_MAX_CAP.toLocaleString('en-US')} Gold`)
+      return
+    }
+    setFieldError(null)
+    try {
+      await save.mutateAsync({ kind: 'jackpot', settings: parsed.data })
+      setDraft(null)
+    } catch (err) {
+      setError(slotsErrorMessage(err))
+    }
+  }
+
+  const wins = jackpot.wins.flatMap((spin) => {
+    const rules = slotMachine(spin.machine)
+    return rules ? [{ spin, rules }] : []
+  })
+
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-4 rounded-xs border border-line bg-surface p-4">
+      <h2 id={headingId} className="text-2xl">
+        Jackpot
+      </h2>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Switch label="Jackpot on" checked={jackpot.live} disabled={save.isPending} onToggle={() => void toggleLive()} />
+        <p className="text-sm text-muted">
+          {jackpot.live ? 'Lost rounds add to the pot.' : 'The pot is kept. Lost rounds add nothing and it cannot drop.'}
+        </p>
+      </div>
+
+      <form aria-label="Jackpot cap" noValidate onSubmit={(event) => void saveCap(event)} className="flex flex-col gap-4">
+        <div className="flex max-w-xs flex-col gap-1">
+          <label htmlFor={fieldId} className={labelText}>
+            Cap for the next jackpot, in Gold
+          </label>
+          <input
+            id={fieldId}
+            type="number"
+            inputMode="numeric"
+            min={SLOT_JACKPOT_MIN_CAP}
+            max={SLOT_JACKPOT_MAX_CAP}
+            value={typed}
+            aria-invalid={fieldError ? true : undefined}
+            onChange={(event) => setDraft(event.target.value)}
+            className="rounded-xs border border-line bg-bg px-3 py-2 tabular-nums"
+          />
+          {typedCap !== null && typedCap >= SLOT_JACKPOT_MIN_CAP && typedCap <= SLOT_JACKPOT_MAX_CAP && (
+            <span className="text-sm text-muted">
+              {`Can drop from ${silverText(typedCap * 100)}, must drop before ${silverText(typedCap * 1000)}.`}
+            </span>
+          )}
+          {fieldError && (
+            <p role="alert" className="text-sm text-danger">
+              {fieldError}
+            </p>
+          )}
+        </div>
+        <div>
+          <Button type="submit" disabled={save.isPending}>
+            Save cap
+          </Button>
+        </div>
+      </form>
+      <FormMessage message={error} />
+
+      {running ? (
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3 text-sm">
+          <dl className="flex flex-col gap-0.5">
+            <dt className={labelText}>Pot now</dt>
+            <dd className="font-bold">{silverText(running.pot)}</dd>
+          </dl>
+          <p className="text-muted">
+            {running.cap === jackpot.setCap * 1000
+              ? `Must drop before ${silverText(running.cap)}.`
+              : `This jackpot must drop before ${silverText(running.cap)}. The next one: ${silverText(jackpot.setCap * 1000)}.`}
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">The jackpot's table is not in this database yet.</p>
+      )}
+
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+        <div className="flex flex-col gap-0.5">
+          <dt className={labelText}>Added</dt>
+          <dd>{silverText(jackpot.added)}</dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className={labelText}>Paid out</dt>
+          <dd>{silverText(jackpot.paid)}</dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <dt className={labelText}>Drops</dt>
+          <dd>{jackpot.drops.toLocaleString('en-US')}</dd>
+        </div>
+      </dl>
+
+      {wins.length === 0 ? (
+        <p className="rounded-xs border border-dashed border-line p-10 text-center text-muted">Nobody has won the jackpot yet.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xs border border-line bg-bg">
+          <table aria-label="Jackpot drops" className="w-full text-left text-sm">
+            <thead className={labelText}>
+              <tr>
+                {['When', 'Character', 'Machine', 'Won'].map((title) => (
+                  <th key={title} scope="col" className="px-3 py-2">
+                    {title}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {wins.map(({ spin, rules }) => (
+                <tr key={spin.id} className="border-t border-line">
+                  <td className="px-3 py-2 whitespace-nowrap text-muted">{formatSpinTime(spin.at)}</td>
+                  <td className="px-3 py-2 font-bold">{spin.character}</td>
+                  <td className="px-3 py-2">{rules.name}</td>
+                  <td className="px-3 py-2">{silverText(spin.jackpot)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -266,6 +430,10 @@ function Totals({ title, totals }: { title: string; totals: SlotTotals }) {
           <dd>{silverText(totals.paid)}</dd>
         </div>
         <div className="flex flex-col gap-0.5">
+          <dt className={labelText}>To the jackpot</dt>
+          <dd>{silverText(totals.added)}</dd>
+        </div>
+        <div className="flex flex-col gap-0.5">
           <dt className={labelText}>House result</dt>
           <dd className="font-bold">{houseResult(totals)}</dd>
         </div>
@@ -292,7 +460,7 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
         <p className="rounded-xs border border-dashed border-line p-10 text-center text-muted">Nobody has spun yet.</p>
       ) : (
         <div className="overflow-x-auto rounded-xs border border-line bg-surface">
-          <table className="w-full text-left text-sm">
+          <table aria-labelledby="slots-latest-heading" className="w-full text-left text-sm">
             <thead className={labelText}>
               <tr>
                 {['When', 'Character', 'Machine', 'Symbols', 'Staked', 'Paid'].map((title) => (
@@ -318,7 +486,7 @@ function LatestSpins({ spins }: { spins: GmSlots['latest'] }) {
                     </span>
                   </td>
                   <td className="px-3 py-2">{silverText(spin.stake)}</td>
-                  <td className="px-3 py-2">{silverText(spin.payout)}</td>
+                  <td className="px-3 py-2">{spin.jackpot > 0 ? `Jackpot ${silverText(spin.jackpot)}` : silverText(spin.payout)}</td>
                 </tr>
               ))}
             </tbody>

@@ -177,6 +177,70 @@ export function slotOdds(machine: SlotMachine): { combos: number; paid: number; 
   return { combos: SLOT_REEL_STOPS ** 3, paid, hits, top };
 }
 
+export const SLOT_JACKPOT_DEFAULT_CAP = 50; // whole Gold
+export const SLOT_JACKPOT_MIN_CAP = 1;
+export const SLOT_JACKPOT_MAX_CAP = 10_000;
+/** The jackpot's random draw is a whole number from 0 up to (not including) this. */
+export const SLOT_JACKPOT_ROLLS = 1_000_000_000;
+export const BRONZE_PER_SILVER = 1000;
+export const BRONZE_PER_GOLD = 1_000_000;
+
+// Counting a machine's results takes 32,768 prizes, and every spin and every render of the page asks for the share.
+// Keyed by the machine object, not its key, so a copy with other reels gets its own count.
+const jackpotShares = new WeakMap<SlotMachine, { num: number; den: number }>();
+
+/**
+ * The share of a lost stake that goes to the pot, as two whole numbers: (combos - paid) / (combos - hits). The
+ * lost rounds then give back to the pot exactly what the winning ones took out of the stakes.
+ */
+export function slotJackpotShare(machine: SlotMachine): { num: number; den: number } {
+  let share = jackpotShares.get(machine);
+  if (!share) {
+    const { combos, paid, hits } = slotOdds(machine);
+    share = { num: combos - paid, den: combos - hits };
+    jackpotShares.set(machine, share);
+  }
+  return { ...share };
+}
+
+/** What a lost round of `stake` Silver adds to the pot, in whole Bronze, rounded down. */
+export function slotJackpotAdd(machine: SlotMachine, stake: number): number {
+  const { num, den } = slotJackpotShare(machine);
+  return Math.floor((stake * BRONZE_PER_SILVER * num) / den);
+}
+
+/**
+ * Whether the lost round that adds `add` to a pot of `pot` under `cap` makes it drop. All three in Bronze;
+ * `roll` is a whole number from 0 up to SLOT_JACKPOT_ROLLS. The database step does the same sum.
+ */
+export function slotJackpotDrops(pot: number, add: number, cap: number, roll: number): boolean {
+  // BigInt so a 10,000 Gold cap times the roll range cannot overflow.
+  const p = BigInt(pot);
+  const c = BigInt(cap);
+  const floor = c / 10n;
+  const from = p > floor ? p : floor;
+  const to = p + BigInt(add) > floor ? p + BigInt(add) : floor;
+  if (from >= c) return true;
+  return BigInt(roll) * (c - from) < (to - from) * BigInt(SLOT_JACKPOT_ROLLS);
+}
+
+export const slotJackpotSettingsSchema = z.object({
+  live: z.boolean(),
+  cap: z.number().int().min(SLOT_JACKPOT_MIN_CAP).max(SLOT_JACKPOT_MAX_CAP),
+});
+export type SlotJackpotSettingsInput = z.output<typeof slotJackpotSettingsSchema>;
+
+/** What players see. All money whole Silver, rounded down. */
+export type SlotJackpot = {
+  live: boolean;
+  pot: number;
+  /** The cap this pot runs under; the cap set now while the pot has none. */
+  cap: number;
+  /** A tenth of the cap. */
+  floor: number;
+  last: { character: string; amount: number; at: string } | null;
+};
+
 /** The share of all stakes the machine pays back: paid / combos. */
 export const slotReturn = (machine: SlotMachine): number => {
   const { paid, combos } = slotOdds(machine);
@@ -226,6 +290,8 @@ export type SlotSpinView = {
   /** Whole Silver. */
   stake: number;
   payout: number;
+  /** Whole Silver won from the pot, 0 for a spin that did not win it. */
+  jackpot: number;
 };
 export type SlotsState = {
   live: boolean;
@@ -235,8 +301,29 @@ export type SlotsState = {
   mine: SlotSpinView[];
   /** The latest big wins by anyone, newest first. */
   bigWins: SlotSpinView[];
+  /** Null when the jackpot cannot be read. */
+  jackpot: SlotJackpot | null;
 };
 export type SlotSpinResult = { spin: SlotSpinView; wallet: Wallet; state: SlotsState };
-export type SlotTotals = { spins: number; staked: number; paid: number };
+export type SlotTotals = {
+  spins: number;
+  staked: number;
+  paid: number;
+  /** Whole Silver that went to the jackpot. */
+  added: number;
+};
 export type GmSlotMachine = SlotMachineState & { today: SlotTotals; allTime: SlotTotals };
-export type GmSlots = { live: boolean; machines: GmSlotMachine[]; latest: SlotSpinView[] };
+/** All money whole Silver, rounded down. */
+export type GmSlotJackpot = {
+  live: boolean;
+  /** The cap set for the next jackpot, whole Gold. */
+  setCap: number;
+  /** Null when the pot cannot be read. `cap` is what this pot runs under: the set cap while it has none. */
+  running: { pot: number; cap: number; floor: number } | null;
+  added: number;
+  paid: number;
+  drops: number;
+  /** The latest 10 drops, newest first. */
+  wins: SlotSpinView[];
+};
+export type GmSlots = { live: boolean; machines: GmSlotMachine[]; latest: SlotSpinView[]; jackpot: GmSlotJackpot };

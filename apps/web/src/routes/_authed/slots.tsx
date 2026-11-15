@@ -1,4 +1,4 @@
-import { SLOT_MACHINES, silverText, slotLargestWin, slotLine, slotMachine, slotOdds, slotPrize, slotRest, slotReturn, slotWindow, walletSilver } from '@4story-portal/shared'
+import { SLOT_MACHINES, silverText, slotJackpotShare, slotLargestWin, slotLine, slotMachine, slotOdds, slotPrize, slotRest, slotReturn, slotWindow, walletSilver } from '@4story-portal/shared'
 import type { SlotMachine, SlotMachineKey, SlotMachineState, SlotSpinResult, SlotSpinView, SlotsState, SlotStops } from '@4story-portal/shared'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
@@ -8,6 +8,7 @@ import { Button } from '../../components/Button'
 import { FormMessage } from '../../components/FormMessage'
 import { WalletCharacterPicker, WalletCoins } from '../../components/games/WalletCharacterPicker'
 import { GameIcon } from '../../components/gm/GameIcon'
+import { JackpotBanner } from '../../components/slots/JackpotBanner'
 import { PayTable } from '../../components/slots/PayTable'
 import { Reels } from '../../components/slots/Reels'
 import { Tabs } from '../../components/Tabs'
@@ -61,6 +62,12 @@ function houseLine(machine: SlotMachine): string {
   return line
 }
 
+/** What a lost round on the machine adds to the jackpot, as a share of its stake. */
+function jackpotLine(machine: SlotMachine): string {
+  const { num, den } = slotJackpotShare(machine)
+  return `A lost round on this machine adds ${((num / den) * 100).toFixed(1)}% of its stake to the jackpot. With the jackpot, the slots pay back everything staked, over time.`
+}
+
 const rests = new Map<SlotMachineKey, SlotStops>()
 
 /** Where the machine rests before its first spin. Found once per machine. */
@@ -75,6 +82,7 @@ function restOf(machine: SlotMachine): SlotStops {
 
 /** "Won" is everything paid back, stake included, so the stake is always shown beside it. */
 function resultLine(machine: SlotMachine, spin: SlotSpinView): string {
+  if (spin.jackpot > 0) return `Jackpot. This round made it drop. You won ${silverText(spin.jackpot)} on a stake of ${silverText(spin.stake)}.`
   if (spin.payout <= 0) return `No win this time. You staked ${silverText(spin.stake)}.`
   return `${slotLine(machine, slotPrize(machine, spin.stops))} You won ${silverText(spin.payout)} on a stake of ${silverText(spin.stake)}.`
 }
@@ -154,6 +162,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const inGame = character?.online === true
   const canSpin = view.live && settings.live && characterFree && money !== null && stake !== null && money >= stake && !busy
   const reelSpin = spins[machine.key] ?? null
+  // Told with the result, when the last reel has stopped, like the wallet.
+  const wonJackpot = shown !== null && !busy && shown.spin.jackpot > 0
 
   async function onSpin() {
     // A second press finds the button already off: React applies a press's state before the next one.
@@ -247,6 +257,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
       <p className="mt-1 hidden text-muted sm:block">Three machines, one pull at a time.</p>
       <p className="order-1 mt-3 text-sm text-muted sm:mt-1 sm:mb-6">This is real gambling with your character's money. Each machine shows what it pays back.</p>
 
+      {view.jackpot && <JackpotBanner jackpot={view.jackpot} won={wonJackpot} />}
+
       <Tabs
         label="Machine"
         tabs={SLOT_MACHINES.map((m) => ({ id: m.key, label: m.name, note: settingsOf(view, m).live ? undefined : 'Closed' }))}
@@ -313,7 +325,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
               <p className="text-muted">Good luck...</p>
             ) : (
               <>
-                {lastSpin && <p className={`text-lg ${lastSpin.payout > 0 ? 'font-bold text-accent-text' : ''}`}>{resultLine(machine, lastSpin)}</p>}
+                {lastSpin && <p className={`text-lg ${lastSpin.payout > 0 || lastSpin.jackpot > 0 ? 'font-bold text-accent-text' : ''}`}>{resultLine(machine, lastSpin)}</p>}
                 {stakeNote && <p className="text-muted">{stakeNote}</p>}
                 {note && <p className="text-muted">{note}</p>}
                 {!lastSpin && !note && !stakeNote && <p className="text-muted">Pick a stake, then press Spin.</p>}
@@ -332,6 +344,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           <PayTable machine={machine} stake={stake ?? lowest} />
         </div>
         <p className="mt-3 text-sm text-muted">{houseLine(machine)}</p>
+        {view.jackpot?.live && <p className="mt-2 text-sm text-muted">{jackpotLine(machine)}</p>}
         <p className="mt-2 text-sm text-muted">The most one spin can win at these stakes is {silverText(slotLargestWin(machine, settings.stakes))}.</p>
       </section>
 
@@ -343,7 +356,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
         line={(entry, of) => (
           <>
             {of.name}: <LineIcons machine={of} stops={entry.stops} /> staked {silverText(entry.stake)}, won{' '}
-            {entry.payout > 0 ? silverText(entry.payout) : 'nothing'}
+            {entry.jackpot > 0 ? `the jackpot, ${silverText(entry.jackpot)}` : entry.payout > 0 ? silverText(entry.payout) : 'nothing'}
           </>
         )}
       />
@@ -352,7 +365,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
         title="Big wins"
         spins={known(view.bigWins)}
         empty="Nobody has had a big win yet."
-        line={(entry, of) => `${entry.character} won ${silverText(entry.payout)} on ${of.name}`}
+        line={(entry, of) =>
+          entry.jackpot > 0 ? `${entry.character} won the jackpot, ${silverText(entry.jackpot)}` : `${entry.character} won ${silverText(entry.payout)} on ${of.name}`
+        }
       />
     </main>
   )

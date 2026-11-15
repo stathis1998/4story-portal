@@ -6,10 +6,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/config.js';
 import type { DbService } from '../../src/db/db.service.js';
 import { BET_CLOSED, BET_OK, BET_ONLINE } from '../../src/games/wallet-bet.js';
-import { type SlotBetInput, SLOTS_LIVE_KEY, SqlSlotsRepository } from '../../src/slots/slots.repository.js';
+import {
+  type SlotBetInput,
+  SLOTS_JACKPOT_CAP_KEY,
+  SLOTS_JACKPOT_LIVE_KEY,
+  SLOTS_LIVE_KEY,
+  type SlotPotRow,
+  SqlSlotsRepository,
+} from '../../src/slots/slots.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
-const setupSql = ['TPORTALSETTING.sql', 'TPORTALSLOTSPIN.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
+const setupSql = ['TPORTALSETTING.sql', 'TPORTALSLOTSPIN.sql', 'TPORTALSLOTJACKPOT.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
 
 type Character = { charId: number; userId: number; name: string };
 type Ctx = { repo: SqlSlotsRepository; tx: sql.Transaction; character: Character };
@@ -28,9 +35,17 @@ type SpinTableRow = {
   llPayout: string;
   llWallet: string;
   wMultiple: number;
+  llAdded: string;
+  llJackpot: string;
 };
 
 const START: Wallet = { gold: 5, silver: 250, copper: 999 };
+
+/** A lost 50 Silver round on Tranus's Shelf, with what it adds to the pot. */
+const LOST: Partial<SlotBetInput> = { stake: 50, payout: 0, multiple: 0, add: 2784 };
+
+/** The jackpot before a GM saves anything. */
+const STARTING_JACKPOT = { live: true, cap: 50 };
 
 /** What every machine holds before a GM saves anything. */
 const STARTING_MACHINES = {
@@ -59,6 +74,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       // A table or settings already there keep what was made of them; these tests start from nothing.
       await new sql.Request(tx).query(`DELETE FROM ${db.tables.slotSpins}`);
       await new sql.Request(tx).query(`DELETE FROM ${db.tables.portalSettings} WHERE szKey LIKE 'slots[_]%'`);
+      await new sql.Request(tx).query(`UPDATE ${db.tables.slotJackpot} SET llPot = 0, llCap = NULL WHERE bID = 1`);
 
       const picked = await new sql.Request(tx).query<Character>(
         `SELECT TOP 1 dwCharID AS charId, dwUserID AS userId, szNAME AS name FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`,
@@ -99,6 +115,15 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
   const spinRows = async (tx: sql.Transaction) =>
     (await new sql.Request(tx).query<SpinTableRow>(`SELECT * FROM ${db.tables.slotSpins} ORDER BY dwID`)).recordset;
 
+  const potOf = async (tx: sql.Transaction): Promise<SlotPotRow> => {
+    const row = (await new sql.Request(tx).query<{ llPot: string; llCap: string | null }>(`SELECT llPot, llCap FROM ${db.tables.slotJackpot} WHERE bID = 1`))
+      .recordset[0];
+    return { pot: Number(row.llPot), cap: row.llCap === null ? null : Number(row.llCap) };
+  };
+
+  const setPot = (tx: sql.Transaction, pot: number, cap: number | null) =>
+    new sql.Request(tx).input('pot', sql.BigInt, pot).input('cap', sql.BigInt, cap).query(`UPDATE ${db.tables.slotJackpot} SET llPot = @pot, llCap = @cap WHERE bID = 1`);
+
   const setRawSetting = (tx: sql.Transaction, key: string, value: string) =>
     new sql.Request(tx)
       .input('key', sql.VarChar(40), key)
@@ -122,6 +147,9 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
     stake: 50,
     payout: 2500,
     multiple: 50,
+    add: 0,
+    cap: 50,
+    roll: 999_999_999,
     ...overrides,
   });
 
@@ -134,7 +162,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
 
   it('has the floor closed, every machine open and the starting stakes before anything is saved', () =>
     withRepo(async ({ repo }) => {
-      expect(await repo.settings()).toEqual({ live: false, machines: STARTING_MACHINES });
+      expect(await repo.settings()).toEqual({ live: false, machines: STARTING_MACHINES, jackpot: STARTING_JACKPOT });
     }));
 
   it('saves and reads back the floor switch, a machine switch and its stakes', () =>
@@ -145,6 +173,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await repo.settings()).toEqual({
         live: true,
         machines: { ...STARTING_MACHINES, hoard: { live: false, stakes: [100, 250, 1000] } },
+        jackpot: STARTING_JACKPOT,
       });
       const rows = await new sql.Request(tx).query<{ szKey: string; szValue: string; szUpdatedBy: string }>(
         `SELECT szKey, szValue, szUpdatedBy FROM ${db.tables.portalSettings} WHERE szKey LIKE 'slots[_]%' ORDER BY szKey`,
@@ -161,6 +190,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await repo.settings()).toEqual({
         live: false,
         machines: { ...STARTING_MACHINES, hoard: { live: true, stakes: [5, 6, 7] } },
+        jackpot: STARTING_JACKPOT,
       });
     }));
 
@@ -193,7 +223,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
 
       const wallet = await walletOf(tx, character.charId);
       expect(wallet).toEqual({ gold: 7, silver: 700, copper: 999 });
-      expect(outcome).toEqual({ code: BET_OK, id: expect.any(Number), wallet });
+      expect(outcome).toEqual({ code: BET_OK, id: expect.any(Number), wallet, jackpot: 0 });
     }));
 
   it('a loss takes exactly the stake', () =>
@@ -211,7 +241,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       const rows = await spinRows(tx);
       expect(rows).toHaveLength(1);
       const row = rows[0];
-      expect({ ...row, llStake: Number(row.llStake), llPayout: Number(row.llPayout), llWallet: Number(row.llWallet) }).toEqual({
+      expect({ ...row, llStake: Number(row.llStake), llPayout: Number(row.llPayout), llWallet: Number(row.llWallet), llAdded: Number(row.llAdded), llJackpot: Number(row.llJackpot) }).toEqual({
         dwID: id,
         dwUserID: character.userId,
         dwCharID: character.charId,
@@ -225,10 +255,12 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         llPayout: 2_500_000,
         llWallet: 7_700_999,
         wMultiple: 50,
+        llAdded: 0,
+        llJackpot: 0,
       });
 
       expect(await repo.spinsOf(character.userId, 10)).toEqual([
-        { id, userId: character.userId, character: character.name, spunAt: expect.any(Date), machine: 'hoard', stops: [0, 17, 31], stake: 50, payout: 2500 },
+        { id, userId: character.userId, character: character.name, spunAt: expect.any(Date), machine: 'hoard', stops: [0, 17, 31], stake: 50, payout: 2500, jackpot: 0 },
       ]);
       expect(await repo.spinsOf(character.userId + 1, 10)).toEqual([]);
     }));
@@ -277,7 +309,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         );
 
       expect(await repo.latest(10)).toEqual([
-        { id: expect.any(Number), userId: character.userId, character: character.name, spunAt: expect.any(Date), machine: 'retired', stops: [1, 2, 3], stake: 40, payout: 80 },
+        { id: expect.any(Number), userId: character.userId, character: character.name, spunAt: expect.any(Date), machine: 'retired', stops: [1, 2, 3], stake: 40, payout: 80, jackpot: 0 },
       ]);
     }));
 
@@ -297,9 +329,260 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       }
 
       expect(await repo.totals()).toEqual({
-        shelf: { today: { spins: 2, staked: 30, paid: 700 }, allTime: { spins: 3, staked: 60, paid: 700 } },
-        armoury: { today: { spins: 0, staked: 0, paid: 0 }, allTime: { spins: 1, staked: 25, paid: 50 } },
-        hoard: { today: { spins: 1, staked: 50, paid: 0 }, allTime: { spins: 1, staked: 50, paid: 0 } },
+        shelf: { today: { spins: 2, staked: 30, paid: 700, added: 0 }, allTime: { spins: 3, staked: 60, paid: 700, added: 0 } },
+        armoury: { today: { spins: 0, staked: 0, paid: 0, added: 0 }, allTime: { spins: 1, staked: 25, paid: 50, added: 0 } },
+        hoard: { today: { spins: 1, staked: 50, paid: 0, added: 0 }, allTime: { spins: 1, staked: 50, paid: 0, added: 0 } },
       });
+    }));
+
+  it('a lost round adds to the pot and fixes its cap', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      const outcome = await repo.bet(bet(character, LOST));
+
+      expect(await potOf(tx)).toEqual({ pot: 2784, cap: 50_000_000 });
+      expect(await repo.pot()).toEqual({ pot: 2784, cap: 50_000_000 });
+      const wallet = { gold: 5, silver: 200, copper: 999 };
+      expect(await walletOf(tx, character.charId)).toEqual(wallet);
+      expect(outcome).toEqual({ code: BET_OK, id: expect.any(Number), wallet, jackpot: 0 });
+      const [row] = await spinRows(tx);
+      expect({ llAdded: Number(row.llAdded), llJackpot: Number(row.llJackpot) }).toEqual({ llAdded: 2784, llJackpot: 0 });
+    }));
+
+  it('a round that pays leaves the pot alone', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      const outcome = await repo.bet(bet(character, { payout: 2500, multiple: 50, add: 0 }));
+
+      expect(outcome).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 0, cap: null });
+      const [row] = await spinRows(tx);
+      expect(Number(row.llAdded)).toBe(0);
+    }));
+
+  it('a round that reaches the cap wins the whole Silver and leaves the odd Bronze', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await setPot(tx, 49_999_500, 50_000_000);
+
+      const outcome = await repo.bet(bet(character, LOST));
+
+      const wallet = { gold: 55, silver: 202, copper: 999 };
+      expect(outcome).toEqual({ code: BET_OK, id: expect.any(Number), wallet, jackpot: 50_002 });
+      expect(await walletOf(tx, character.charId)).toEqual(wallet);
+      expect(await potOf(tx)).toEqual({ pot: 284, cap: null });
+      const [row] = await spinRows(tx);
+      expect({
+        llPayout: Number(row.llPayout),
+        llJackpot: Number(row.llJackpot),
+        llAdded: Number(row.llAdded),
+        llWallet: Number(row.llWallet),
+        wMultiple: row.wMultiple,
+      }).toEqual({ llPayout: 0, llJackpot: 50_002_000, llAdded: 2784, llWallet: 55_202_999, wMultiple: 0 });
+    }));
+
+  it('the roll decides between floor and cap', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // 2784 of the 22,500,000 Bronze left to the cap: the round drops for a roll below 123,733.33.
+      await setPot(tx, 27_500_000, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 123_734 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 27_502_784, cap: 50_000_000 });
+
+      await setPot(tx, 27_500_000, 50_000_000);
+      await setWallet(tx, character.charId, START);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 123_733 }))).toMatchObject({ code: BET_OK, jackpot: 27_502 });
+      expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
+    }));
+
+  it('below the floor even a roll of 0 does not drop', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await setPot(tx, 1_000_000, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 0 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 1_002_784, cap: 50_000_000 });
+    }));
+
+  it('across the floor only the part past it counts', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // 1784 of the 45,000,000 Bronze from the floor to the cap: the round drops for a roll below 39,644.44.
+      await setPot(tx, 4_999_000, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 39_645 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 5_001_784, cap: 50_000_000 });
+
+      await setPot(tx, 4_999_000, 50_000_000);
+      await setWallet(tx, character.charId, START);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 39_644 }))).toMatchObject({ code: BET_OK, jackpot: 5001 });
+      expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
+    }));
+
+  it('a pot keeps its cap when the cap set changes, and the next pot takes the new one', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await setPot(tx, 10_000_000, 50_000_000);
+      await placed(repo, bet(character, { ...LOST, cap: 20, roll: 999_999_999 }));
+      expect(await potOf(tx)).toEqual({ pot: 10_002_784, cap: 50_000_000 });
+
+      await setPot(tx, 49_999_500, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, cap: 20 }))).toMatchObject({ code: BET_OK, jackpot: 50_002 });
+      await placed(repo, bet(character, { ...LOST, cap: 20 }));
+      expect(await potOf(tx)).toEqual({ pot: 284 + 2784, cap: 20_000_000 });
+    }));
+
+  it('does not overflow at a 10,000 Gold cap', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // On the floor: the roll's side is just under what a BIGINT holds, so this one only guards the rule.
+      await setPot(tx, 1_000_000_000, 10_000_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 999_999_999 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 1_000_002_784, cap: 10_000_000_000 });
+
+      // An add can be at most the stake, so only a 9,500 Gold stake makes (to - from) x 10^9 pass the BIGINT limit;
+      // no machine takes one, but the repository does not limit the stake. Only the DECIMAL sum gets here.
+      await setWallet(tx, character.charId, { gold: 10_000, silver: 0, copper: 0 });
+      expect(await repo.bet(bet(character, { ...LOST, stake: 9_500_000, add: 9_500_000_000, roll: 999_999_999 }))).toMatchObject({
+        code: BET_OK,
+        jackpot: 10_500_002,
+        wallet: { gold: 11_000, silver: 2, copper: 0 },
+      });
+      expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
+    }));
+
+  /** The wallet of the character withRepo picks and the spin count, read through the pool, outside any test's transaction. */
+  const outside = async () => ({
+    wallet: (
+      await db.pool
+        .request()
+        .query<Wallet>(`SELECT TOP 1 dwGold AS gold, dwSilver AS silver, dwCooper AS copper FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`)
+    ).recordset[0],
+    // The spin table may exist only inside the tests' transactions.
+    spins: (
+      await db.pool
+        .request()
+        .query<{ n: number }>(`IF OBJECT_ID('${db.tables.slotSpins}', 'U') IS NULL SELECT -1 AS n ELSE SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)
+    ).recordset[0].n,
+  });
+
+  // A pot table that is not there is only found when the pot step runs, after the checks. The error (208) rolls
+  // back the whole transaction, the caller's included, so nothing is left open on the connection; the wallet and
+  // spins are read again through the pool, outside it.
+  it('rolls everything back when the pot table is missing', async () => {
+    const before = await outside();
+
+    // The helper then fails to roll back a transaction that is already gone; that is the proof it was rolled back.
+    let refused = false;
+    await expect(
+      withLiveRepo(async ({ repo, tx, character }) => {
+        await new sql.Request(tx).query(`DROP TABLE ${db.tables.slotJackpot}`);
+        await expect(repo.bet(bet(character, LOST))).rejects.toThrow(/Invalid object name/);
+        refused = true;
+      }),
+    ).rejects.toThrow('Transaction has been aborted');
+    expect(refused).toBe(true);
+
+    expect(await outside()).toEqual(before);
+  });
+
+  // No real round has these: a lost round adds a share of its stake and pays nothing, and the roll is randomInt(1e9).
+  // The THROW rolls back the whole transaction like the missing table above, so each input gets its own.
+  it.each<[string, Partial<SlotBetInput>]>([
+    ['a round that pays and adds', { ...LOST, payout: 2500, multiple: 50 }],
+    ['an add past the stake', { ...LOST, add: 50_001 }],
+    ['a negative roll', { ...LOST, roll: -1 }],
+    ['a roll of 1,000,000,000', { ...LOST, roll: 1_000_000_000 }],
+    ['no roll', { ...LOST, roll: null as unknown as number }],
+  ])('refuses %s and writes nothing', async (_, input) => {
+    const before = await outside();
+
+    let refused = false;
+    await expect(
+      withLiveRepo(async ({ repo, character }) => {
+        await expect(repo.bet(bet(character, input))).rejects.toThrow('A round cannot add that to the jackpot');
+        refused = true;
+      }),
+    ).rejects.toThrow('Transaction has been aborted');
+    expect(refused).toBe(true);
+
+    expect(await outside()).toEqual(before);
+  });
+
+  it('a refused spin leaves the pot alone', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await goOnline(tx, character.userId, character.charId);
+
+      expect(await repo.bet(bet(character, LOST))).toEqual({ code: BET_ONLINE, name: character.name });
+      expect(await potOf(tx)).toEqual({ pot: 0, cap: null });
+    }));
+
+  it('the pot is always what was added less what was paid', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // A 1 Gold cap, so six rounds reach past its floor; the fourth round's roll of 0 drops it.
+      const rounds: Partial<SlotBetInput>[] = [
+        { machine: 'shelf', add: 2784 },
+        { machine: 'armoury', add: 5151 },
+        { machine: 'hoard', stake: 100, add: 98_000 },
+        { machine: 'shelf', add: 40_000, roll: 0 },
+        { machine: 'armoury', add: 5151 },
+        { machine: 'hoard', add: 8673, roll: 500_000_000 },
+      ];
+      for (const round of rounds) await placed(repo, bet(character, { ...LOST, cap: 1, ...round }));
+
+      const sums = await new sql.Request(tx).query<{ added: string; paid: string; drops: number }>(
+        `SELECT SUM(llAdded) AS added, SUM(llJackpot) AS paid, COUNT(CASE WHEN llJackpot > 0 THEN 1 END) AS drops FROM ${db.tables.slotSpins}`,
+      );
+      const { added, paid, drops } = sums.recordset[0];
+      expect(drops).toBe(1);
+      expect(Number(paid)).toBe(145_000);
+      expect(await potOf(tx)).toEqual({ pot: Number(added) - Number(paid), cap: 1_000_000 });
+    }));
+
+  it('reads the jackpot on with a 50 Gold cap before anything is saved, and saves it', () =>
+    withRepo(async ({ repo, tx }) => {
+      expect((await repo.settings()).jackpot).toEqual({ live: true, cap: 50 });
+
+      await repo.saveJackpot({ live: false, cap: 80 }, 'otter');
+
+      expect((await repo.settings()).jackpot).toEqual({ live: false, cap: 80 });
+      const rows = await new sql.Request(tx).query<{ szKey: string; szValue: string; szUpdatedBy: string }>(
+        `SELECT szKey, szValue, szUpdatedBy FROM ${db.tables.portalSettings} WHERE szKey LIKE 'slots[_]jackpot[_]%' ORDER BY szKey`,
+      );
+      expect(rows.recordset).toEqual([
+        { szKey: SLOTS_JACKPOT_CAP_KEY, szValue: '80', szUpdatedBy: 'otter' },
+        { szKey: SLOTS_JACKPOT_LIVE_KEY, szValue: 'false', szUpdatedBy: 'otter' },
+      ]);
+    }));
+
+  it.each(['abc', '0', '10001', '12.5'])('falls back to a 50 Gold cap when the setting holds %s', (value) =>
+    withRepo(async ({ repo, tx }) => {
+      await repo.saveJackpot({ live: false, cap: 80 }, 'moose');
+      await setRawSetting(tx, SLOTS_JACKPOT_CAP_KEY, value);
+
+      // The switch beside it still reads as saved.
+      expect((await repo.settings()).jackpot).toEqual({ live: false, cap: 50 });
+    }));
+
+  it('lists jackpot wins, and among the big wins', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await setPot(tx, 49_999_500, 50_000_000);
+      const drop = await placed(repo, bet(character, LOST));
+      const win = await placed(repo, bet(character, { stake: 10, payout: 500, multiple: 50 }));
+      await placed(repo, bet(character, { stake: 10, payout: 0, multiple: 0 }));
+
+      expect(await repo.jackpotWins(10)).toEqual([
+        { id: drop, userId: character.userId, character: character.name, spunAt: expect.any(Date), machine: 'shelf', stops: [3, 17, 30], stake: 50, payout: 0, jackpot: 50_002 },
+      ]);
+      expect((await repo.bigWins(10)).map((row) => [row.id, row.jackpot])).toEqual([
+        [win, 0],
+        [drop, 50_002],
+      ]);
+    }));
+
+  it('adds up what went to the jackpot', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      expect(await repo.jackpotTotals()).toEqual({ added: 0, paid: 0, drops: 0 });
+
+      await placed(repo, bet(character, { ...LOST, machine: 'shelf' }));
+      await setPot(tx, 49_999_500, 50_000_000);
+      await placed(repo, bet(character, { ...LOST, machine: 'armoury', add: 5151 }));
+
+      const totals = await repo.totals();
+      expect(totals.shelf.allTime).toEqual({ spins: 1, staked: 50, paid: 0, added: 2 });
+      expect(totals.shelf.today).toEqual({ spins: 1, staked: 50, paid: 0, added: 2 });
+      expect(totals.armoury.allTime).toEqual({ spins: 1, staked: 50, paid: 0, added: 5 });
+      // 49,999,500 + 5151 drops as 50,004 Silver.
+      expect(await repo.jackpotTotals()).toEqual({ added: 2784 + 5151, paid: 50_004, drops: 1 });
     }));
 });

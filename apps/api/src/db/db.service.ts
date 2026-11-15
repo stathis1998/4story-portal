@@ -50,6 +50,7 @@ export function tableNames(config: AppConfig) {
     wheelProcedure: `${game}.TPortalWheelSpin`,
     rouletteSpins: `${game}.TPORTALROULETTESPIN`,
     slotSpins: `${game}.TPORTALSLOTSPIN`,
+    slotJackpot: `${game}.TPORTALSLOTJACKPOT`,
   };
 }
 
