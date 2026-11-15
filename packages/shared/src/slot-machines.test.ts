@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SLOT_LETTERS, SLOT_PAYING, SLOT_REEL_STOPS, SLOT_SCATTER, SLOT_WILD } from './slots.js';
 import { slotSpin, slotWindow } from './slot-rules.js';
 import { countSlotMachine } from './slot-count.js';
-import { slotFreeRate, slotLostRate, slotReturn } from './slot-figures.js';
+import { slotFreeRate, slotJackpotAdd, slotJackpotShare, slotLostRate, slotReturn } from './slot-figures.js';
 import { SLOT_MACHINES, slotMachine } from './slot-machines.js';
 
 const WILD = SLOT_LETTERS[SLOT_WILD];
@@ -57,6 +57,18 @@ describe.each(SLOT_MACHINES)('$name', (machine) => {
   it('returns between 95% and 96.5%', () => {
     expect(slotReturn(machine)).toBeGreaterThanOrEqual(0.95);
     expect(slotReturn(machine)).toBeLessThanOrEqual(0.965);
+  });
+
+  it('never pays back more than is staked, the jackpot counted', () => {
+    const back = slotReturn(machine);
+    const lost = slotLostRate(machine);
+    const { num, den } = slotJackpotShare(machine);
+    expect(back + (lost * num) / den).toBeLessThanOrEqual(1);
+    expect(back + (lost * num) / den).toBeGreaterThan(1 - 3e-9);
+    // What a lost round adds, in Bronze, is never more than the share of the stake the machine keeps.
+    for (const stake of [...machine.stakes, 100_000]) {
+      expect(slotJackpotAdd(machine, stake)).toBeLessThanOrEqual((stake * 1000 * (1 - back)) / lost);
+    }
   });
 
   it('rests on a window that looks like nothing', () => {
