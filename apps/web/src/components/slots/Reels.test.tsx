@@ -1,9 +1,10 @@
-import { SLOT_MACHINES, SLOT_REEL_STOPS, slotWindow } from '@4story-portal/shared'
-import type { SlotStops } from '@4story-portal/shared'
+import { SLOT_MACHINES, SLOT_REEL_STOPS, slotChain, slotWindow } from '@4story-portal/shared'
+import type { SlotStep, SlotStops } from '@4story-portal/shared'
 import { act, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { reelTimes } from '../../lib/slots'
+import { stopsWhere } from '../../test/slot-fixture'
 import { cabinetLine, Reels } from './Reels'
 
 const machine = SLOT_MACHINES[0]
@@ -35,6 +36,29 @@ const shown = () =>
     }),
   )
 
+/** The symbol index a tile shows, read from its icon's file. */
+const symbolOf = (tile: Element) => {
+  const src = tile.querySelector('img')!.getAttribute('src')!
+  return machine.symbols.findIndex((symbol) => src === `/game-icons/${symbol.sprite}.png`)
+}
+
+/** The three tiles of a reel's step grid, top first. */
+const stepTiles = (reel: number) => [...screen.getByTestId(`step-${reel}`).children] as HTMLElement[]
+
+/** The symbol index in each tile of the step grid: [reel][row]. */
+const stepShown = () => [0, 1, 2, 3, 4].map((reel) => stepTiles(reel).map(symbolOf))
+
+/** How many rows above its place a tile is drawn: 0 when it is not moved. */
+const rowsAbove = (tile: HTMLElement) => -Number(/translateY\((-?[\d.e+-]+)%\)/.exec(tile.style.transform)?.[1] ?? 0) / 100
+
+/** The first stops whose cascade runs three steps or more, so step 2 bursts what step 1 won and step 3 what step 2 won. */
+const CHAIN = stopsWhere(machine, (_, stops) => slotChain(machine, stops).steps.length >= 3)
+const STEPS = slotChain(machine, CHAIN).steps
+const stepOf = (i: number, key = `s${i + 1}`) => {
+  const { grid, drop, burst }: SlotStep = STEPS[i]
+  return { step: { grid, drop, burst, key } }
+}
+
 const litTiles = () =>
   [0, 1, 2, 3, 4].flatMap((reel) => [...strip(reel).element.children].filter((tile) => (tile as HTMLElement).dataset.won))
 
@@ -55,6 +79,7 @@ function setup(props: Partial<ComponentProps<typeof Reels>> = {}) {
     stopNow: 0,
     onReelStopped: (reel) => told.push(`reel ${reel}`),
     onStopped: () => told.push('stopped'),
+    onStepLanded: () => told.push(`landed ${base.step?.key}`),
     ...props,
   }
   const view = render(<Reels {...base} />)
@@ -244,6 +269,218 @@ describe('the reels', () => {
     vi.advanceTimersByTime(5000)
     expect(second.told).toEqual([])
     expect(errors).not.toHaveBeenCalled()
+  })
+})
+
+describe('a cascade step on the reels', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  /** The reels at rest on CHAIN, as the page has them when the paid spin has stopped. */
+  const stopped = (props: Partial<ComponentProps<typeof Reels>> = {}) => setup({ ...spinTo(CHAIN), ...props })
+
+  it('draws step 1 in place of the strips at once, tile for tile where the strips were, and tells it landed', () => {
+    animate()
+    const { told, update } = stopped()
+    const before = shown()
+    const tileClass = tileAt(0, 0).className
+    update(stepOf(0))
+    expect(told).toEqual(['landed s1'])
+    expect(STEPS[0].grid).toEqual(before)
+    expect(stepShown()).toEqual(before)
+    for (let reel = 0; reel < 5; reel++) {
+      expect(strip(reel).element).not.toBeVisible()
+      expect(screen.getByTestId(`step-${reel}`)).toBeVisible()
+      // In the same window as the strip, at its top, with tiles of the same size, none of them moved.
+      expect(screen.getByTestId(`step-${reel}`).parentElement).toBe(strip(reel).element.parentElement!.parentElement)
+      for (const tile of stepTiles(reel)) {
+        expect(tile.className).toBe(tileClass)
+        expect(tile.style.transform).toBe('')
+      }
+    }
+    expect(screen.queryByTestId('burst-0')).toBeNull()
+    const names = STEPS[0].grid.map((rows) => rows.map((s) => machine.symbols[s].name))
+    const row = (r: number) => names.map((rows) => rows[r]).join(', ')
+    expect(screen.getByRole('img')).toHaveAccessibleName(`Reels: top row ${row(0)}; middle row ${row(1)}; bottom row ${row(2)}`)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('bursts the tiles the step before won, then drops each tile from its drop rows to its place', () => {
+    animate()
+    const { told, update } = stopped()
+    update(stepOf(0))
+    update(stepOf(1))
+    const { drop } = STEPS[1]
+    const burst = STEPS[0].burst
+    const isBurst = (reel: number, row: number) => burst.some(([r, w]) => r === reel && w === row)
+    const burstTile = (reel: number, row: number) => screen.getByTestId(`burst-${reel}`).children[row] as HTMLElement
+    expect(screen.getByRole('img')).toHaveAccessibleName('Reels, tiles falling')
+
+    // The burst: step 1's grid, its winning tiles fading and shrinking, the new grid waiting above its places.
+    for (let reel = 0; reel < 5; reel++) {
+      expect(screen.getByTestId(`burst-${reel}`)).toBeVisible()
+      expect(screen.getByTestId(`step-${reel}`)).not.toBeVisible()
+      expect([...screen.getByTestId(`burst-${reel}`).children].map(symbolOf)).toEqual(STEPS[0].grid[reel])
+      stepTiles(reel).forEach((tile, row) => expect(rowsAbove(tile)).toBeCloseTo(drop[reel][row], 6))
+    }
+    advance(16 + 150)
+    for (let reel = 0; reel < 5; reel++) {
+      for (let row = 0; row < 3; row++) {
+        const opacity = burstTile(reel, row).style.opacity
+        if (isBurst(reel, row)) {
+          expect(Number(opacity)).toBeGreaterThan(0)
+          expect(Number(opacity)).toBeLessThan(1)
+          expect(burstTile(reel, row).style.transform).toMatch(/^scale\(0\.\d+\)$/)
+        } else expect(opacity).toBe('')
+      }
+    }
+
+    // The fall: the new grid, every tile that moves still above its place, each falling as far as it has to.
+    advance(250)
+    expect(told).toEqual(['landed s1'])
+    expect(drop.flat().some((rows) => rows > 0)).toBe(true)
+    for (let reel = 0; reel < 5; reel++) {
+      expect(screen.getByTestId(`burst-${reel}`)).not.toBeVisible()
+      expect(screen.getByTestId(`step-${reel}`)).toBeVisible()
+      stepTiles(reel).forEach((tile, row) => {
+        if (drop[reel][row] === 0) expect(tile.style.transform).toBe('')
+        else {
+          expect(rowsAbove(tile)).toBeGreaterThan(0)
+          expect(rowsAbove(tile)).toBeLessThan(drop[reel][row])
+        }
+      })
+    }
+
+    // Landed, after the burst and the fall (0.3 + 0.35 s): every tile on its place, the burst gone.
+    advance(300)
+    expect(told).toEqual(['landed s1', 'landed s2'])
+    expect(stepShown()).toEqual(STEPS[1].grid)
+    for (let reel = 0; reel < 5; reel++) for (const tile of stepTiles(reel)) expect(tile.style.transform).toBe('')
+    expect(screen.queryByTestId('burst-0')).toBeNull()
+    expect(screen.getByRole('img')).toHaveAccessibleName(/^Reels: top row /)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('tells each step landed once, after its burst and fall, and never twice for the same key', () => {
+    animate()
+    const { told, update } = stopped()
+    update(stepOf(0))
+    update(stepOf(1))
+    // The first frame starts the clock; 0.65 s later it lands.
+    advance(16 + 630)
+    expect(told).toEqual(['landed s1'])
+    advance(40)
+    expect(told).toEqual(['landed s1', 'landed s2'])
+    // The same step drawn again starts nothing.
+    update(stepOf(1))
+    update({ lit: [[0, 1]] })
+    advance(2000)
+    expect(told).toEqual(['landed s1', 'landed s2'])
+    expect(vi.getTimerCount()).toBe(0)
+
+    // Quick spin's halved times.
+    update({ ...stepOf(2), stepTimes: { burst: 0.15, fall: 0.175 } })
+    advance(16 + 300)
+    expect(told).toHaveLength(2)
+    advance(40)
+    expect(told).toEqual(['landed s1', 'landed s2', 'landed s3'])
+  })
+
+  it('tells each step landed once under React development mode, which runs effects twice', () => {
+    animate()
+    const told: string[] = []
+    const props = (change: Partial<ComponentProps<typeof Reels>>): ComponentProps<typeof Reels> => ({
+      machine,
+      rest: machine.rest,
+      ...spinTo(CHAIN),
+      animate: true,
+      lit: [],
+      stopNow: 0,
+      onReelStopped: () => {},
+      onStopped: () => {},
+      onStepLanded: () => told.push('landed'),
+      ...change,
+    })
+    const view = render(<Reels {...props(stepOf(0))} />, { reactStrictMode: true })
+    expect(told).toEqual([])
+    view.rerender(<Reels {...props(stepOf(1))} />)
+    advance(1000)
+    view.rerender(<Reels {...props(stepOf(2))} />)
+    advance(1000)
+    expect(told).toEqual(['landed', 'landed'])
+    expect(stepShown()).toEqual(STEPS[2].grid)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('never tells a step landed after unmount, and leaves no frame', () => {
+    animate()
+    const errors = vi.spyOn(console, 'error')
+    const { told, update, view } = stopped()
+    update(stepOf(0))
+    update(stepOf(1))
+    advance(400)
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(5000)
+    expect(told).toEqual(['landed s1'])
+    expect(errors).not.toHaveBeenCalled()
+  })
+
+  it('lands a step at once without animation', () => {
+    const { told, update } = stopped({ animate: false })
+    update(stepOf(0))
+    update(stepOf(1))
+    expect(told).toEqual(['landed s1', 'landed s2'])
+    expect(stepShown()).toEqual(STEPS[1].grid)
+    for (let reel = 0; reel < 5; reel++) for (const tile of stepTiles(reel)) expect(tile.style.transform).toBe('')
+    expect(screen.queryByTestId('burst-0')).toBeNull()
+  })
+
+  it('shows a step it is first drawn with as landed, and tells nothing', () => {
+    const { told } = stopped(stepOf(1))
+    expect(stepShown()).toEqual(STEPS[1].grid)
+    expect(screen.queryByTestId('burst-0')).toBeNull()
+    expect(told).toEqual([])
+  })
+
+  it('lights the tiles it is given on a step only once it has landed, and draws what it is given over it', () => {
+    animate()
+    const lit = [[0, 0], [2, 1], [4, 2]] as const
+    const { update } = stopped({ lit, children: <p>Over the reels</p> })
+    const litAt = () => lit.map(([reel, row]) => stepTiles(reel)[row].dataset.won)
+    update(stepOf(0))
+    expect(litAt()).toEqual(['true', 'true', 'true'])
+    // The strips under it are not lit.
+    expect(litTiles()).toHaveLength(0)
+    update(stepOf(1))
+    expect(litAt()).toEqual([undefined, undefined, undefined])
+    advance(1000)
+    expect(litAt()).toEqual(['true', 'true', 'true'])
+    expect(screen.getByText('Over the reels')).toBeInTheDocument()
+    update({ lit: [] })
+    expect(litAt()).toEqual([undefined, undefined, undefined])
+  })
+
+  it('goes back to the strips for the next spin, from the stops the page passes', () => {
+    animate()
+    const { told, update } = stopped()
+    update(stepOf(0))
+    update(stepOf(1))
+    advance(1000)
+    told.length = 0
+    update({ step: null, ...spinTo(TO, 'b') })
+    expect(screen.queryByTestId('step-0')).toBeNull()
+    for (let reel = 0; reel < 5; reel++) expect(strip(reel).element).toBeVisible()
+    advance(4000)
+    expect(told).toEqual(['reel 0', 'reel 1', 'reel 2', 'reel 3', 'reel 4', 'stopped'])
+    expect(shown()).toEqual(slotWindow(machine, TO))
+
+    // The next chain's step 1 lands at once again: nothing from the last chain bursts.
+    update(stepOf(0, 'b1'))
+    expect(told.at(-1)).toBe('landed b1')
+    expect(screen.queryByTestId('burst-0')).toBeNull()
   })
 })
 
