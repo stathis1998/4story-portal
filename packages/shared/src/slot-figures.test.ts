@@ -173,9 +173,10 @@ describe('counting windows', () => {
     expect(retriggered).toBeGreaterThan(0);
   });
 
-  it('values a free round exactly: the programme against enumerating every sequence', () => {
-    const tiny = build(['ACDE', 'AIBJ', 'BACD', 'AJBC', 'CDEJ']);
-    const rules: FreeRules = { start: 2, max: 4, retrigger: 1, limit: 3, stepCap: 12 };
+  describe('valuing a free round exactly: the programme against enumerating every sequence', () => {
+    // Few kinds of chain (22), so a round of up to 4 spins can be walked in full.
+    const tiny = build(['ACDE', 'ADBJ', 'BCED', 'AJBC', 'CDEJ']);
+    const C = 4 ** 5;
     // Windows that play the same chain (the same line stakes step by step, the same retrigger) are the same to a
     // free round, so each kind stands for all its windows: enumerating sequences of kinds, each weighted by how
     // many windows it has, enumerates every sequence of windows. 1,024 cubed would be too slow to walk one by one.
@@ -189,47 +190,85 @@ describe('counting windows', () => {
       kind.windows++;
       kinds.set(key, kind);
     }
-    const C = 4 ** 5;
     const list = [...kinds.values()];
-    expect(list.some((k) => k.pays.length >= 2)).toBe(true);
-    expect(list.some((k) => k.retrigger)).toBe(true);
-    expect(list.some((k) => k.pays.length === 0 && !k.retrigger)).toBe(true);
-    expect(list.some((k) => k.pays.length === 0 && k.retrigger)).toBe(true);
+    const counts = countSlotMachine(tiny);
 
-    const seen = { topped: false, full: false };
-    function walk(left: number, total: number, times: number, chance: number, paid: number, out: { value: number; blank: number }) {
-      if (left === 0) {
-        out.value += chance * paid;
-        if (paid === 0) out.blank += chance;
-        return;
-      }
-      for (const kind of list) {
-        let m = times;
-        let pay = 0;
-        for (const p of kind.pays) {
-          pay += p * m;
-          m = Math.min(m + 1, rules.max);
+    /** Every sequence a round of n spins can play, by the rules; what it pays on average, and its chance of nothing. */
+    function enumerate(rules: FreeRules, n: number) {
+      const seen = { topped: false, full: false, partial: false, grew: false };
+      const out = { value: 0, blank: 0, seen };
+      const walk = (left: number, total: number, times: number, chance: number, paid: number) => {
+        if (left === 0) {
+          out.value += chance * paid;
+          if (paid === 0) out.blank += chance;
+          return;
         }
-        if (m === rules.max) seen.topped = true;
-        const add = kind.retrigger ? Math.min(rules.retrigger, rules.limit - total) : 0;
-        if (kind.retrigger && add === 0) seen.full = true;
-        walk(left - 1 + add, total + add, m, (chance * kind.windows) / C, paid + pay, out);
-      }
+        for (const kind of list) {
+          let m = times;
+          let pay = 0;
+          for (const p of kind.pays) {
+            pay += p * m;
+            m = Math.min(m + 1, rules.max);
+          }
+          if (m === rules.max) seen.topped = true;
+          const add = kind.retrigger ? Math.min(rules.retrigger, rules.limit - total) : 0;
+          if (kind.retrigger && add === 0) seen.full = true;
+          if (add > 0 && add < rules.retrigger) seen.partial = true;
+          if (left - 1 + add > n) seen.grew = true;
+          walk(left - 1 + add, total + add, m, (chance * kind.windows) / C, paid + pay);
+        }
+      };
+      walk(n, n, rules.start, 1, 0);
+      return out;
     }
 
-    const counts = countSlotMachine(tiny);
-    for (const n of [1, 2, 3]) {
-      const out = { value: 0, blank: 0 };
-      walk(n, n, rules.start, 1, 0, out);
+    function expectSame(rules: FreeRules, n: number) {
+      const out = enumerate(rules, n);
       expect(out.value).toBeGreaterThan(0);
       expect(out.blank).toBeGreaterThan(0);
       expect(Math.abs(slotFreeRoundValue(counts, n, rules) - out.value)).toBeLessThanOrEqual(1e-12 * out.value);
       expect(Math.abs(slotFreeRoundBlank(counts, n, rules) - out.blank)).toBeLessThanOrEqual(1e-12);
+      return out.seen;
     }
-    expect(seen.topped).toBe(true);
-    expect(seen.full).toBe(true);
-    expect(slotFreeRoundValue(counts, 0, rules)).toBe(0);
-    expect(slotFreeRoundBlank(counts, 0, rules)).toBe(1);
+
+    it('has kinds that chain, retrigger, and pay nothing', () => {
+      expect(list.some((k) => k.pays.length >= 2)).toBe(true);
+      expect(list.some((k) => k.retrigger)).toBe(true);
+      expect(list.some((k) => k.pays.length === 0 && !k.retrigger)).toBe(true);
+      expect(list.some((k) => k.pays.length === 0 && k.retrigger)).toBe(true);
+    });
+
+    it('agrees when a retrigger adds one spin, up to a limit of 3', () => {
+      const rules: FreeRules = { start: 2, max: 4, retrigger: 1, limit: 3, stepCap: 12 };
+      const seen = [1, 2, 3].map((n) => expectSame(rules, n));
+      expect(seen.some((s) => s.topped)).toBe(true);
+      expect(seen.some((s) => s.full)).toBe(true);
+      expect(slotFreeRoundValue(counts, 0, rules)).toBe(0);
+      expect(slotFreeRoundBlank(counts, 0, rules)).toBe(1);
+    });
+
+    it('agrees when a retrigger near the limit adds only what fits, and the round grows past its start', () => {
+      const rules: FreeRules = { start: 2, max: 4, retrigger: 2, limit: 4, stepCap: 12 };
+      const seen = [1, 2].map((n) => expectSame(rules, n));
+      expect(seen.some((s) => s.partial)).toBe(true);
+      expect(seen.some((s) => s.grew)).toBe(true);
+      expect(seen.some((s) => s.full)).toBe(true);
+    });
+
+    it('values a round asked for more spins than the limit without NaN', () => {
+      const rules: FreeRules = { start: 2, max: 4, retrigger: 2, limit: 4, stepCap: 12 };
+      expect(Number.isFinite(slotFreeRoundValue(counts, 6, rules))).toBe(true);
+      expect(Number.isFinite(slotFreeRoundBlank(counts, 6, rules))).toBe(true);
+    });
+  });
+
+  it('refuses prizes below 1, where a win that pays nothing would count as a blank', () => {
+    const short = build(['ACDE', 'ADBJ', 'BCED', 'AJBC', 'CDEJ']);
+    expect(() => countSlotMachine(short)).not.toThrow();
+    const zeroLucky = { ...short, twoLucky: 0 };
+    expect(() => countSlotMachine(zeroLucky)).toThrow('Every prize must be at least 1 line stake');
+    const zeroPrize = { ...short, pays: short.pays.map((p, i) => (i === 3 ? ([0, p[1], p[2]] as const) : p)) };
+    expect(() => countSlotMachine(zeroPrize)).toThrow('Every prize must be at least 1 line stake');
   });
 });
 
@@ -338,5 +377,23 @@ describe('the published figures', () => {
     expect(slotReturn(rich)).toBeGreaterThanOrEqual(1.05);
     expect(slotJackpotShare(rich)).toEqual({ num: 0, den: 1e9 });
     expect(slotJackpotAdds(rich, 5000)).toEqual({ mini: 0, major: 0, giga: 0 });
+  });
+
+  it('gives no share when no round is ever lost', () => {
+    // Every window pays 1 line stake at step 1: R is 5%, L is 0, and (1.05 - R) / L would be Infinity.
+    const counts = emptyCounts();
+    counts.last = [100, 0, 0, 0, 0, 0];
+    bucket(counts, 1, 0, 100, [100]);
+    const never: SlotMachine = { ...machine, counts };
+    expect(slotLostRate(never)).toBe(0);
+    expect(slotReturn(never)).toBeCloseTo(0.05, 15);
+    expect(slotJackpotShare(never)).toEqual({ num: 0, den: 1e9 });
+    expect(slotJackpotAdds(never, 5000)).toEqual({ mini: 0, major: 0, giga: 0 });
+  });
+
+  it('gives no share for counts of no windows', () => {
+    const empty: SlotMachine = { ...machine, counts: emptyCounts() };
+    expect(slotJackpotShare(empty)).toEqual({ num: 0, den: 1e9 });
+    expect(slotJackpotAdds(empty, 5000)).toEqual({ mini: 0, major: 0, giga: 0 });
   });
 });

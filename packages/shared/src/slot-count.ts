@@ -63,6 +63,11 @@ function reelSymbols(strip: Uint8Array): Uint8Array {
  * step 1 is read from the prize table and only a window that wins plays its chain, on reused typed arrays.
  */
 export function countSlotMachine(machine: Countable): SlotCounts {
+  // The figures read a spin that won no step as one that paid nothing. A prize of 0 would make a win that pays
+  // nothing, so the lost rate would come out too low and the jackpot share too high.
+  if (machine.twoLucky < 1 || machine.pays.some((row) => row.some((prize) => prize < 1))) {
+    throw new Error('Every prize must be at least 1 line stake');
+  }
   const table = prizeTable(machine);
   const lines = SLOT_LINES.length;
   const strips = machine.reels.map((reel) => Uint8Array.from(reel, (letter) => SLOT_LETTERS.indexOf(letter)));

@@ -68,8 +68,9 @@ export function slotFreeRoundValue(counts: SlotCounts, n: number, rules: FreeRul
       for (let r = 0; r < 2; r++) {
         const windows = counts.free[W * 2 + r];
         if (!windows) continue;
-        const add = r ? Math.min(rules.retrigger, rules.limit - total) : 0;
-        v += (windows / C) * value(left - 1 + add, Math.min(m + W, rules.max), total + add);
+        // A round already at or past the limit adds nothing.
+        const add = r ? Math.max(0, Math.min(rules.retrigger, rules.limit - total)) : 0;
+        v +=(windows / C) * value(left - 1 + add, Math.min(m + W, rules.max), total + add);
       }
     }
     memo[key] = v;
@@ -91,8 +92,8 @@ export function slotFreeRoundBlank(counts: SlotCounts, n: number, rules: FreeRul
     for (let r = 0; r < 2; r++) {
       const windows = counts.free[r];
       if (!windows) continue;
-      const add = r ? Math.min(rules.retrigger, rules.limit - total) : 0;
-      q += (windows / C) * blank(left - 1 + add, total + add);
+      const add = r ? Math.max(0, Math.min(rules.retrigger, rules.limit - total)) : 0;
+      q +=(windows / C) * blank(left - 1 + add, total + add);
     }
     memo[key] = q;
     return q;
@@ -164,10 +165,14 @@ const shares = new WeakMap<SlotMachine, { num: number; den: number }>();
 export function slotJackpotShare(machine: SlotMachine): { num: number; den: number } {
   const known = shares.get(machine);
   if (known) return known;
+  const R = slotReturn(machine);
+  const L = slotLostRate(machine);
   // Whatever the reels, free spins and meter pay back, the pots make up the rest of 105%. The -1 covers
-  // floating-point error, so the share never rounds up past what is left to give.
-  const num = Math.max(0, Math.floor(((SLOT_TOTAL_RETURN - slotReturn(machine)) / slotLostRate(machine)) * NINE) - 1);
-  const share = { num, den: NINE };
+  // floating-point error, so the share never rounds up past what is left to give. No share for a machine that
+  // never loses a round, already pays 105%, or has no counts: none has a finite share, and the pay table must
+  // never show Infinity or NaN.
+  const exact = L > 0 && R < SLOT_TOTAL_RETURN ? Math.floor(((SLOT_TOTAL_RETURN - R) / L) * NINE) - 1 : 0;
+  const share = { num: Number.isFinite(exact) ? Math.max(0, exact) : 0, den: NINE };
   shares.set(machine, share);
   return share;
 }
