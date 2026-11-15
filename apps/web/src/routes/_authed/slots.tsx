@@ -362,6 +362,10 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           <div className="flex items-stretch justify-center gap-2">
             <Button
               onClick={() => void onSpin()}
+              // A held Enter clicks a button on every repeat: Spin is also Stop, so that would play by itself.
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && event.repeat) event.preventDefault()
+              }}
               disabled={!canSpin && !showing}
               // Resting after a round: shown not ready, but not switched off, so the focus stays on it.
               aria-disabled={resting || undefined}

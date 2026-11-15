@@ -594,6 +594,26 @@ describe('slots', () => {
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
   })
 
+  it('holding Enter on the focused Spin button is one press: the repeats send nothing and stop nothing', async () => {
+    const { user, fetchMock } = open(state(), server(lost, lines))
+    await loaded()
+    animate()
+    spinButton().focus()
+
+    // Down, three repeats, then up: the first is a press, and starts the round.
+    await user.keyboard('{Enter>4/}')
+    await screen.findByRole('img', { name: 'Reels, spinning' })
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+    expect(spinButton()).toHaveTextContent('Stop')
+
+    // While the reels turn, a repeat is not a press of Stop: the browser is told not to click.
+    for (let i = 0; i < 3; i++) expect(fireEvent.keyDown(spinButton(), { key: 'Enter', repeat: true })).toBe(false)
+    advance(300)
+    expect(reels()).toHaveAccessibleName('Reels, spinning')
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+    playOut()
+  })
+
   it('does not spin on space in the character picker', async () => {
     const { fetchMock } = open(state({ characters: [mounara, moosey] }), server(lines))
     await loaded()
