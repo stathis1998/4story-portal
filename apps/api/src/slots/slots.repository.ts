@@ -1,5 +1,6 @@
 import {
   BRONZE_PER_GOLD,
+  parseSlotFree,
   parseSlotStakes,
   SLOT_BIG_WIN,
   SLOT_JACKPOT_DEFAULT_CAP,
@@ -7,6 +8,7 @@ import {
   SLOT_JACKPOT_MIN_CAP,
   SLOT_JACKPOT_ROLLS,
   SLOT_MACHINES,
+  slotFreeText,
   type SlotMachineKey,
   type SlotStakes,
   type SlotStops,
@@ -23,7 +25,10 @@ export type SlotSettings = {
   jackpot: { live: boolean; /** Whole Gold. */ cap: number };
 };
 
-/** Money in Silver. `jackpot` is whole Silver, 0 for a spin that did not win it. */
+/** The rules number written on every new row; 1 is the old three-reel rows. */
+export const SLOT_RULES = 2;
+
+/** One round: the paid spin's stops and its free spins. Money in Silver, the whole round's. `jackpot` is whole Silver, 0 for a round that did not win it. */
 export type SlotSpinRow = {
   id: number;
   userId: number;
@@ -31,13 +36,15 @@ export type SlotSpinRow = {
   spunAt: Date;
   machine: string;
   stops: SlotStops;
+  free: SlotStops[];
   stake: number;
   payout: number;
   jackpot: number;
 };
 
 /**
- * Money in Silver; the repository multiplies by 1000 for the database.
+ * Money in Silver; the repository multiplies by 1000 for the database. `payout` is the whole round's.
+ * `multiple` is min(32767, floor(payout / stake)), worked out by the caller.
  * `add` is Bronze, 0 to leave the pot alone. `cap` is whole Gold: the cap set now, taken by a pot that has none.
  * `roll` is a whole number from 0 up to SLOT_JACKPOT_ROLLS.
  */
@@ -46,6 +53,7 @@ export type SlotBetInput = {
   charId: number;
   machine: SlotMachineKey;
   stops: SlotStops;
+  free: SlotStops[];
   stake: number;
   payout: number;
   multiple: number;
@@ -134,7 +142,7 @@ const potStep = (jackpot: string) => `IF @add IS NULL OR @roll IS NULL OR @add >
   END
   ELSE UPDATE ${jackpot} SET llPot = @pot, llCap = @cap WHERE bID = 1`;
 
-type RawSpin = Omit<SlotSpinRow, 'stops'> & { stop1: number; stop2: number; stop3: number };
+type RawSpin = Omit<SlotSpinRow, 'stops' | 'free'> & { stop1: number; stop2: number; stop3: number; stop4: number; stop5: number; free: string };
 type RawTotals = { machine: string } & Record<'spins' | 'todaySpins', number> &
   Record<'staked' | 'paid' | 'added' | 'todayStaked' | 'todayPaid' | 'todayAdded', string>;
 
@@ -223,9 +231,11 @@ export class SqlSlotsRepository implements SlotsRepository {
 
   async bet(input: SlotBetInput): Promise<SlotBetOutcome> {
     const record = `INSERT INTO ${this.db.tables.slotSpins}
-      (dwUserID, dwCharID, szCharName, szMachine, bStop1, bStop2, bStop3, llStake, llPayout, llWallet, wMultiple, llAdded, llJackpot)
-      VALUES (@userId, @charId, @name, @machine, @stop1, @stop2, @stop3, @stake, @payout, @wallet, @multiple, @add, @extra)`;
-    const [stop1, stop2, stop3] = input.stops;
+      (dwUserID, dwCharID, szCharName, szMachine, bStop1, bStop2, bStop3, bStop4, bStop5, bRules, szFree,
+       llStake, llPayout, llWallet, wMultiple, llAdded, llJackpot)
+      VALUES (@userId, @charId, @name, @machine, @stop1, @stop2, @stop3, @stop4, @stop5, @rules, @free,
+       @stake, @payout, @wallet, @multiple, @add, @extra)`;
+    const [stop1, stop2, stop3, stop4, stop5] = input.stops;
     // A round that adds nothing does not touch the pot's row at all, so it neither waits for its lock nor sets its cap.
     const feeds = input.add > 0;
     const request = this.request().input('add', sql.BigInt, feeds ? input.add : 0);
@@ -239,6 +249,10 @@ export class SqlSlotsRepository implements SlotsRepository {
       .input('stop1', sql.TinyInt, stop1)
       .input('stop2', sql.TinyInt, stop2)
       .input('stop3', sql.TinyInt, stop3)
+      .input('stop4', sql.TinyInt, stop4)
+      .input('stop5', sql.TinyInt, stop5)
+      .input('rules', sql.TinyInt, SLOT_RULES)
+      .input('free', sql.VarChar(400), slotFreeText(input.free))
       .input('multiple', sql.SmallInt, input.multiple)
       .query<{ code: BetCode; id: number; name: string | null; extra: string } & Wallet>(
         walletBetSql(this.db.tables, SLOTS_LIVE_KEY, record, feeds ? potStep(this.db.tables.slotJackpot) : ''),
@@ -262,14 +276,18 @@ export class SqlSlotsRepository implements SlotsRepository {
       .input('top', sql.Int, top)
       .query<RawSpin>(
         `SELECT TOP (@top) dwID AS id, dwUserID AS userId, szCharName AS character, dSpun AS spunAt, szMachine AS machine,
-                bStop1 AS stop1, bStop2 AS stop2, bStop3 AS stop3,
+                bStop1 AS stop1, bStop2 AS stop2, bStop3 AS stop3, bStop4 AS stop4, bStop5 AS stop5, szFree AS free,
                 CAST(llStake / ${SILVER} AS INT) AS stake, CAST(llPayout / ${SILVER} AS INT) AS payout,
                 CAST(llJackpot / ${SILVER} AS INT) AS jackpot
          FROM ${this.db.tables.slotSpins}
-         WHERE ${where}
+         WHERE bRules = ${SLOT_RULES} AND (${where})
          ORDER BY dwID DESC`,
       );
-    return result.recordset.map(({ stop1, stop2, stop3, ...row }): SlotSpinRow => ({ ...row, stops: [stop1, stop2, stop3] }));
+    // A row whose free spins cannot be read is left out, like one whose stops are out of range.
+    return result.recordset.flatMap(({ stop1, stop2, stop3, stop4, stop5, free, ...row }): SlotSpinRow[] => {
+      const spins = parseSlotFree(free);
+      return spins ? [{ ...row, stops: [stop1, stop2, stop3, stop4, stop5], free: spins }] : [];
+    });
   }
 
   spinsOf(userId: number, limit: number): Promise<SlotSpinRow[]> {
