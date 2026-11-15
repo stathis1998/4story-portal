@@ -339,8 +339,8 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect((await repo.jackpotWins(10)).map((row) => row.id)).toEqual([]);
     }));
 
-  it('a table from before this change gets the four columns; until then a bet and the lists refuse, and nothing moves', () =>
-    withLiveRepo(async ({ repo, tx, character }) => {
+  it('a table from before this change gets the four columns', () =>
+    withRepo(async ({ tx }) => {
       const columns = ['bStop4', 'bStop5', 'bRules', 'szFree'];
       const present = async () =>
         (
@@ -356,20 +356,6 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         await new sql.Request(tx).query(`ALTER TABLE ${db.tables.slotSpins} DROP COLUMN ${column}`);
       }
       expect(await present()).toEqual([]);
-
-      // The new API on the old table: the batch is refused before it runs, so neither the wallet nor the pot moves.
-      const rows = async () => (await new sql.Request(tx).query<{ n: number }>(`SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)).recordset[0].n;
-      await expect(repo.bet(bet(character, LOST))).rejects.toThrow(/Invalid column name/);
-      await expect(repo.bet(bet(character))).rejects.toThrow(/Invalid column name/);
-      expect(await walletOf(tx, character.charId)).toEqual(START);
-      expect(await potOf(tx)).toEqual({ pot: 0, cap: null });
-      expect(await rows()).toBe(0);
-      await expect(repo.spinsOf(character.userId, 10)).rejects.toThrow(/Invalid column name/);
-      await expect(repo.latest(10)).rejects.toThrow(/Invalid column name/);
-      // What does not read the new columns still reads: the page can say the floor is there.
-      expect((await repo.settings()).live).toBe(true);
-      expect(await repo.pot()).toEqual({ pot: 0, cap: null });
-      expect(await repo.totals()).toEqual({});
 
       for (let run = 0; run < 2; run++) {
         await new sql.Request(tx).input('sql', sql.NVarChar(sql.MAX), setupSql[1]).query(`EXEC [${gameName}].sys.sp_executesql @sql`);
@@ -586,6 +572,56 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
     ).rejects.toThrow('Transaction has been aborted');
     expect(refused).toBe(true);
 
+    expect(await outside()).toEqual(before);
+  });
+
+  // The new API on a spin table from before the five reels. What needs the new columns refuses, the bet included.
+  // A batch compiled afresh is refused before any of it runs. One whose plan the server kept from before the columns
+  // went has its INSERT compiled again as it is reached, and under the batch's XACT_ABORT that error rolls back the
+  // whole transaction, the caller's included, as for the missing pot table above. Which of the two the server does is
+  // not the caller's to choose, so the test holds for both: nothing moves either way.
+  it('a table without the new columns refuses the bet and the lists, still reads the rest, and moves nothing', async () => {
+    const before = await outside();
+    let refused = false;
+    let kept = false;
+
+    const outcome = await withLiveRepo(async ({ repo, tx, character }) => {
+      for (const column of ['bStop4', 'bStop5', 'bRules', 'szFree']) {
+        await new sql.Request(tx).query(`ALTER TABLE ${db.tables.slotSpins} DROP CONSTRAINT DF_TPORTALSLOTSPIN_${column}`);
+        await new sql.Request(tx).query(`ALTER TABLE ${db.tables.slotSpins} DROP COLUMN ${column}`);
+      }
+      // A pooled connection can still have XACT_ABORT on from an earlier test's bet; then even a refused read would
+      // end the transaction.
+      await new sql.Request(tx).query('SET XACT_ABORT OFF');
+      await expect(repo.spinsOf(character.userId, 10)).rejects.toThrow(/Invalid column name/);
+      await expect(repo.latest(10)).rejects.toThrow(/Invalid column name/);
+      // What does not read the new columns still reads, so the page can open.
+      expect((await repo.settings()).live).toBe(true);
+      expect(await repo.pot()).toEqual({ pot: 0, cap: null });
+      expect(await repo.totals()).toEqual({});
+
+      await expect(repo.bet(bet(character, LOST))).rejects.toThrow(/Invalid column name/);
+      refused = true;
+      let wallet: Wallet;
+      try {
+        wallet = await walletOf(tx, character.charId);
+      } catch {
+        // The transaction is gone: what is left is read outside it, below.
+        return;
+      }
+      kept = true;
+      expect(wallet).toEqual(START);
+      expect(await potOf(tx)).toEqual({ pot: 0, cap: null });
+      expect((await new sql.Request(tx).query<{ n: number }>(`SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)).recordset[0].n).toBe(0);
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(refused).toBe(true);
+    if (kept) expect(outcome).toBeNull();
+    // The helper then fails to roll back a transaction that is already gone; that is the proof it was rolled back.
+    else expect(String(outcome)).toMatch('Transaction has been aborted');
     expect(await outside()).toEqual(before);
   });
 
