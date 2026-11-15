@@ -22,11 +22,13 @@ import {
   SLOT_JACKPOT_ROLLS,
   SLOT_MACHINES,
   SLOT_REEL_STOPS,
+  SLOT_REELS,
   slotMachine,
   type SlotMachineKey,
   type SlotMachineSettingsInput,
   type SlotMachineState,
-  slotPrize,
+  slotRoundPayout,
+  slotSpin,
   type SlotSpinRequest,
   type SlotSpinResult,
   type SlotSpinView,
@@ -58,6 +60,8 @@ const NO_POT: SlotPotRow | null = null;
 /** One Gold is this many Silver. */
 const SILVER_PER_GOLD = 1000;
 const JACKPOT_WINS = 10;
+/** The most a SMALLINT column holds. */
+const MAX_MULTIPLE = 32_767;
 
 @Injectable()
 export class SlotsService {
@@ -102,13 +106,15 @@ export class SlotsService {
     if (!own.live) throw new ConflictException('That machine is closed');
     if (!own.stakes.includes(request.stake)) throw new UnprocessableEntityException('That stake is no longer offered on this machine');
 
-    // Reel 1 first.
-    const stops: SlotStops = [this.random(SLOT_REEL_STOPS), this.random(SLOT_REEL_STOPS), this.random(SLOT_REEL_STOPS)];
-    const { multiple } = slotPrize(machine, stops);
+    // Draws, in order: the paid spin's five reels, then each free spin's five reels, then the jackpot's number.
+    const stops = this.reels();
+    const free = Array.from({ length: slotSpin(machine, stops).freeSpins }, () => this.reels());
     const stake = request.stake;
-    const payout = stake * multiple;
-    // Only a round that pays nothing feeds the pot, and only then is the jackpot's number drawn, after the stops.
-    const add = multiple === 0 && settings.jackpot.live ? slotJackpotAdd(machine, stake) : 0;
+    const payout = slotRoundPayout(machine, { stops, free }, stake);
+    // The column is a SMALLINT.
+    const multiple = Math.min(MAX_MULTIPLE, Math.floor(payout / stake));
+    // Only a round that pays nothing in all feeds the pot, and only then is the jackpot's number drawn, after the stops.
+    const add = payout === 0 && settings.jackpot.live ? slotJackpotAdd(machine, stake) : 0;
     const roll = add > 0 ? this.random(SLOT_JACKPOT_ROLLS) : 0;
     const outcome = await this.write(() =>
       this.repo.bet({
@@ -116,6 +122,7 @@ export class SlotsService {
         charId: request.characterId,
         machine: machine.key,
         stops,
+        free,
         stake,
         payout,
         multiple,
@@ -143,11 +150,17 @@ export class SlotsService {
       character: state.characters.find((c) => c.id === request.characterId)?.name ?? '',
       machine: machine.key,
       stops,
+      free,
       stake,
       payout,
       jackpot: outcome.jackpot,
     };
     return { spin, wallet: outcome.wallet, state };
+  }
+
+  /** One spin's five reels, reel 1 first. */
+  private reels(): SlotStops {
+    return Array.from({ length: SLOT_REELS }, () => this.random(SLOT_REEL_STOPS)) as SlotStops;
   }
 
   async gmState(): Promise<GmSlots> {
@@ -248,13 +261,13 @@ const jackpotView = (settings: SlotSettings, pot: SlotPotRow, last: SlotSpinRow 
   last: last ? { character: last.character, amount: last.jackpot, at: last.spunAt.toISOString() } : null,
 });
 
-const stopsInRange = (stops: SlotStops) => stops.length === 3 && stops.every((s) => Number.isInteger(s) && s >= 0 && s < SLOT_REEL_STOPS);
+const stopsInRange = (stops: SlotStops) => stops.length === SLOT_REELS && stops.every((s) => Number.isInteger(s) && s >= 0 && s < SLOT_REEL_STOPS);
 
 /** A spin for a machine the code no longer has, or with stops that cannot be shown, is left out. */
 const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
   rows.flatMap((row) => {
     const machine = slotMachine(row.machine);
-    if (!machine || !stopsInRange(row.stops)) return [];
+    if (!machine || !stopsInRange(row.stops) || !row.free.every(stopsInRange)) return [];
     return [
       {
         id: row.id,
@@ -262,6 +275,7 @@ const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
         character: row.character,
         machine: machine.key,
         stops: [...row.stops] as SlotStops,
+        free: row.free.map((stops) => [...stops] as SlotStops),
         stake: row.stake,
         payout: row.payout,
         jackpot: row.jackpot,
