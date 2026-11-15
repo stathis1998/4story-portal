@@ -48,6 +48,7 @@ import {
   ROULETTE_DEFAULT_LIMITS,
   SLOT_BIG_WIN,
   SLOT_JACKPOT_DEFAULT_CAP,
+  SLOT_JACKPOT_ROLLS,
   SLOT_MACHINES,
   slotJackpotDrops,
   type SlotMachineKey,
@@ -874,6 +875,11 @@ export class FakeSlotsRepository implements SlotsRepository {
     let jackpot = 0;
     let nextPot = this.potRow;
     if (added > 0) {
+      // The pot step's refusal, before the wallet or the pot changes. null is named because null >= 0 is true here.
+      const { roll } = input;
+      if (added > input.stake * BRONZE_PER_SILVER || input.payout > 0 || roll === null || !(roll >= 0 && roll < SLOT_JACKPOT_ROLLS)) {
+        throw new Error('A round cannot add that to the jackpot');
+      }
       if (this.potMissing) throw new Error('Invalid object name TPortalSlotJackpot');
       const cap = this.potRow.cap ?? input.cap * BRONZE_PER_GOLD;
       const pot = this.potRow.pot + added;

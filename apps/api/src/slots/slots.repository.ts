@@ -114,8 +114,13 @@ function parseJackpotCap(text: string | undefined): number {
  * the character, so every spin takes the locks in the same order. The rule is slotJackpotDrops in whole numbers;
  * DECIMAL because a 10,000 Gold cap times the roll range is past what a BIGINT holds. Only assignments and statements
  * that return no rows, so the batch's own result stays its first.
+ * A round that pays, adds more than its stake or brings a roll outside the range would make or win gold that no
+ * real round can, and the pot would still be what was added less what was paid, so nothing else would show it.
+ * It is refused before the pot is read; under XACT_ABORT the THROW rolls everything back. NULL is named on its own.
  */
-const potStep = (jackpot: string) => `DECLARE @pot BIGINT, @cap BIGINT, @from BIGINT, @to BIGINT;
+const potStep = (jackpot: string) => `IF @add IS NULL OR @roll IS NULL OR @add > @stake OR @payout > 0 OR @roll < 0 OR @roll >= ${SLOT_JACKPOT_ROLLS}
+    THROW 50000, 'A round cannot add that to the jackpot', 1;
+  DECLARE @pot BIGINT, @cap BIGINT, @from BIGINT, @to BIGINT;
   SELECT @pot = llPot, @cap = ISNULL(llCap, @nextCap) FROM ${jackpot} WITH (UPDLOCK, ROWLOCK) WHERE bID = 1;
   IF @pot IS NULL THROW 50001, 'The jackpot row is missing', 1;
   SET @from = CASE WHEN @pot > @cap / 10 THEN @pot ELSE @cap / 10 END;

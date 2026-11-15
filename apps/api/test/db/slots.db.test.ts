@@ -430,28 +430,36 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await repo.bet(bet(character, { ...LOST, roll: 999_999_999 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
       expect(await potOf(tx)).toEqual({ pot: 1_000_002_784, cap: 10_000_000_000 });
 
-      // An add far past any stake makes (to - from) x 10^9 pass the BIGINT limit; only the DECIMAL sum gets here.
-      expect(await repo.bet(bet(character, { ...LOST, add: 9_500_000_000, roll: 999_999_999 }))).toMatchObject({ code: BET_OK, jackpot: 10_500_002 });
+      // An add can be at most the stake, so only a 9,500 Gold stake makes (to - from) x 10^9 pass the BIGINT limit;
+      // no machine takes one, but the repository does not limit the stake. Only the DECIMAL sum gets here.
+      await setWallet(tx, character.charId, { gold: 10_000, silver: 0, copper: 0 });
+      expect(await repo.bet(bet(character, { ...LOST, stake: 9_500_000, add: 9_500_000_000, roll: 999_999_999 }))).toMatchObject({
+        code: BET_OK,
+        jackpot: 10_500_002,
+        wallet: { gold: 11_000, silver: 2, copper: 0 },
+      });
       expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
     }));
+
+  /** The wallet of the character withRepo picks and the spin count, read through the pool, outside any test's transaction. */
+  const outside = async () => ({
+    wallet: (
+      await db.pool
+        .request()
+        .query<Wallet>(`SELECT TOP 1 dwGold AS gold, dwSilver AS silver, dwCooper AS copper FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`)
+    ).recordset[0],
+    // The spin table may exist only inside the tests' transactions.
+    spins: (
+      await db.pool
+        .request()
+        .query<{ n: number }>(`IF OBJECT_ID('${db.tables.slotSpins}', 'U') IS NULL SELECT -1 AS n ELSE SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)
+    ).recordset[0].n,
+  });
 
   // A pot table that is not there is only found when the pot step runs, after the checks. The error (208) rolls
   // back the whole transaction, the caller's included, so nothing is left open on the connection; the wallet and
   // spins are read again through the pool, outside it.
   it('rolls everything back when the pot table is missing', async () => {
-    // The same character withRepo picks. The spin table may exist only inside the tests' transactions.
-    const outside = async () => ({
-      wallet: (
-        await db.pool
-          .request()
-          .query<Wallet>(`SELECT TOP 1 dwGold AS gold, dwSilver AS silver, dwCooper AS copper FROM ${db.tables.characters} WHERE bDelete = 0 ORDER BY dwCharID`)
-      ).recordset[0],
-      spins: (
-        await db.pool
-          .request()
-          .query<{ n: number }>(`IF OBJECT_ID('${db.tables.slotSpins}', 'U') IS NULL SELECT -1 AS n ELSE SELECT COUNT(*) AS n FROM ${db.tables.slotSpins}`)
-      ).recordset[0].n,
-    });
     const before = await outside();
 
     // The helper then fails to roll back a transaction that is already gone; that is the proof it was rolled back.
@@ -460,6 +468,29 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       withLiveRepo(async ({ repo, tx, character }) => {
         await new sql.Request(tx).query(`DROP TABLE ${db.tables.slotJackpot}`);
         await expect(repo.bet(bet(character, LOST))).rejects.toThrow(/Invalid object name/);
+        refused = true;
+      }),
+    ).rejects.toThrow('Transaction has been aborted');
+    expect(refused).toBe(true);
+
+    expect(await outside()).toEqual(before);
+  });
+
+  // No real round has these: a lost round adds a share of its stake and pays nothing, and the roll is randomInt(1e9).
+  // The THROW rolls back the whole transaction like the missing table above, so each input gets its own.
+  it.each<[string, Partial<SlotBetInput>]>([
+    ['a round that pays and adds', { ...LOST, payout: 2500, multiple: 50 }],
+    ['an add past the stake', { ...LOST, add: 50_001 }],
+    ['a negative roll', { ...LOST, roll: -1 }],
+    ['a roll of 1,000,000,000', { ...LOST, roll: 1_000_000_000 }],
+    ['no roll', { ...LOST, roll: null as unknown as number }],
+  ])('refuses %s and writes nothing', async (_, input) => {
+    const before = await outside();
+
+    let refused = false;
+    await expect(
+      withLiveRepo(async ({ repo, character }) => {
+        await expect(repo.bet(bet(character, input))).rejects.toThrow('A round cannot add that to the jackpot');
         refused = true;
       }),
     ).rejects.toThrow('Transaction has been aborted');
@@ -482,7 +513,7 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       const rounds: Partial<SlotBetInput>[] = [
         { machine: 'shelf', add: 2784 },
         { machine: 'armoury', add: 5151 },
-        { machine: 'hoard', add: 98_000 },
+        { machine: 'hoard', stake: 100, add: 98_000 },
         { machine: 'shelf', add: 40_000, roll: 0 },
         { machine: 'armoury', add: 5151 },
         { machine: 'hoard', add: 8673, roll: 500_000_000 },
