@@ -185,13 +185,22 @@ export const SLOT_JACKPOT_ROLLS = 1_000_000_000;
 export const BRONZE_PER_SILVER = 1000;
 export const BRONZE_PER_GOLD = 1_000_000;
 
+// Counting a machine's results takes 32,768 prizes, and every spin and every render of the page asks for the share.
+// Keyed by the machine object, not its key, so a copy with other reels gets its own count.
+const jackpotShares = new WeakMap<SlotMachine, { num: number; den: number }>();
+
 /**
  * The share of a lost stake that goes to the pot, as two whole numbers: (combos - paid) / (combos - hits). The
  * lost rounds then give back to the pot exactly what the winning ones took out of the stakes.
  */
 export function slotJackpotShare(machine: SlotMachine): { num: number; den: number } {
-  const { combos, paid, hits } = slotOdds(machine);
-  return { num: combos - paid, den: combos - hits };
+  let share = jackpotShares.get(machine);
+  if (!share) {
+    const { combos, paid, hits } = slotOdds(machine);
+    share = { num: combos - paid, den: combos - hits };
+    jackpotShares.set(machine, share);
+  }
+  return { ...share };
 }
 
 /** What a lost round of `stake` Silver adds to the pot, in whole Bronze, rounded down. */

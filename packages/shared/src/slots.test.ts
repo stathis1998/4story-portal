@@ -184,6 +184,15 @@ describe('the jackpot', () => {
   ])('a lost %s round of %i Silver adds %i Bronze', (key, stake, bronze) =>
     expect(slotJackpotAdd(slotMachine(key)!, stake)).toBe(bronze));
 
+  it('counts a copy of a machine with other reels on its own, though it has the same key', () => {
+    expect(slotJackpotShare(shelf)).toEqual({ num: 1368, den: 24564 });
+    const swapped = { ...shelf, reels: [shelf.reels[2], shelf.reels[1], shelf.reels[0]] as const };
+    const { combos, paid, hits } = slotOdds(swapped);
+    expect(slotJackpotShare(swapped)).toEqual({ num: combos - paid, den: combos - hits });
+    expect(slotJackpotShare(swapped)).not.toEqual(slotJackpotShare(shelf));
+    expect(slotJackpotAdd(swapped, 50)).toBe(Math.floor((50_000 * (combos - paid)) / (combos - hits)));
+  });
+
   it('pays back exactly the stakes before rounding, and never more after it', () => {
     for (const machine of SLOT_MACHINES) {
       const { combos, paid, hits } = slotOdds(machine);
