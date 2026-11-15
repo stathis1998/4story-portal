@@ -391,6 +391,26 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
       expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
     }));
 
+  it('below the floor even a roll of 0 does not drop', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      await setPot(tx, 1_000_000, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 0 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 1_002_784, cap: 50_000_000 });
+    }));
+
+  it('across the floor only the part past it counts', () =>
+    withLiveRepo(async ({ repo, tx, character }) => {
+      // 1784 of the 45,000,000 Bronze from the floor to the cap: the round drops for a roll below 39,644.44.
+      await setPot(tx, 4_999_000, 50_000_000);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 39_645 }))).toMatchObject({ code: BET_OK, jackpot: 0 });
+      expect(await potOf(tx)).toEqual({ pot: 5_001_784, cap: 50_000_000 });
+
+      await setPot(tx, 4_999_000, 50_000_000);
+      await setWallet(tx, character.charId, START);
+      expect(await repo.bet(bet(character, { ...LOST, roll: 39_644 }))).toMatchObject({ code: BET_OK, jackpot: 5001 });
+      expect(await potOf(tx)).toEqual({ pot: 784, cap: null });
+    }));
+
   it('a pot keeps its cap when the cap set changes, and the next pot takes the new one', () =>
     withLiveRepo(async ({ repo, tx, character }) => {
       await setPot(tx, 10_000_000, 50_000_000);
