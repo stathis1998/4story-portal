@@ -1,6 +1,15 @@
-import { ConflictException, Inject, Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import {
   type GmRebirth,
+  REBIRTH_LEVEL,
   rebirthBonus,
   rebirthIsOpen,
   rebirthPriceGold,
@@ -14,10 +23,12 @@ import {
   REBIRTH_CLOSED,
   REBIRTH_LOW_LEVEL,
   REBIRTH_NOT_YOURS,
+  REBIRTH_OK,
   REBIRTH_ONLINE,
   REBIRTH_POOR,
   REBIRTH_PRICE_CHANGED,
   REBIRTH_WEARING,
+  type RebirthCode,
 } from './rebirth-sql.js';
 import { REBIRTH_REPOSITORY, type RebirthLogRow, type RebirthRepository } from './rebirth.repository.js';
 
@@ -60,28 +71,18 @@ export class RebirthService {
   }
 
   async rebirth(userId: number, charId: number, expectedPriceGold: number): Promise<RebirthState> {
-    // A stranger's character is refused before anything is read for it.
-    if (!(await this.repo.find(userId, charId))) throw new NotFoundException(NOT_FOUND);
-    const baseline = JSON.stringify((await this.stats.freshBaseline(charId)) ?? {});
-    const outcome = await this.repo.rebirth({ userId, charId, expectedPriceGold, baseline, text: LOG_TEXT });
-    switch (outcome.code) {
-      case REBIRTH_NOT_YOURS:
-        throw new NotFoundException(NOT_FOUND);
-      case REBIRTH_CLOSED:
-        throw new ConflictException('Rebirth is closed right now');
-      case REBIRTH_ONLINE:
-        throw new ConflictException('Log out of the game with this character first');
-      case REBIRTH_PRICE_CHANGED:
-        throw new ConflictException('The price has changed. Check it and confirm again');
-      case REBIRTH_LOW_LEVEL:
-        throw new UnprocessableEntityException('This character is not level 90 yet');
-      case REBIRTH_WEARING:
-        throw new UnprocessableEntityException('Take off everything this character is wearing first');
-      case REBIRTH_AT_LIMIT:
-        throw new UnprocessableEntityException('This character has reached the rebirth limit');
-      case REBIRTH_POOR:
-        throw new UnprocessableEntityException('This character does not have enough Gold');
-    }
+    // A stranger's character is refused before anything is read for it, and the cheap refusals come before
+    // the full stats load. The batch checks everything again and stays the authority.
+    const [character, settings] = await Promise.all([this.repo.find(userId, charId), this.repo.settings()]);
+    if (!character) throw new NotFoundException(NOT_FOUND);
+    if (!rebirthIsOpen(settings)) refuse(REBIRTH_CLOSED);
+    if (character.online) refuse(REBIRTH_ONLINE);
+    if (character.level < REBIRTH_LEVEL) refuse(REBIRTH_LOW_LEVEL);
+    // Without a baseline every counter would pay again from zero, so no baseline means no rebirth.
+    const fresh = await this.stats.freshBaseline(charId);
+    if (!fresh) throw new ServiceUnavailableException('Rebirth is not available right now. Try again in a minute');
+    const outcome = await this.repo.rebirth({ userId, charId, expectedPriceGold, baseline: JSON.stringify(fresh), text: LOG_TEXT });
+    if (outcome.code !== REBIRTH_OK) refuse(outcome.code);
     // The character's counters just started over: the next stats page must not serve the old snapshot.
     this.stats.dropCache();
     return this.state(userId, charId);
@@ -107,6 +108,28 @@ export class RebirthService {
     } catch (error) {
       this.logger.warn(`Could not write the rebirth audit row: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+}
+
+/** Throws the answer for a refusal, whether the service or the batch found it. */
+function refuse(code: Exclude<RebirthCode, typeof REBIRTH_OK>): never {
+  switch (code) {
+    case REBIRTH_NOT_YOURS:
+      throw new NotFoundException(NOT_FOUND);
+    case REBIRTH_CLOSED:
+      throw new ConflictException('Rebirth is closed right now');
+    case REBIRTH_ONLINE:
+      throw new ConflictException('Log out of the game with this character first');
+    case REBIRTH_PRICE_CHANGED:
+      throw new ConflictException('The price has changed. Check it and confirm again');
+    case REBIRTH_LOW_LEVEL:
+      throw new UnprocessableEntityException('This character is not level 90 yet');
+    case REBIRTH_WEARING:
+      throw new UnprocessableEntityException('Take off everything this character is wearing first');
+    case REBIRTH_AT_LIMIT:
+      throw new UnprocessableEntityException('This character has reached the rebirth limit');
+    case REBIRTH_POOR:
+      throw new UnprocessableEntityException('This character does not have enough Gold');
   }
 }
 

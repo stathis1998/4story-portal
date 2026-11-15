@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { sha1Hex } from '../src/auth/sha1.js';
 import { RebirthAnnouncer } from '../src/rebirth/rebirth-announcer.js';
 import { ANNOUNCE_SENT, ANNOUNCE_SKIPPED, ANNOUNCE_WAITING } from '../src/rebirth/rebirth.repository.js';
@@ -20,6 +20,7 @@ describe('/api rebirth', () => {
   let moose: ReturnType<typeof request.agent>;
   let playerId: number;
   let now: Date;
+  let freshBaseline: MockInstance<StatsService['freshBaseline']>;
 
   beforeAll(() => Logger.overrideLogger(false));
 
@@ -39,6 +40,8 @@ describe('/api rebirth', () => {
     gm = new FakeGmRepository();
     control = new FakeControlClient();
     app = await createTestApp({ accounts, gm, rebirth, control });
+    // The fake stats know no character; a rebirth needs a baseline.
+    freshBaseline = vi.spyOn(app.get(StatsService), 'freshBaseline').mockResolvedValue({ kills: 0 });
     player = request.agent(app.getHttpServer());
     await player.post('/api/auth/login').send({ username: 'newuser', password: 'secret1' }).expect(200);
     moose = request.agent(app.getHttpServer());
@@ -97,10 +100,9 @@ describe('/api rebirth', () => {
     });
 
     it('stores a baseline read past the cache', async () => {
-      const stats = app.get(StatsService);
-      const fresh = vi.spyOn(stats, 'freshBaseline').mockResolvedValue({ kills: 7 });
+      freshBaseline.mockResolvedValue({ kills: 7 });
       await reborn().expect(200);
-      expect(fresh).toHaveBeenCalledWith(7);
+      expect(freshBaseline).toHaveBeenCalledWith(7);
       expect(rebirth.rebirthCalls[0]).toMatchObject({
         userId: playerId,
         charId: 7,
@@ -110,10 +112,28 @@ describe('/api rebirth', () => {
       });
     });
 
-    it('stores an empty baseline for a character the stats do not know', async () => {
-      vi.spyOn(app.get(StatsService), 'freshBaseline').mockResolvedValue(null);
-      await reborn().expect(200);
-      expect(rebirth.rebirthCalls[0].baseline).toBe('{}');
+    it('answers 503 and stays out of the batch when the stats do not know the character', async () => {
+      freshBaseline.mockResolvedValue(null);
+      const before = { ...mine() };
+      const res = await reborn().expect(503);
+      expect(res.body.message).toBe('Rebirth is not available right now. Try again in a minute');
+      expect(rebirth.rebirthCalls).toEqual([]);
+      expect(mine()).toEqual(before);
+    });
+
+    it.each([
+      ['closed', { settingsRow: { live: false, priceGold: 2000, percent: 2, limit: 10 } }, 409, 'Rebirth is closed right now'],
+      ['closed with no price', { settingsRow: { live: true, priceGold: 0, percent: 2, limit: 10 } }, 409, 'Rebirth is closed right now'],
+      ['online', { row: { online: true } }, 409, 'Log out of the game with this character first'],
+      ['level 1', { row: { level: 1 } }, 422, 'This character is not level 90 yet'],
+    ])('refuses %s before reading the baseline', async (_name, change, status, message) => {
+      const { settingsRow, row } = change as { settingsRow?: typeof rebirth.settingsRow; row?: Partial<ReturnType<typeof mine>> };
+      if (settingsRow) rebirth.settingsRow = settingsRow;
+      if (row) Object.assign(mine(), row);
+      const res = await reborn().expect(status);
+      expect(res.body.message).toBe(message);
+      expect(freshBaseline).not.toHaveBeenCalled();
+      expect(rebirth.rebirthCalls).toEqual([]);
     });
 
     it('drops the stats cache after a rebirth', async () => {
@@ -150,6 +170,11 @@ describe('/api rebirth', () => {
     it('refuses a body without a price', async () => {
       await player.post('/api/characters/7/rebirth').send({}).expect(400);
       await reborn(0).expect(400);
+      expect(rebirth.rebirthCalls).toEqual([]);
+    });
+
+    it('refuses a price above what rebirth 20 at the highest price costs', async () => {
+      await reborn(2_000_001).expect(400);
       expect(rebirth.rebirthCalls).toEqual([]);
     });
   });

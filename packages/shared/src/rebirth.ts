@@ -24,8 +24,8 @@ export const rebirthSettingsSchema: z.ZodType<RebirthSettings> = z
   });
 export type RebirthSettingsInput = z.infer<typeof rebirthSettingsSchema>;
 
-/** The price the player was shown. */
-export const rebirthRequestSchema = z.object({ priceGold: z.number().int().min(1) });
+/** The price the player was shown. At most rebirth 20 at the highest price, 100,000 Gold. */
+export const rebirthRequestSchema = z.object({ priceGold: z.number().int().min(1).max(2_000_000) });
 export type RebirthRequest = z.infer<typeof rebirthRequestSchema>;
 
 export const rebirthIsOpen = (s: RebirthSettings): boolean => s.live && s.priceGold >= 1;

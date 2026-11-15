@@ -4,6 +4,7 @@ import {
   rebirthBonus,
   rebirthIsOpen,
   rebirthPriceGold,
+  rebirthRequestSchema,
   rebirthSettingsSchema,
 } from './rebirth.js';
 
@@ -30,6 +31,12 @@ describe('rebirth rules', () => {
     [{ live: true, priceGold: 5, percent: 2, limit: 21 }, false],
     [{ live: true, priceGold: 5.5, percent: 2, limit: 10 }, false],
   ])('settings %j valid: %s', (input, ok) => expect(rebirthSettingsSchema.safeParse(input).success).toBe(ok));
+  it.each([
+    [1, true],
+    [2_000_000, true],
+    [0, false],
+    [2_000_001, false],
+  ])('a request price of %i is valid: %s', (priceGold, ok) => expect(rebirthRequestSchema.safeParse({ priceGold }).success).toBe(ok));
   it('names the field each refinement blames', () => {
     const price = rebirthSettingsSchema.safeParse({ live: true, priceGold: 0, percent: 2, limit: 10 });
     expect(price.success || price.error.issues[0]).toMatchObject({
