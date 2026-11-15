@@ -55,9 +55,32 @@ export const slotsErrorMessage = (err: unknown) =>
 // letter above the win line is then the next to arrive on it, so the stop on the win line gets SMALLER as the
 // position grows. reelStop is exactly that: stop = -position, wrapped into 0..31.
 
-/** When each reel comes to rest, in seconds; the last is the length of a spin. */
-export const SLOT_REEL_SECONDS = [1.3, 1.9, 2.5] as const
-export const SLOT_SPIN_SECONDS = 2.5
+/** Seconds until reel 1 rests. */
+export const SLOT_FIRST_STOP = 1.0
+/** Seconds between one reel resting and the next. */
+export const SLOT_STOP_GAP = 0.5
+/** Added before each reel that turns while two scatters already show. */
+export const SLOT_SUSPENSE = 1.0
+
+/** The reels that turn in suspense: every reel after the one that showed the second scatter. */
+export function suspenseReels(scatterOnReel: readonly boolean[]): number[] {
+  let seen = 0
+  const second = scatterOnReel.findIndex((scatter) => scatter && ++seen === 2)
+  if (second < 0) return []
+  return scatterOnReel.map((_, i) => i).filter((i) => i > second)
+}
+
+/** When each reel rests. `scatterOnReel[i]` is whether reel i shows a scatter. Quick halves all three times. */
+export function reelTimes(scatterOnReel: readonly boolean[], quick: boolean): number[] {
+  const scale = quick ? 0.5 : 1
+  const suspense = new Set(suspenseReels(scatterOnReel))
+  const times: number[] = []
+  scatterOnReel.forEach((_, i) => {
+    const wait = i === 0 ? SLOT_FIRST_STOP : SLOT_STOP_GAP + (suspense.has(i) ? SLOT_SUSPENSE : 0)
+    times.push((times[i - 1] ?? 0) + wait * scale)
+  })
+  return times
+}
 
 /** The ease-in from rest to full speed, the run down from full speed to a halt just past the stop, the settle back onto it. */
 const RAMP = 0.15
@@ -65,26 +88,39 @@ const SLOW = 0.4
 const SETTLE = 0.18
 /** How far past its stop a reel runs before it drops back, in stops. */
 const OVERSHOOT = 0.2
-/** Whole loops a reel turns before the turns it needs to reach its stop: later reels run further, so the order of stopping is also the order of distance. */
-const FIRST_LOOPS = 2
+/**
+ * A reel resting sooner than this has its ramp, slow-down and settle shortened in proportion: a quick spin's first
+ * reel rests at half a second, less than the three together.
+ */
+const FULL_EASE = 1.0
 
-/** `start` and `travel` are the reels' positions at rest before the spin and how far each turns, which ends on `to`. */
-export type ReelPlan = { from: SlotStops; to: SlotStops; start: SlotStops; travel: SlotStops; [key: string]: number | SlotStops }
+/**
+ * `start` and `travel` are the reels' positions at rest before the spin and how far each turns, which ends on `to`.
+ * `times` is when each rests, in seconds.
+ */
+export type ReelPlan = { from: SlotStops; to: SlotStops; start: number[]; travel: number[]; times: number[] }
 
 /** The stop on the win line for a reel at rest at the whole number `position`, from 0 to 31. */
 export function reelStop(position: number): number {
   return (((-position % SLOT_REEL_STOPS) + SLOT_REEL_STOPS) % SLOT_REEL_STOPS)
 }
 
-/** A spin that starts with the reels resting on `from` and ends with them resting on `to`. */
-export function planReels(from: SlotStops, to: SlotStops): ReelPlan {
+/** A spin that starts with the reels resting on `from` and ends with them resting on `to`, each at its time in `times`. */
+export function planReels(from: SlotStops, to: SlotStops, times: readonly number[]): ReelPlan {
   // Resting on stop s is the position -s, so the start is kept non-negative and a position grows with time.
-  const start = from.map((s) => (SLOT_REEL_STOPS - s) % SLOT_REEL_STOPS) as SlotStops
-  const travel = to.map((s, i) => {
+  const start = from.map((s) => (SLOT_REEL_STOPS - s) % SLOT_REEL_STOPS)
+  const travel: number[] = []
+  let loops = 1
+  to.forEach((s, i) => {
     const toGo = (((SLOT_REEL_STOPS - s - start[i]) % SLOT_REEL_STOPS) + SLOT_REEL_STOPS) % SLOT_REEL_STOPS
-    return (FIRST_LOOPS + i) * SLOT_REEL_STOPS + toGo
-  }) as SlotStops
-  return { from, to, start, travel }
+    // About two loops a second, so a reel that turns longer runs further and the speed stays about even.
+    loops = Math.max(loops, Math.round(times[i] * 2))
+    let distance = loops * SLOT_REEL_STOPS + toGo
+    // Two reels on the same loops: a later one is never seen running behind an earlier one.
+    while (i > 0 && distance < travel[i - 1]) distance += SLOT_REEL_STOPS
+    travel.push(distance)
+  })
+  return { from, to, start, travel, times: [...times] }
 }
 
 /**
@@ -94,23 +130,42 @@ export function planReels(from: SlotStops, to: SlotStops): ReelPlan {
  */
 function turned(travel: number, total: number, t: number): number {
   if (t >= total) return travel
+  const fit = Math.min(1, total / FULL_EASE)
+  const ramp = RAMP * fit
+  const slow = SLOW * fit
+  const settle = SETTLE * fit
   const aim = travel + OVERSHOOT
-  const run = total - SETTLE
+  const run = total - settle
   // The distance is the area under the speed: a ramp up, a plateau, a ramp down.
-  const speed = aim / (run - (RAMP + SLOW) / 2)
-  if (t <= RAMP) return (speed * t * t) / (2 * RAMP)
-  if (t <= run - SLOW) return speed * (RAMP / 2 + (t - RAMP))
+  const speed = aim / (run - (ramp + slow) / 2)
+  if (t <= ramp) return (speed * t * t) / (2 * ramp)
+  if (t <= run - slow) return speed * (ramp / 2 + (t - ramp))
   if (t <= run) {
     const left = run - t
-    return aim - (speed * left * left) / (2 * SLOW)
+    return aim - (speed * left * left) / (2 * slow)
   }
-  // Back from the overshoot, starting and ending at a standstill.
-  const u = (t - run) / SETTLE
-  return travel + (OVERSHOOT * (1 + Math.cos(Math.PI * u))) / 2
+  return travel + dropBack((t - run) / settle)
 }
 
-/** Where each reel is `seconds` into the spin: fractional while it moves, a whole number once at rest. */
-export function reelsAt(plan: ReelPlan, seconds: number): [number, number, number] {
+/** Back from the overshoot, starting and ending at a standstill: `u` runs from 0 to 1 over the settle. */
+const dropBack = (u: number) => (u >= 1 ? 0 : (OVERSHOOT * (1 + Math.cos(Math.PI * u))) / 2)
+
+/**
+ * When each reel is at rest in a spin stopped at once `stopAt` seconds in: a reel already resting keeps its time,
+ * one still turning rests after the settle. Without `stopAt`, the plan's own times.
+ */
+export function restTimes(plan: ReelPlan, stopAt = Infinity): number[] {
+  return plan.times.map((time) => (time <= stopAt ? time : stopAt + SETTLE))
+}
+
+/**
+ * Where each reel is `seconds` into the spin: fractional while it moves, a whole number once at rest. A spin
+ * stopped at once `stopAt` seconds in puts every reel still turning just past its stop, to drop back onto it.
+ */
+export function reelsAt(plan: ReelPlan, seconds: number, stopAt = Infinity): number[] {
   const t = Math.max(seconds, 0)
-  return [0, 1, 2].map((i) => plan.start[i] + turned(plan.travel[i], SLOT_REEL_SECONDS[i], t)) as [number, number, number]
+  return plan.travel.map((travel, i) => {
+    if (t >= stopAt && plan.times[i] > stopAt) return plan.start[i] + travel + dropBack((t - stopAt) / SETTLE)
+    return plan.start[i] + turned(travel, plan.times[i], t)
+  })
 }
