@@ -171,7 +171,6 @@ const pots = (change: Partial<Record<SlotPot, Partial<SlotJackpotView>>> = {}): 
 const jackpots = () => screen.getByRole('region', { name: 'Jackpots' })
 const pot = (name: string) => within(jackpots()).getByRole('group', { name })
 const payTable = () => within(screen.getByRole('region', { name: 'What it pays' }))
-const JACKPOT_LINE = 'With the jackpot, the slots pay back everything staked, over time.'
 
 const open = (current: SlotsState = state(), extra: Parameters<typeof mockApi>[0] = {}) => {
   const fetchMock = mockApi({ 'GET /slots': () => json(200, current), ...extra })
@@ -2267,7 +2266,7 @@ describe('slots', () => {
 
       expect(screen.queryByRole('region', { name: 'Jackpots' })).not.toBeInTheDocument()
       expect(screen.queryByRole('progressbar', { name: /jackpot/ })).not.toBeInTheDocument()
-      expect(payTable().queryByText(/jackpot/)).not.toBeInTheDocument()
+      expect(payTable().queryByText(/adds .* of its stake to the jackpots/)).not.toBeInTheDocument()
     })
 
     it('says a pot switched off is paused', async () => {
@@ -2378,7 +2377,7 @@ describe('slots', () => {
       for (const machine of SLOT_MACHINES) {
         await user.click(tab(machine.name))
         const { num, den } = slotJackpotShare(machine)
-        expect(payTable().getByText(`A lost round on this machine adds ${((num / den) * 100).toFixed(1)}% of its stake to the jackpot. ${JACKPOT_LINE}`)).toBeInTheDocument()
+        expect(payTable().getByText(`A lost round adds ${((num / den) * 100).toFixed(1)}% of its stake to the jackpots.`)).toBeInTheDocument()
       }
     })
 
