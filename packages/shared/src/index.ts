@@ -8,6 +8,7 @@ export * from './gm-mail.js';
 export * from './player-stats.js';
 export * from './roulette.js';
 export * from './slot-figures.js';
+export * from './slot-machines.js';
 export * from './slot-rules.js';
 export * from './slots.js';
 export * from './upgrade-prices.js';
