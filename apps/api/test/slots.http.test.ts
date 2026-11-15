@@ -19,6 +19,7 @@ import { FakeAccountsRepository, FakeGmRepository, FakeSlotsRepository } from '.
 import { createTestApp } from './test-app.js';
 
 const shelf = slotMachine('shelf') as SlotMachine;
+const armoury = slotMachine('armoury') as SlotMachine;
 
 /** The first stops, counting reel 5 fastest, whose paid spin satisfies `want`. */
 function stopsWhere(machine: SlotMachine, want: (out: SlotSpinOutcome) => boolean): SlotStops {
@@ -35,6 +36,8 @@ function stopsWhere(machine: SlotMachine, want: (out: SlotSpinOutcome) => boolea
 const blank = stopsWhere(shelf, (o) => o.multiple === 0 && o.scatters < 3);
 const paying = stopsWhere(shelf, (o) => o.multiple > 0 && o.freeSpins === 0);
 const eightFree = stopsWhere(shelf, (o) => o.freeSpins === 8 && o.multiple === 0);
+/** A lost paid spin on the Armoury, found on its own strips. */
+const armouryBlank = stopsWhere(armoury, (o) => o.multiple === 0 && o.scatters < 3);
 const payingMultiple = slotSpin(shelf, paying).multiple;
 const JACKPOT_ROLL = 999_999_999;
 
@@ -238,6 +241,29 @@ describe('/api/slots', () => {
       expect(res.body.state.mine).toEqual([res.body.spin]);
     });
 
+    it('answers the round with its free spins when the new row is not in the list read back', async () => {
+      draws(...stopsOf(eightFree, ...Array<SlotStops>(8).fill(paying)));
+      // A read that misses the row just written: the answer is made from the round itself.
+      slots.spinsOf = async () => [];
+
+      const res = await spin({ stake: 40 }).expect(200);
+
+      const payout = (8 * 2 * payingMultiple * 40) / 20;
+      expect(res.body.state.mine).toEqual([]);
+      expect(res.body.spin).toEqual({
+        id: slots.spinRows[0].id,
+        at: expect.any(String),
+        character: 'Mounara',
+        machine: 'shelf',
+        stops: eightFree,
+        free: Array(8).fill(paying),
+        stake: 40,
+        payout,
+        jackpot: 0,
+      });
+      expect(res.body.wallet).toEqual(walletAfter(payout - 40));
+    });
+
     it('free spins that all pay nothing make a lost round', async () => {
       const calls = draws(...stopsOf(eightFree, ...Array<SlotStops>(8).fill(blank)), JACKPOT_ROLL);
 
@@ -345,7 +371,7 @@ describe('/api/slots', () => {
       expect(slots.spinRows).toEqual([]);
       untouched();
       // The other machines are not affected.
-      draws(...blank, 0);
+      draws(...armouryBlank, 0);
       await spin({ machine: 'armoury', stake: 40 }).expect(200);
     });
 
@@ -477,6 +503,8 @@ describe('/api/slots', () => {
 
       const page = await player.get('/api/slots').expect(200);
       expect(page.body.mine).toEqual([real.body.spin]);
+      // The stray rows are all big wins, and the real one is not.
+      expect(page.body.bigWins).toEqual([]);
       const gmPage = await moose.get('/api/gm/slots').expect(200);
       expect(gmPage.body.latest).toEqual([real.body.spin]);
       // Only the three machines the code has are listed, whatever the table holds.
@@ -556,7 +584,7 @@ describe('/api/slots', () => {
       slots.settingsRow.live = true;
       draws(...paying);
       await spin().expect(200);
-      draws(...blank, JACKPOT_ROLL);
+      draws(...armouryBlank, JACKPOT_ROLL);
       await spin({ machine: 'armoury', stake: 40 }).expect(200);
       // An older day only counts toward all time.
       now = new Date('2026-11-15T10:00:00Z');

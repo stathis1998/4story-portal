@@ -71,6 +71,7 @@ const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms))
 describe('the reels', () => {
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('shows the three real rows of each of the five reels at rest', () => {
