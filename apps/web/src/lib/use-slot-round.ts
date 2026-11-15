@@ -294,8 +294,10 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
   }
 
   function freeEnd(r: Round) {
-    update({ banner: { kind: 'freeEnd', spins: r.spins.length - 1, won: r.spin.payout - r.spins[0].won } })
-    sounds.play('freeEnd')
+    const won = r.spin.payout - r.spins[0].won
+    update({ banner: { kind: 'freeEnd', spins: r.spins.length - 1, won } })
+    // The banner says what the free spins won; its cadence is a cheer, so only for the stake or more.
+    if (won >= r.spin.stake) sounds.play('freeEnd')
     // A press ends the round here: all that would follow is a cheer for the total this banner already gives.
     r.press = () => endNow(r)
     clock.after(FREE_END_SECONDS, () => {
@@ -428,8 +430,11 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
   }
 
   /** A press of Spin, or the space bar, while a round shows: it stops the reels, or ends what is showing. */
-  function press() {
-    round.current?.press?.()
+  function press(): boolean {
+    const r = round.current
+    r?.press?.()
+    // True when this press ended the round.
+    return r !== null && round.current !== r
   }
 
   /** "Skip to the total": the reels on the last free spin and the round over, at once. */

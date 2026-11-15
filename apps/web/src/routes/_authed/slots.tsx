@@ -31,6 +31,8 @@ const labelText = 'text-xs font-bold tracking-wider text-muted uppercase'
 const cardFrame = 'rounded-xs border border-line bg-surface'
 const card = `${cardFrame} p-4 sm:p-5`
 const LAST_ROUNDS = 10
+/** After a press that ended a round, how long Spin waits before it sends again: a double click is one wish. */
+const END_PAUSE_MS = 400
 
 /** What the browser remembers under `key`, if it lets us. */
 function remembered(key: string): string | null {
@@ -102,6 +104,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const pickerId = useId()
   const playArea = useRef<HTMLDivElement>(null)
   const stakeGroup = useRef<HTMLDivElement>(null)
+  // Until when Spin and the space bar send nothing, after a press ended a round. A time, so no timer is left behind.
+  const quietUntil = useRef(0)
 
   const machine = slotMachine(machineKey ?? '') ?? SLOT_MACHINES[0]
   const settings = settingsOf(view, machine)
@@ -139,9 +143,18 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   // Told with the result, when the round has been shown, like the wallet.
   const wonJackpot = shown !== null && !busy && shown.spin.jackpot > 0
 
+  /** A press that ended a round: the next one of a quick pair, meant as "stop" too, must not stake money. */
+  function endedByPress() {
+    quietUntil.current = performance.now() + END_PAUSE_MS
+  }
+
   async function onSpin() {
     // While a round is on screen a press stops its reels or ends what is showing: it never sends another spin.
-    if (busy) return round.press()
+    if (busy) {
+      if (round.press()) endedByPress()
+      return
+    }
+    if (performance.now() < quietUntil.current) return
     // A second press finds the page already busy: React applies a press's state before the next one.
     if (!character || !canSpin || stake === null) return
     // The press is what lets the browser make sound at all.
@@ -360,7 +373,14 @@ function SlotsFloor({ data }: { data: SlotsState }) {
             </div>
             {/* Under Spin, not over the window: it never hides a symbol, and the cabinet's picture does not swallow it. */}
             {ours && show.skip && (
-              <Button variant="secondary" size="sm" onClick={round.skip}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  round.skip()
+                  endedByPress()
+                }}
+              >
                 Skip to the total
               </Button>
             )}

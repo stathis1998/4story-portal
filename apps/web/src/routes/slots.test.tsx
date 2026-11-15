@@ -72,6 +72,10 @@ const SCATTERS_1_4 = stopsWhere(shelf, (o, s) => o.multiple === 0 && sameReels(s
 const SCATTERS_1_2 = stopsWhere(shelf, (o, s) => o.multiple === 0 && sameReels(scatterReels(s), [true, true, false, false, false]))
 /** Eight free spins: two pay well, one a little, the rest nothing. */
 const FREE = [LINES, BLANK, SMALL, BLANK, BLANK, BLANK, LINES, BLANK]
+/** Eight free spins, and lines of its own that pay less than the stake. */
+const EIGHT_SMALL = stopsWhere(shelf, (o) => o.freeSpins === 8 && o.multiple > 0 && o.multiple < 20)
+/** Less than half the stake, so even doubled in a free spin it stays below it. */
+const TINY = stopsWhere(shelf, (o) => o.multiple > 0 && o.multiple < 10 && o.freeSpins === 0)
 
 let ids = 100
 /** A round on Tranus's Shelf by Mounara, paying what its stops pay. */
@@ -1377,6 +1381,158 @@ describe('slots', () => {
       vi.advanceTimersByTime(60_000)
       expect(calls).toHaveLength(after)
       expect(errors).not.toHaveBeenCalled()
+    })
+
+    it('chimes no line until the running total has reached the stake, and from that spin on', async () => {
+      // The paid spin's own lines pay less than the stake; the second free spin takes the round past it.
+      const free = [BLANK, LINES, BLANK, LINES, BLANK, BLANK, BLANK, BLANK]
+      const spin = roundOf(EIGHT_SMALL, { free })
+      const spins = roundSpins(shelf, spin)
+      expect(spins[0].won).toBeGreaterThan(0)
+      expect(spins[1].total).toBeLessThan(20)
+      expect(spins[2].total).toBeGreaterThanOrEqual(20)
+      const { user } = open(state(), server(result(spin)))
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      const cheers = () => calls.filter((call) => call.startsWith('lineWin') || call === 'count')
+      // Up to free spin 2 coming to rest, nothing cheers, though the paid spin's lines are drawn.
+      let drewLines = false
+      for (let t = 0; t < 60_000 && !(status().textContent === 'Free spin 2 of 8' && reels().getAttribute('aria-label') !== 'Reels, spinning'); t += 50) {
+        advance(50)
+        drewLines ||= drawnLines() > 0
+        if (status().textContent !== 'Free spin 2 of 8' || reels().getAttribute('aria-label') === 'Reels, spinning') expect(cheers()).toEqual([])
+      }
+      expect(drewLines).toBe(true)
+      expect(status()).toHaveTextContent('Free spin 2 of 8')
+      expect(calls).toContain('lineWin 0')
+      playOut()
+      // The fourth free spin's lines chime too.
+      expect(calls.filter((call) => call === 'lineWin 0').length).toBe(2)
+    })
+
+    it('a round with free spins that stays below the stake gets only the small tick', async () => {
+      const spin = roundOf(EIGHT, { free: [TINY, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK] })
+      expect(winTier(spin.payout, 20)).toBe('small')
+      const { user } = open(state(), server(result(spin)))
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      const banners = seen(() => within(reels()).queryByText(/free spins/)?.textContent ?? null)
+      playOut(banners.look)
+
+      expect(banners.texts).toContain(`8 free spins won ${silverText(spin.payout)}.`)
+      expect(calls.filter((call) => WIN_SOUNDS.includes(call.split(' ')[0]))).toEqual([])
+      // The closing banner says it plainly, without its cadence.
+      expect(calls).not.toContain('freeEnd')
+      expect(calls.filter((call) => call === 'smallWin')).toHaveLength(1)
+      expect(calls[calls.length - 1]).toBe('smallWin')
+    })
+
+    it('free spins that win nothing close without a sound; ones that win the stake close with one', async () => {
+      const nothing = roundOf(EIGHT, { free: Array<SlotStops>(8).fill(BLANK) })
+      const { user } = open(state(), server(result(nothing), result(freeSpin())))
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      const banners = seen(() => within(reels()).queryByText(/free spins/)?.textContent ?? null)
+      playOut(banners.look)
+      expect(banners.texts).toContain('8 free spins won nothing.')
+      expect(calls).toContain('freeStart')
+      expect(calls).not.toContain('freeEnd')
+      expect(status()).toHaveTextContent('8 free spins won you nothing. You staked 20 Silver.')
+
+      calls.length = 0
+      advance(500)
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: 'Reels, spinning' })
+      playOut()
+      expect(calls.filter((call) => call === 'freeEnd')).toHaveLength(1)
+    })
+
+    describe('a press that ends a round', () => {
+      it('during Big win, two clicks on Spin send one spin in all', async () => {
+        const { user, fetchMock } = open(state(), server(result(roundOf(BIG))))
+        await loaded()
+        animate()
+        await user.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        for (let t = 0; t < 20_000 && !screen.queryByText('Big win'); t += 100) advance(100)
+        expect(screen.getByText('Big win')).toBeInTheDocument()
+
+        fireEvent.click(spinButton())
+        expect(spinButton()).toHaveTextContent('Spin')
+        fireEvent.click(spinButton())
+        advance(100)
+        fireEvent.click(spinButton())
+
+        expect(spinButton()).toHaveTextContent('Spin')
+        expect(reels()).toHaveAccessibleName(reelsName(BIG))
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+      })
+
+      it("during a lone paid spin's lines, two space presses send one spin in all; after 400 ms a press sends the next", async () => {
+        const { fetchMock } = open(state(), server(lines, lost))
+        await loaded()
+        animate()
+        fireEvent.keyDown(document.body, { key: ' ' })
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        advance(reelTimes(scatterReels(LINES), false)[4] * 1000 + 100)
+        expect(drawnLines()).toBe(1)
+
+        fireEvent.keyDown(document.body, { key: ' ' })
+        expect(status()).toHaveTextContent(lineOf(lines.spin))
+        fireEvent.keyDown(document.body, { key: ' ' })
+        advance(350)
+        fireEvent.keyDown(document.body, { key: ' ' })
+        expect(spinButton()).toHaveTextContent('Spin')
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+
+        // The pause is over: a press is a new round.
+        advance(100)
+        fireEvent.keyDown(document.body, { key: ' ' })
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+        playOut()
+      })
+
+      it('a click on Skip to the total followed at once by a click on Spin sends nothing', async () => {
+        const spin = freeSpin()
+        const { user, fetchMock } = open(state(), server(result(spin)))
+        await loaded()
+        animate()
+        await user.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        for (let t = 0; t < 20_000 && !skipButton(); t += 100) advance(100)
+
+        fireEvent.click(skipButton()!)
+        fireEvent.click(spinButton())
+
+        expect(spinButton()).toHaveTextContent('Spin')
+        expect(status()).toHaveTextContent(lineOf(spin))
+        expect(reels()).toHaveAccessibleName(reelsName(FREE[7]))
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+      })
+
+      it('a round that ends by itself leaves Spin ready at once', async () => {
+        const { user, fetchMock } = open(state(), server(lost, lines))
+        await loaded()
+        animate()
+        await user.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        playOut()
+
+        fireEvent.click(spinButton())
+        await screen.findByRole('img', { name: 'Reels, spinning' })
+        expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+        playOut()
+      })
     })
   })
 
