@@ -7,6 +7,7 @@ import {
   type SessionRow,
   type StatRows,
 } from '../src/stats/stats-rules.js';
+import { firstLife } from './fixtures.js';
 
 const at = (value: string) => new Date(`${value}Z`);
 
@@ -24,6 +25,7 @@ const character = (overrides: Partial<CharacterRow> = {}): CharacterRow => ({
   gold: 0,
   createdAt: at('2026-01-01T00:00:00'),
   banned: false,
+  ...firstLife,
   ...overrides,
 });
 

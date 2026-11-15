@@ -9,7 +9,8 @@ import { itemIcons } from '../src/gm/game-icons.generated.js';
 import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
 import { serverNow } from '../src/stats/stats.service.js';
 import { PortalStore } from '../src/store/portal-store.js';
-import { FakeAccountsRepository, FakeAchievementsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
+import { FakeAccountsRepository, FakeAchievementsRepository, FakeControlClient, FakeRebirthRepository, FakeStatsRepository } from './fakes.js';
+import { firstLife } from './fixtures.js';
 import { createTestApp } from './test-app.js';
 
 const MOOSE = 100;
@@ -31,6 +32,7 @@ const character = (overrides: Partial<CharacterRow>): CharacterRow => ({
   gold: 0,
   createdAt: null,
   banned: false,
+  ...firstLife,
   ...overrides,
 });
 
@@ -63,6 +65,7 @@ describe('achievement routes', () => {
   let app: INestApplication;
   let stats: FakeStatsRepository;
   let repo: FakeAchievementsRepository;
+  let rebirth: FakeRebirthRepository;
   let control: FakeControlClient;
   let store: PortalStore;
   let awarder: AchievementAwarder;
@@ -80,11 +83,13 @@ describe('achievement routes', () => {
     stats.rows = baseRows();
     repo = new FakeAchievementsRepository();
     repo.now = serverNow;
+    rebirth = new FakeRebirthRepository();
+    rebirth.now = serverNow;
 
     repo.items = [{ itemId, name: 'Potion', stack: 20 }];
     control = new FakeControlClient();
     store = new PortalStore(':memory:');
-    app = await createTestApp({ accounts, control, stats, store, achievements: repo });
+    app = await createTestApp({ accounts, control, stats, store, achievements: repo, rebirth });
     awarder = app.get(AchievementAwarder);
     const login = async (username: string) => {
       const agent = request.agent(app.getHttpServer());
@@ -506,6 +511,169 @@ describe('achievement routes', () => {
       await awarder.tick();
       expect(repo.rows).toHaveLength(21);
       expect(((await player.get('/api/news')).body as News).items).toHaveLength(20);
+    });
+  });
+
+  describe('after a rebirth', () => {
+    let nextGiven = 1000;
+    /** An award given before this test, in the life named. */
+    const given = (achievementId: string, level: number, life: number, charId = KAELITH, userId = PLAYER) =>
+      repo.rows.push({
+        id: nextGiven++,
+        userId,
+        charId,
+        rebirth: life,
+        achievementId,
+        level,
+        earnedAt: serverNow(),
+        ageSeconds: 0,
+        text: `given ${achievementId} ${level}`,
+        announced: ANNOUNCE_SENT,
+      });
+    /** Kaelith reborn once, two minutes and more ago, with the rows given. */
+    const reborn = (overrides: Partial<CharacterRow> = {}, rows: Partial<StatRows> = {}) => {
+      stats.rows = {
+        ...baseRows(),
+        characters: [character({ id: 1, level: 20, rebirth: 1, rebirthAgeSeconds: 600, ...overrides })],
+        ...rows,
+      };
+    };
+    const sentFor = (achievementId: string) =>
+      repo.sent.filter((sent) => sent.charId === KAELITH && sent.achievementId === achievementId).map((sent) => [sent.level, sent.rebirth]);
+    const titles = [1, 2, 3].map((titleId) => ({ charId: KAELITH, titleId, name: `Title ${titleId}` }));
+
+    it('pays a reborn character its level achievement again', async () => {
+      given('level', 1, 0);
+      reborn();
+      await goLive();
+      await awarder.tick();
+      expect(sentFor('level')).toEqual([[1, 1]]);
+      expect(repo.rows.filter((row) => row.achievementId === 'level').map((row) => [row.level, row.rebirth])).toEqual([
+        [1, 0],
+        [1, 1],
+      ]);
+    });
+
+    it('does not pay a counter again until it is earned again', async () => {
+      reborn({ level: 1, baseline: { kills: 1_000_000 } }, { combat: [{ charId: KAELITH, kills: 1_000_000, damageDealt: 0 }] });
+      await goLive();
+      await awarder.tick();
+      expect(sentFor('kills')).toEqual([]);
+
+      reborn({ level: 1, baseline: { kills: 1_000_000 } }, { combat: [{ charId: KAELITH, kills: 1_001_000, damageDealt: 0 }] });
+      advance();
+      await awarder.tick();
+      expect(sentFor('kills')).toEqual([[1, 1]]);
+    });
+
+    it('pays a kept thing once whatever the life', async () => {
+      given('titles', 1, 0);
+      reborn({}, { titles });
+      await goLive();
+      await awarder.tick();
+      expect(sentFor('titles')).toEqual([]);
+
+      repo.rows = repo.rows.filter((row) => row.achievementId !== 'titles');
+      advance();
+      await awarder.tick();
+      expect(sentFor('titles')).toEqual([[1, 0]]);
+    });
+
+    it('leaves a character alone for two minutes after its rebirth', async () => {
+      reborn({ level: 90, rebirthAgeSeconds: 30 });
+      await goLive();
+      await awarder.tick();
+      expect(repo.sent.filter((sent) => sent.charId === KAELITH)).toEqual([]);
+      // The account's own achievements carry on.
+      expect(repo.sent.some((sent) => sent.achievementId === 'roster')).toBe(true);
+
+      reborn({ level: 90, rebirthAgeSeconds: 121 });
+      advance();
+      await awarder.tick();
+      expect(sentFor('level')).toEqual([1, 2, 3, 4, 5].map((level) => [level, 1]));
+    });
+
+    it('shows a reborn character its new life', async () => {
+      for (const level of [1, 2, 3, 4, 5]) given('level', level, 0);
+      given('titles', 1, 0);
+      reborn({ baseline: { kills: 1200 } }, { titles, combat: [{ charId: KAELITH, kills: 1500, damageDealt: 0 }] });
+      const level = await achievement('level');
+      expect(level).toMatchObject({ value: 20, levelsDone: 1 });
+      expect(level.levels.map((entry) => entry.done)).toEqual([true, false, false, false, false]);
+      // Reached in this life, not yet awarded in it.
+      expect(level.levels[0].earnedAt).toBeNull();
+      expect(await achievement('kills')).toMatchObject({ value: 300, levelsDone: 0 });
+      const kept = await achievement('titles');
+      expect(kept).toMatchObject({ value: 3, levelsDone: 1 });
+      expect(kept.levels[0]).toMatchObject({ done: true, earnedAt: serverNow().toISOString() });
+    });
+
+    it('keeps a level awarded in this life', async () => {
+      given('level', 2, 1);
+      reborn();
+      expect(await achievement('level')).toMatchObject({ value: 20, levelsDone: 2 });
+    });
+
+    it('puts rebirths in the news with the awards, newest first', async () => {
+      // Five awards now, then a rebirth a minute later and one an hour before them.
+      await goLive();
+      await awarder.tick();
+      advance(MINUTE);
+      const at = (minutesAgo: number) => new Date(serverNow().getTime() - minutesAgo * MINUTE);
+      const logRow = (id: number, userId: number, name: string, minutesAgo: number) => ({
+        id,
+        userId,
+        charId: id,
+        name,
+        rebirth: 1,
+        bonus: 2,
+        priceGold: 2000,
+        at: at(minutesAgo),
+        ageSeconds: minutesAgo * 60,
+        text: `${name} was reborn (rebirth 1)`,
+        announced: ANNOUNCE_SENT,
+      });
+      rebirth.logRows = [logRow(1, MOOSE, 'Moosey', 61), logRow(2, PLAYER, 'Kaelith', 0)];
+
+      const { items } = (await player.get('/api/news').expect(200)).body as News;
+      expect(items).toHaveLength(7);
+      expect(items[0]).toEqual({ id: -2, at: at(0).toISOString(), text: 'Kaelith was reborn (rebirth 1)', mine: true });
+      expect(items[6]).toEqual({ id: -1, at: at(61).toISOString(), text: 'Moosey was reborn (rebirth 1)', mine: false });
+      expect(items.slice(1, 6).every((item) => item.id > 0)).toBe(true);
+    });
+
+    it('keeps the newest 20 of the awards and rebirths together', async () => {
+      stats.rows = {
+        ...baseRows(),
+        characters: [character({ id: 1, level: 90, gold: 10_000 })],
+        combat: [{ charId: 1, kills: 1_000_000, damageDealt: 5_000_000_000 }],
+      };
+      await goLive();
+      await awarder.tick();
+      advance();
+      rebirth.logRows = [1, 2, 3].map((id) => ({
+        id,
+        userId: PLAYER,
+        charId: KAELITH,
+        name: 'Kaelith',
+        rebirth: id,
+        bonus: 2 * id,
+        priceGold: 2000 * id,
+        at: serverNow(),
+        ageSeconds: 0,
+        text: `Kaelith was reborn (rebirth ${id})`,
+        announced: ANNOUNCE_SENT,
+      }));
+      const { items } = (await player.get('/api/news').expect(200)).body as News;
+      expect(items).toHaveLength(20);
+      expect(items.slice(0, 3).map((item) => item.id)).toEqual([-3, -2, -1]);
+    });
+
+    it('still lists the awards when the rebirth log cannot be read', async () => {
+      rebirth.failing = true;
+      await goLive();
+      await awarder.tick();
+      expect(((await player.get('/api/news').expect(200)).body as News).items).toHaveLength(5);
     });
   });
 

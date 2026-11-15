@@ -30,6 +30,7 @@ const inspected = (overrides: Partial<CharacterInspect> = {}): CharacterInspect 
   id: 2,
   name: 'Rival',
   level: 60,
+  rebirth: 0,
   className: 'Warrior',
   race: 'Human',
   country: 'Derion',

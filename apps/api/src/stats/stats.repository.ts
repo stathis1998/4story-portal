@@ -109,6 +109,19 @@ export function toGearRow(raw: RawGearRow): GearRow {
   };
 }
 
+/** A stored baseline: only its numbers, and nothing at all for text that is not a JSON object. */
+export function readBaseline(text: string | null): Record<string, number> {
+  if (!text) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+  return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => Number.isFinite(entry[1])));
+}
+
 // Only ever reads: the portal's own data goes in PortalStore, not the game databases.
 @Injectable()
 export class SqlStatsRepository implements StatsRepository {
@@ -332,20 +345,29 @@ export class SqlStatsRepository implements StatsRepository {
     return result.recordset.map((row) => ({ ...row, damageDealt: Number(row.damageDealt) }));
   }
 
+  // The rebirth number, age and baseline come from the same statement as the level, so the awarder never
+  // sees a new life's level beside the old life's baseline, or the other way round.
   private async characters(): Promise<CharacterRow[]> {
-    const { characters, levels, allCharacters } = this.db.tables;
-    const result = await this.db.pool.request().query<Omit<CharacterRow, 'banned'> & { banned: number }>(
-      `SELECT c.dwCharID AS id, c.dwUserID AS userId, c.szNAME AS name, c.bClass AS classCode, c.bRace AS raceCode,
-              c.bCountry AS countryCode, c.bLevel AS level, c.dwEXP AS exp, prev.dwEXP AS levelStartExp,
-              cur.dwEXP AS levelEndExp, c.dwGold AS gold, c.dCreateDate AS createdAt,
-              CASE WHEN EXISTS (SELECT 1 FROM ${allCharacters} a WHERE a.dwCharID = c.dwCharID AND a.Ban <> 0)
-                   THEN 1 ELSE 0 END AS banned
-       FROM ${characters} c
-       LEFT JOIN ${levels} cur ON cur.bLevel = c.bLevel
-       LEFT JOIN ${levels} prev ON prev.bLevel = c.bLevel - 1
-       WHERE c.bDelete = 0`,
-    );
-    return result.recordset.map((row) => ({ ...row, banned: row.banned === 1 }));
+    const { characters, levels, allCharacters, rebirths, rebirthLog } = this.db.tables;
+    const result = await this.db.pool
+      .request()
+      .query<Omit<CharacterRow, 'banned' | 'baseline'> & { banned: number; baseline: string | null }>(
+        `SELECT c.dwCharID AS id, c.dwUserID AS userId, c.szNAME AS name, c.bClass AS classCode, c.bRace AS raceCode,
+                c.bCountry AS countryCode, c.bLevel AS level, c.dwEXP AS exp, prev.dwEXP AS levelStartExp,
+                cur.dwEXP AS levelEndExp, c.dwGold AS gold, c.dCreateDate AS createdAt,
+                CASE WHEN EXISTS (SELECT 1 FROM ${allCharacters} a WHERE a.dwCharID = c.dwCharID AND a.Ban <> 0)
+                     THEN 1 ELSE 0 END AS banned,
+                ISNULL(r.bRebirth, 0) AS rebirth,
+                CASE WHEN r.dwCharID IS NULL THEN NULL ELSE DATEDIFF(second, lastLife.dRebirth, GETDATE()) END AS rebirthAgeSeconds,
+                CASE WHEN r.dwCharID IS NULL THEN NULL ELSE lastLife.szBaseline END AS baseline
+         FROM ${characters} c
+         LEFT JOIN ${levels} cur ON cur.bLevel = c.bLevel
+         LEFT JOIN ${levels} prev ON prev.bLevel = c.bLevel - 1
+         LEFT JOIN ${rebirths} r ON r.dwCharID = c.dwCharID
+         OUTER APPLY (SELECT TOP 1 l.dRebirth, l.szBaseline FROM ${rebirthLog} l WHERE l.dwCharID = c.dwCharID ORDER BY l.dwID DESC) lastLife
+         WHERE c.bDelete = 0`,
+      );
+    return result.recordset.map((row) => ({ ...row, banned: row.banned === 1, baseline: readBaseline(row.baseline) }));
   }
 
   private async sessions(): Promise<SessionRow[]> {

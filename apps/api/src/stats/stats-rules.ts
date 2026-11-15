@@ -18,6 +18,12 @@ export type CharacterRow = {
   gold: number;
   createdAt: Date | null;
   banned: boolean;
+  /** How many times the character has been reborn. 0 in the first life. */
+  rebirth: number;
+  /** Seconds since the last rebirth, by the database's clock. Null in the first life. */
+  rebirthAgeSeconds: number | null;
+  /** Achievement id -> its number at the last rebirth. Empty in the first life. */
+  baseline: Record<string, number>;
 };
 
 // The game's times are server local, and the driver returns them as if they were UTC, so getUTC*

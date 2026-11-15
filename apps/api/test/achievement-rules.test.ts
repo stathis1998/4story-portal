@@ -8,10 +8,16 @@ import {
   CHARACTER_ACHIEVEMENTS,
   CHARACTER_LEVELS_TOTAL,
   accountLevelsDone,
+  awardLife,
+  baselineOf,
   characterLevelsDone,
+  FIRST_LIFE,
   formatValue,
   levelReached,
   levelsDone,
+  lifeValue,
+  REBIRTH_SETTLE_SECONDS,
+  type RebirthBehaviour,
 } from '../src/achievements/achievement-rules.js';
 import {
   type CharacterRow,
@@ -22,7 +28,7 @@ import {
   UPGRADE_LOST_LEVELS,
   UPGRADE_SUCCESS,
 } from '../src/stats/stats-rules.js';
-import { gearDefaults } from './fixtures.js';
+import { firstLife, gearDefaults } from './fixtures.js';
 
 const character = (overrides: Partial<CharacterRow> = {}): CharacterRow => ({
   id: 1,
@@ -38,6 +44,7 @@ const character = (overrides: Partial<CharacterRow> = {}): CharacterRow => ({
   gold: 0,
   createdAt: null,
   banned: false,
+  ...firstLife,
   ...overrides,
 });
 
@@ -297,6 +304,94 @@ describe('levels done', () => {
   it('adds the account and its characters up, leaving banned characters out', () => {
     expect(levelsDone(account(played))).toBe(3 + 3 + 2);
   });
+});
+
+describe('rebirth', () => {
+  const RESTARTS = ['level', 'skills'];
+  const SINCE = [
+    'kills',
+    'damage',
+    'damage-taken',
+    'healing',
+    'duels',
+    'upgrade-successes',
+    'gem-successes',
+    'gold-looted',
+    'gold-spent',
+    'lottery-plays',
+    'lottery-wins',
+    'lottery-gold',
+    'upgrade-fails',
+    'setbacks',
+    'destroyed',
+    'lottery-losses',
+  ];
+  const ONCE = [
+    'bestiary',
+    'nemesis',
+    'upgrade',
+    'gem-level',
+    'glowing',
+    'equipped',
+    'gold-held',
+    'titles',
+    'companions',
+    'companion-level',
+    'friends',
+    'guild-member',
+    'guild-leader',
+    'lose-streak',
+  ];
+  const characterFamily = (id: string) => CHARACTER_ACHIEVEMENTS.find((entry) => entry.id === id)!;
+  const sorted = (ids: string[]) => [...ids].sort();
+  const kills = (count: number) => [{ charId: 1, kills: count, damageDealt: 0 }];
+
+  it('gives every character achievement a rebirth behaviour', () => {
+    const ids = (behaviour: RebirthBehaviour) => CHARACTER_ACHIEVEMENTS.filter((entry) => entry.rebirth === behaviour).map((entry) => entry.id);
+    expect(sorted(ids('restarts'))).toEqual(sorted(RESTARTS));
+    expect(sorted(ids('since'))).toEqual(sorted(SINCE));
+    expect(sorted(ids('once'))).toEqual(sorted(ONCE));
+    expect(CHARACTER_ACHIEVEMENTS).toHaveLength(RESTARTS.length + SINCE.length + ONCE.length);
+  });
+
+  it('counts a counter from the rebirth', () => {
+    const reborn = (baseline: Record<string, number>) => char({ characters: [character({ rebirth: 1, baseline })], combat: kills(1500) });
+    expect(lifeValue(characterFamily('kills'), reborn({ kills: 1200 }))).toBe(300);
+    // A baseline above the number now never counts below zero.
+    expect(lifeValue(characterFamily('kills'), reborn({ kills: 2000 }))).toBe(0);
+    // A counter missing from the baseline counts from zero.
+    expect(lifeValue(characterFamily('kills'), reborn({}))).toBe(1500);
+  });
+
+  it('leaves level and kept things as they are', () => {
+    expect(lifeValue(characterFamily('level'), char({ characters: [character({ rebirth: 1, level: 12, baseline: {} })] }))).toBe(12);
+    const rich = char({ characters: [character({ rebirth: 1, gold: 500, baseline: { 'gold-held': 400, level: 10 } })] });
+    expect(lifeValue(characterFamily('gold-held'), rich)).toBe(500);
+    expect(lifeValue(characterFamily('level'), rich)).toBe(1);
+  });
+
+  it('awards kept things under the first life', () => {
+    const reborn = char({ characters: [character({ rebirth: 2 })] });
+    expect(awardLife(characterFamily('titles'), reborn)).toBe(FIRST_LIFE);
+    expect(awardLife(characterFamily('kills'), reborn)).toBe(2);
+    expect(awardLife(characterFamily('level'), reborn)).toBe(2);
+    expect(FIRST_LIFE).toBe(0);
+  });
+
+  it('takes the baseline from the counters only', () => {
+    const played = char({ characters: [character({ level: 90, gold: 800 })], combat: kills(1500) });
+    const baseline = baselineOf(played);
+    expect(sorted(Object.keys(baseline))).toEqual(sorted(SINCE));
+    expect(baseline.kills).toBe(1500);
+  });
+
+  it('counts only the levels of the current life', () => {
+    // 1,000 kills before the rebirth and none since; level 20 again.
+    const reborn = char({ characters: [character({ rebirth: 1, level: 20, baseline: { kills: 1000 } })], combat: kills(1000) });
+    expect(characterLevelsDone(reborn)).toBe(1);
+  });
+
+  it('waits two minutes after a rebirth', () => expect(REBIRTH_SETTLE_SECONDS).toBe(120));
 });
 
 describe('formatValue', () => {

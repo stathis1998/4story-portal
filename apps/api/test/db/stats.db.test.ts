@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DbService } from '../../src/db/db.service.js';
 import { computeStats, type StatRows } from '../../src/stats/stats-rules.js';
 import { SqlStatsRepository } from '../../src/stats/stats.repository.js';
@@ -186,6 +186,63 @@ describe('SqlStatsRepository against the _TEST copy', () => {
     } finally {
       await row().query(`DELETE FROM ${db.tables.characterCounters} WHERE dwCharID = @charId`);
     }
+  });
+
+  describe('the rebirth number, age and baseline', () => {
+    let plain: number;
+    let reborn: number;
+    const request = () => db.pool.request().input('reborn', sql.Int, reborn);
+    const character = async (id: number) => (await new SqlStatsRepository(db).loadRows()).characters.find((row) => row.id === id)!;
+
+    beforeEach(async () => {
+      const { characters, rebirths, rebirthLog } = db.tables;
+      const free = await db.pool.request().query<{ id: number }>(
+        `SELECT TOP 2 c.dwCharID AS id FROM ${characters} c
+         WHERE c.bDelete = 0
+           AND NOT EXISTS (SELECT 1 FROM ${rebirths} r WHERE r.dwCharID = c.dwCharID)
+           AND NOT EXISTS (SELECT 1 FROM ${rebirthLog} l WHERE l.dwCharID = c.dwCharID)
+         ORDER BY c.dwCharID`,
+      );
+      [plain, reborn] = free.recordset.map((row) => row.id);
+      // Two lives behind it: the newest log row is the one that counts.
+      await request().query(
+        `INSERT INTO ${rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@reborn, 2, 4);
+         INSERT INTO ${rebirthLog} (dwUserID, dwCharID, szCharName, bRebirth, bStatBonus, dwPriceGold, szBaseline, szText, dRebirth)
+         SELECT dwUserID, dwCharID, szNAME, 1, 2, 2000, '{"kills":10}', 'first', DATEADD(day, -1, GETDATE()) FROM ${characters} WHERE dwCharID = @reborn;
+         INSERT INTO ${rebirthLog} (dwUserID, dwCharID, szCharName, bRebirth, bStatBonus, dwPriceGold, szBaseline, szText)
+         SELECT dwUserID, dwCharID, szNAME, 2, 4, 4000, '{"kills":1500,"damage":20}', 'second' FROM ${characters} WHERE dwCharID = @reborn;`,
+      );
+    });
+
+    afterEach(async () => {
+      await request().query(
+        `DELETE FROM ${db.tables.rebirthLog} WHERE dwCharID = @reborn;
+         DELETE FROM ${db.tables.rebirths} WHERE dwCharID = @reborn;`,
+      );
+    });
+
+    it('reads a character never reborn as in its first life', async () => {
+      expect(await character(plain)).toMatchObject({ rebirth: 0, rebirthAgeSeconds: null, baseline: {} });
+    });
+
+    it('reads the rebirth number, and the age and baseline of the newest rebirth', async () => {
+      const row = await character(reborn);
+      expect(row).toMatchObject({ rebirth: 2, baseline: { kills: 1500, damage: 20 } });
+      expect(row.rebirthAgeSeconds).toBeGreaterThanOrEqual(0);
+      expect(row.rebirthAgeSeconds).toBeLessThan(60 * 60);
+    });
+
+    it.each(['not json', '[1500]', '7', 'null'])('reads a baseline of %s as nothing', async (baseline) => {
+      await request()
+        .input('baseline', sql.VarChar(2000), baseline)
+        .query(`UPDATE ${db.tables.rebirthLog} SET szBaseline = @baseline WHERE dwCharID = @reborn AND bRebirth = 2`);
+      expect(await character(reborn)).toMatchObject({ rebirth: 2, baseline: {} });
+    });
+
+    it('keeps only the numbers of a baseline', async () => {
+      await request().query(`UPDATE ${db.tables.rebirthLog} SET szBaseline = '{"kills":3,"name":"x","list":[1]}' WHERE dwCharID = @reborn AND bRebirth = 2`);
+      expect((await character(reborn)).baseline).toEqual({ kills: 3 });
+    });
   });
 
   it('feeds the rules without errors', () => {

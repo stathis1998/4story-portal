@@ -101,6 +101,8 @@ export type CharacterProfile = {
   id: number;
   name: string;
   level: number;
+  /** How many times the character has been reborn. 0 in the first life. */
+  rebirth: number;
   className: string;
   race: string;
   country: string;
@@ -124,6 +126,8 @@ export type CharacterInspect = {
   id: number;
   name: string;
   level: number;
+  /** How many times the character has been reborn. 0 in the first life. */
+  rebirth: number;
   className: string;
   race: string;
   country: string;

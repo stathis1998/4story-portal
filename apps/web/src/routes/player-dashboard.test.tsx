@@ -337,6 +337,7 @@ describe('character page', () => {
     id: 1,
     name: 'Kaelith',
     level: 50,
+    rebirth: 0,
     className: 'Warrior',
     race: 'Human',
     country: 'Defugel',

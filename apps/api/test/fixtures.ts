@@ -14,6 +14,9 @@ export const gearDefaults = {
   revision: [1, 1] as [number, number],
 };
 
+/** A stats character row's rebirth fields while it is in its first life. */
+export const firstLife = { rebirth: 0, rebirthAgeSeconds: null, baseline: {} };
+
 export const validEnv = {
   DB_HOST: 'localhost',
   DB_PORT: '1433',

@@ -7,9 +7,11 @@ import { sha1Hex } from '../src/auth/sha1.js';
 import { ControlTimeoutError } from '../src/control/control-client.js';
 import type { ControlEvent } from '../src/control/control-protocol.js';
 import type { CharacterRow, StatRows } from '../src/stats/stats-rules.js';
+import { StatsService } from '../src/stats/stats.service.js';
 import { PortalStore, StoreUnavailableError } from '../src/store/portal-store.js';
-import { FakeAccountsRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
-import { gearDefaults } from './fixtures.js';
+import { CHARACTERS_REPOSITORY } from '../src/characters/characters.repository.js';
+import { characterRow, FakeAccountsRepository, FakeCharactersRepository, FakeControlClient, FakeStatsRepository } from './fakes.js';
+import { firstLife, gearDefaults } from './fixtures.js';
 import { createTestApp } from './test-app.js';
 
 const at = (value: string) => new Date(`${value}Z`);
@@ -31,6 +33,7 @@ const character = (overrides: Partial<CharacterRow>): CharacterRow => ({
   gold: 12345,
   createdAt: at('2026-01-01T00:00:00'),
   banned: false,
+  ...firstLife,
   ...overrides,
 });
 
@@ -310,11 +313,83 @@ describe('player stats routes', () => {
       expect(category(body, 'level').entries[0].name).toBe('Moosey');
     });
 
+    it('ranks the highest level by rebirths first', async () => {
+      repo.rows = {
+        ...repo.rows,
+        characters: [
+          character({ id: 1, name: 'Kaelith', level: 20, userId: PLAYER, rebirth: 1 }),
+          character({ id: 3, name: 'Moosey', level: 90, userId: MOOSE }),
+          character({ id: 4, name: 'Rival', level: 15, userId: OTHER, rebirth: 2 }),
+        ],
+      };
+      const level = category(await hall(player), 'level');
+      expect(level.entries.map(({ place, name, display, level: shown }) => [place, name, display, shown])).toEqual([
+        [1, 'Rival', 'Rebirth 2, Lv. 15', 15],
+        [2, 'Kaelith', 'Rebirth 1, Lv. 20', 20],
+        [3, 'Moosey', 'Lv. 90', 90],
+      ]);
+      const { rankings } = (await player.get('/api/characters/1/profile')).body;
+      expect(rankings).toContainEqual({ category: 'level', label: 'Highest level', place: 2, display: 'Rebirth 1, Lv. 20' });
+    });
+
     it('works for a player with no characters', async () => {
       const body = await hall(empty);
       expect(body.ranked).toBe(true);
       expect(category(body, 'level').you).toBeNull();
       expect(category(body, 'level').entries.some((entry) => entry.mine)).toBe(false);
+    });
+  });
+
+  describe('the rebirth number', () => {
+    it('sends the rebirth number with the profile, the inspect view and the character list', async () => {
+      repo.rows = {
+        ...repo.rows,
+        characters: [
+          character({ id: 1, name: 'Kaelith', level: 20, userId: PLAYER, rebirth: 2, rebirthAgeSeconds: 600, baseline: { kills: 5 } }),
+          character({ id: 2, name: 'Alt', level: 10, userId: PLAYER }),
+          character({ id: 4, name: 'Rival', level: 60, userId: OTHER, rebirth: 1 }),
+        ],
+      };
+      const characters = app.get<FakeCharactersRepository>(CHARACTERS_REPOSITORY);
+      characters.rowsByUser.set(PLAYER, [characterRow({ dwCharID: 1, rebirth: 2 }), characterRow({ dwCharID: 2, bSlot: 1 })]);
+
+      expect((await player.get('/api/characters/1/profile').expect(200)).body).toMatchObject({ level: 20, rebirth: 2 });
+      expect((await player.get('/api/characters/2/profile').expect(200)).body).toMatchObject({ rebirth: 0 });
+      expect((await player.get('/api/characters/4/inspect').expect(200)).body).toMatchObject({ level: 60, rebirth: 1 });
+      const list = (await player.get('/api/characters').expect(200)).body as { id: number; rebirth: number }[];
+      expect(list.map(({ id, rebirth }) => [id, rebirth])).toEqual([
+        [1, 2],
+        [2, 0],
+      ]);
+    });
+
+    it('reads a baseline past the cache', async () => {
+      await player.get('/api/me/overview').expect(200);
+      repo.rows = { ...repo.rows, combat: [{ charId: 1, kills: 77, damageDealt: 5 }] };
+      const stats = app.get(StatsService);
+      expect(await stats.freshBaseline(1)).toMatchObject({ kills: 77, damage: 5 });
+      expect(await stats.freshBaseline(999)).toBeNull();
+    });
+
+    it('drops the cache, so the next page reads the database', async () => {
+      await player.get('/api/me/overview').expect(200);
+      await player.get('/api/me/overview').expect(200);
+      const loads = repo.loads;
+      app.get(StatsService).dropCache();
+      await player.get('/api/me/overview').expect(200);
+      expect(repo.loads).toBe(loads + 1);
+    });
+
+    it('keeps the baseline and its age out of every response', async () => {
+      repo.rows = {
+        ...repo.rows,
+        characters: [character({ id: 1, userId: PLAYER, rebirth: 2, rebirthAgeSeconds: 600, baseline: { kills: 5 } })],
+      };
+      for (const path of ['/api/characters/1/profile', '/api/characters/1/inspect', '/api/hall-of-fame']) {
+        const text = JSON.stringify((await player.get(path).expect(200)).body);
+        expect(text, path).not.toContain('baseline');
+        expect(text, path).not.toContain('rebirthAgeSeconds');
+      }
     });
   });
 
