@@ -6,6 +6,7 @@ import { Button } from '../../components/Button'
 import { CharacterGear } from '../../components/items/CharacterGear'
 import { GearEffectSection } from '../../components/stats/GearEffectSection'
 import { LevelFreezeSection } from '../../components/stats/LevelFreezeSection'
+import { RebirthSection } from '../../components/stats/RebirthSection'
 import { LevelProgress } from '../../components/stats/LevelProgress'
 import { formatMinutes, isNotFound, ordinal, plural, profileQueryOptions } from '../../lib/stats'
 
@@ -99,6 +100,10 @@ function Profile({ profile }: { profile: CharacterProfile }) {
 
       <Section title="Gear effect">
         <GearEffectSection characterId={String(profile.id)} />
+      </Section>
+
+      <Section title="Rebirth">
+        <RebirthSection characterId={String(profile.id)} />
       </Section>
 
       <Section title="Level freeze">
