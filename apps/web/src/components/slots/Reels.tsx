@@ -43,6 +43,13 @@ const CABINETS: Record<SlotMachineKey, { frame: string; inside: string; line: st
   hoard: { frame: 'linear-gradient(160deg, #b08427, #45300b 70%)', inside: '#1c1305', line: '#ffd36b' },
 }
 
+/** The colour a machine draws its win lines and lit symbols in, for WinLines over its window. */
+// Beside the cabinets it reads from; a hot reload of this file reloads the page.
+// eslint-disable-next-line react-refresh/only-export-components
+export function cabinetLine(key: SlotMachineKey): string {
+  return CABINETS[key].line
+}
+
 /** Where a reel resting on `stop` is: the position whose stop on the middle row is `stop` (see reelStop in lib/slots). */
 const restingAt = (stop: number) => (SLOT_REEL_STOPS - stop) % SLOT_REEL_STOPS
 
@@ -129,9 +136,9 @@ export function Reels({ machine, rest, spin, animate, lit, stopNow, onReelStoppe
       const seconds = (now - start) / 1000
       if (stopping && stopAt === Infinity) stopAt = seconds
       const stopped = stopAt !== Infinity
-      // Reels at rest, from the left: all of them once stopped at once, since all are then on their stops.
-      const resting = stopped ? SLOT_REELS : plan.times.findIndex((time) => time > seconds)
       const rests = restTimes(plan, stopAt)
+      // Reels at rest, from the left. One stopped at once is told only when its settle has ended, as it lands.
+      const resting = rests.findIndex((time) => time > seconds)
       if (seconds < Math.max(...rests)) {
         // A reel settling after a stop at once moves too slowly to blur.
         const blurs = blurStepsAt(plan, seconds).map((blur, i) => (stopped && plan.times[i] > stopAt ? 0 : blur))

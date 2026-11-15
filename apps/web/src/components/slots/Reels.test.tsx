@@ -4,7 +4,7 @@ import { act, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { reelTimes } from '../../lib/slots'
-import { Reels } from './Reels'
+import { cabinetLine, Reels } from './Reels'
 
 const machine = SLOT_MACHINES[0]
 const TO: SlotStops = [5, 0, 20, 31, 2]
@@ -125,17 +125,22 @@ describe('the reels', () => {
 
   it('stops at once when stopNow changes mid-spin', () => {
     animate()
-    const { told, update } = setup()
+    const { told, update } = setup({ lit: [[2, 1]] })
     update(spinTo(TO))
     advance(600)
     update({ stopNow: 1 })
     expect(told).toEqual([])
+    // Each reel is just past its stop, sharp, and drops back onto it: still moving, so nothing is told or lit.
     advance(16)
-    expect(told).toEqual(['reel 0', 'reel 1', 'reel 2', 'reel 3', 'reel 4', 'stopped'])
-    // Each reel is just past its stop, sharp, and drops back onto it.
     for (let reel = 0; reel < 5; reel++) expect(strip(reel).element.style.filter).toBe('')
-    advance(200)
+    advance(100)
+    expect(told).toEqual([])
+    expect(litTiles()).toHaveLength(0)
+    // The settle (0.18 s) has ended: every reel is told, in order, with its tiles on its stops, then the spin.
+    advance(100)
+    expect(told).toEqual(['reel 0', 'reel 1', 'reel 2', 'reel 3', 'reel 4', 'stopped'])
     expect(shown()).toEqual(slotWindow(machine, TO))
+    expect(litTiles()).toHaveLength(1)
     expect(vi.getTimerCount()).toBe(0)
 
     // Pressed again, or after the spin, it does nothing.
@@ -154,11 +159,14 @@ describe('the reels', () => {
     expect(told).toEqual(['reel 0', 'reel 1'])
     update({ stopNow: 1 })
     update({ stopNow: 2 })
-    advance(16)
+    advance(116)
+    expect(told).toEqual(['reel 0', 'reel 1'])
+    // The two that had rested are not told again.
+    advance(100)
     expect(told).toEqual(['reel 0', 'reel 1', 'reel 2', 'reel 3', 'reel 4', 'stopped'])
+    expect(shown()).toEqual(slotWindow(machine, TO))
     advance(4000)
     expect(told).toHaveLength(6)
-    expect(shown()).toEqual(slotWindow(machine, TO))
   })
 
   it('ignores stopNow before a spin and between spins', () => {
@@ -229,9 +237,17 @@ describe('the reels', () => {
     advance(600)
     second.update({ stopNow: 1 })
     advance(16)
-    expect(second.told).toHaveLength(6)
+    expect(second.told).toEqual([])
     second.view.unmount()
     expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(5000)
+    expect(second.told).toEqual([])
     expect(errors).not.toHaveBeenCalled()
+  })
+})
+
+describe('the cabinet line colour', () => {
+  it('is a colour for every machine', () => {
+    for (const { key } of SLOT_MACHINES) expect(cabinetLine(key)).toMatch(/^#[0-9a-f]{6}$/i)
   })
 })
