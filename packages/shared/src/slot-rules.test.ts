@@ -15,7 +15,7 @@ function showing(...windows: [string, string, string][]): SlotMachine {
   return {
     key: 'shelf',
     name: 'Fixture',
-    symbols: Array.from({ length: 10 }, (_, i) => ({ name: `S${i}`, plural: `S${i}s`, sprite: i })),
+    symbols: Array.from({ length: 10 }, (_, i) => ({ name: `S${i}`, sprite: i })),
     reels,
     pays: Array.from({ length: 8 }, (_, i) => [5 * (i + 1), 20 * (i + 1), 100 * (i + 1)] as const),
     twoLucky: 2,

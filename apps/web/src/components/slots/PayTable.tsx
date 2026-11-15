@@ -1,7 +1,7 @@
 import {
+  SLOT_LINE_COUNT,
   SLOT_PAYING,
   SLOT_SCATTER,
-  SLOT_STAKE_STEP,
   SLOT_WILD,
   silverText,
   slotFreeRate,
@@ -16,10 +16,10 @@ import { LineMap } from './WinLines'
 
 type PayTableProps = { machine: SlotMachine; stake: number; stakes: SlotStakes; jackpotLive: boolean }
 
-/** A prize is in line stakes: money is the prize x the stake / 20. */
-const money = (prize: number, stake: number) => silverText((prize * stake) / SLOT_STAKE_STEP)
+/** A prize is in line stakes: money is the prize x the stake / SLOT_LINE_COUNT. */
+const money = (prize: number, stake: number) => silverText((prize * stake) / SLOT_LINE_COUNT)
 
-function Symbol({ machine, symbol }: { machine: SlotMachine; symbol: number }) {
+function SymbolName({ machine, symbol }: { machine: SlotMachine; symbol: number }) {
   const { name, sprite } = machine.symbols[symbol]
   return (
     <span className="flex items-center gap-2">
@@ -57,7 +57,7 @@ export function PayTable({ machine, stake, stakes, jackpotLive }: PayTableProps)
           {order.map((symbol) => (
             <tr key={symbol} className="border-t border-line">
               <th scope="row" className="py-2 pr-2 text-left font-normal">
-                <Symbol machine={machine} symbol={symbol} />
+                <SymbolName machine={machine} symbol={symbol} />
                 {symbol === 0 && (
                   <span className="mt-1 block text-xs text-muted">
                     Two from the left: {money(machine.twoLucky, stake)}
@@ -76,11 +76,11 @@ export function PayTable({ machine, stake, stakes, jackpotLive }: PayTableProps)
       </table>
 
       <div className="space-y-1">
-        <Symbol machine={machine} symbol={SLOT_WILD} />
+        <SymbolName machine={machine} symbol={SLOT_WILD} />
         <p>{`Stands in for any symbol on a line, except the ${scatter}. Only on reels 2, 3 and 4.`}</p>
       </div>
       <div className="space-y-1">
-        <Symbol machine={machine} symbol={SLOT_SCATTER} />
+        <SymbolName machine={machine} symbol={SLOT_SCATTER} />
         <p>3, 4 or 5 anywhere give 8, 12 or 20 free spins. Every win in a free spin is doubled.</p>
       </div>
 

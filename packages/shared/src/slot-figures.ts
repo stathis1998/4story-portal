@@ -1,4 +1,4 @@
-import { SLOT_FREE_MULTIPLIER, SLOT_FREE_SPINS, SLOT_STAKE_STEP, type SlotMachine, type SlotStakes } from './slots.js';
+import { SLOT_FREE_MULTIPLIER, SLOT_FREE_SPINS, SLOT_LINE_COUNT, type SlotMachine, type SlotStakes } from './slots.js';
 
 export const SLOT_COMBOS = 32 ** 5;
 
@@ -10,7 +10,7 @@ const NINE = 1_000_000_000;
 export function slotReturn(machine: SlotMachine): number {
   const { linePaid, scatters } = machine.counts;
   const spins = scatters.reduce((sum, n, k) => sum + n * SLOT_FREE_SPINS[SCATTER_COUNTS[k]], 0);
-  return (linePaid / (20 * SLOT_COMBOS)) * (1 + (SLOT_FREE_MULTIPLIER * spins) / SLOT_COMBOS);
+  return (linePaid / (SLOT_LINE_COUNT * SLOT_COMBOS)) * (1 + (SLOT_FREE_MULTIPLIER * spins) / SLOT_COMBOS);
 }
 
 /** The chance a round is lost. */
@@ -25,9 +25,9 @@ export function slotFreeRate(machine: SlotMachine): number {
   return (machine.counts.scatters[0] + machine.counts.scatters[1] + machine.counts.scatters[2]) / SLOT_COMBOS;
 }
 
-/** The most one paid spin can win at these stakes, in Silver: counts.best x the highest stake / 20. */
+/** The most one paid spin can win at these stakes, in Silver: counts.best x the highest stake / SLOT_LINE_COUNT. */
 export function slotLargestWin(machine: SlotMachine, stakes: SlotStakes): number {
-  return (machine.counts.best * stakes[2]) / SLOT_STAKE_STEP;
+  return (machine.counts.best * stakes[2]) / SLOT_LINE_COUNT;
 }
 
 /** The share of a lost stake that goes to the pot, in billionths: { num, den: 1_000_000_000 }. */

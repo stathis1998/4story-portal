@@ -4,8 +4,8 @@ import {
   SLOT_LETTERS,
   SLOT_REELS,
   SLOT_REEL_STOPS,
+  SLOT_LINE_COUNT,
   SLOT_SCATTER,
-  SLOT_STAKE_STEP,
   SLOT_WILD,
   type SlotMachine,
   type SlotStops,
@@ -72,10 +72,10 @@ export function slotSpin(machine: SlotMachine, stops: SlotStops): SlotSpinOutcom
 
 export type SlotRound = { stops: SlotStops; free: SlotStops[] };
 
-/** What the round pays in whole Silver at `stake`: (paid spin + 2 x each free spin) x stake / 20. */
+/** What the round pays in whole Silver at `stake`: (paid spin + 2 x each free spin) x stake / SLOT_LINE_COUNT. */
 export function slotRoundPayout(machine: SlotMachine, round: SlotRound, stake: number): number {
   const free = round.free.reduce((sum, stops) => sum + slotSpin(machine, stops).multiple, 0);
-  return (slotSpin(machine, round.stops).multiple + SLOT_FREE_MULTIPLIER * free) * (stake / SLOT_STAKE_STEP);
+  return (slotSpin(machine, round.stops).multiple + SLOT_FREE_MULTIPLIER * free) * (stake / SLOT_LINE_COUNT);
 }
 
 /** '3,17,0,22,9;1,2,3,4,5', '' for none. */

@@ -4,8 +4,7 @@ import { characterIdSchema } from './player-stats.js';
 
 export const SLOT_MACHINE_KEYS = ['shelf', 'armoury', 'hoard'] as const;
 export type SlotMachineKey = (typeof SLOT_MACHINE_KEYS)[number];
-/** `plural` is how a win is read out: 'Three Experience Potions.' */
-export type SlotSymbol = { name: string; plural: string; sprite: number };
+export type SlotSymbol = { name: string; sprite: number };
 export type SlotStakes = [number, number, number];
 
 export const SLOT_REELS = 5;

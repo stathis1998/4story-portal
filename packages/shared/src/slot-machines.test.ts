@@ -10,9 +10,9 @@ const SCATTER = SLOT_LETTERS[SLOT_SCATTER];
 const payRate = (key: string) => 1 - slotLostRate(slotMachine(key)!);
 
 describe.each(SLOT_MACHINES)('$name', (machine) => {
-  it('has ten symbols with different names, plurals and icons', () => {
+  it('has ten symbols with different names and icons', () => {
     expect(machine.symbols).toHaveLength(10);
-    for (const field of ['name', 'plural', 'sprite'] as const) {
+    for (const field of ['name', 'sprite'] as const) {
       expect(new Set(machine.symbols.map((s) => s[field])).size).toBe(10);
     }
   });

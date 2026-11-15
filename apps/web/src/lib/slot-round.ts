@@ -1,4 +1,4 @@
-import { SLOT_FREE_MULTIPLIER, SLOT_LINES, silverText, slotSpin } from '@4story-portal/shared';
+import { SLOT_BIG_WIN, SLOT_FREE_MULTIPLIER, SLOT_LINE_COUNT, SLOT_LINES, silverText, slotSpin } from '@4story-portal/shared';
 import type { SlotMachine, SlotSpinOutcome, SlotSpinView, SlotStops } from '@4story-portal/shared';
 
 export type WinTier = 'none' | 'small' | 'win' | 'big' | 'huge';
@@ -8,7 +8,7 @@ export function winTier(won: number, stake: number): WinTier {
   if (won <= 0) return 'none';
   if (won < stake) return 'small';
   if (won < stake * 10) return 'win';
-  if (won < stake * 50) return 'big';
+  if (won < stake * SLOT_BIG_WIN) return 'big';
   return 'huge';
 }
 
@@ -23,9 +23,9 @@ export type RoundSpin = {
   total: number;
 };
 
-/** The paid spin first, then the free spins in order. A line stake is a twentieth of the stake. */
+/** The paid spin first, then the free spins in order. A line stake is the stake shared over the lines. */
 export function roundSpins(machine: SlotMachine, spin: Pick<SlotSpinView, 'stops' | 'free' | 'stake'>): RoundSpin[] {
-  const lineStake = spin.stake / 20;
+  const lineStake = spin.stake / SLOT_LINE_COUNT;
   let total = 0;
   const one = (stops: SlotStops, free: number | null): RoundSpin => {
     const outcome = slotSpin(machine, stops);

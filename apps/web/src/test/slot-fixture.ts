@@ -25,7 +25,7 @@ const NAMES = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 
 
 /**
  * A machine whose window at stops [4k+1 x5] is windows[k] (three rows of five letters). pays[i] = [5, 20, 100]
- * times (i + 1); twoLucky = 2. Unused strip positions are 'G'. Symbols are named Alpha, Bravo ... with plurals.
+ * times (i + 1); twoLucky = 2. Unused strip positions are 'G'. Symbols are named Alpha, Bravo ...
  */
 export function showing(...windows: [string, string, string][]): SlotMachine {
   const reels = [0, 1, 2, 3, 4].map((r) =>
@@ -34,7 +34,7 @@ export function showing(...windows: [string, string, string][]): SlotMachine {
   return {
     key: 'shelf',
     name: 'Fixture',
-    symbols: NAMES.map((name, i) => ({ name, plural: `${name}s`, sprite: i })),
+    symbols: NAMES.map((name, i) => ({ name, sprite: i })),
     reels,
     pays: Array.from({ length: 8 }, (_, i) => [5 * (i + 1), 20 * (i + 1), 100 * (i + 1)] as const),
     twoLucky: 2,
