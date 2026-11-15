@@ -4,6 +4,8 @@ import {
   type GmSlots,
   type SessionUser,
   slotFloorSchema,
+  type SlotJackpotSettingsInput,
+  slotJackpotSettingsSchema,
   type SlotMachineKey,
   type SlotMachineSettingsInput,
   slotMachineSettingsSchema,
@@ -13,6 +15,7 @@ import {
   type SlotsState,
 } from '@4story-portal/shared';
 import type { Request } from 'express';
+import { AccountThrottlerGuard } from '../auth/account-throttler.guard.js';
 import { GmGuard } from '../auth/gm-access.js';
 import { CurrentUser, SessionGuard } from '../auth/session.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -30,8 +33,8 @@ export class SlotsController {
 
   @Post('slots/spin')
   @HttpCode(200)
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @UseGuards(AccountThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   spin(@Body(new ZodValidationPipe(slotSpinRequestSchema)) body: SlotSpinRequest, @CurrentUser() user: SessionUser): Promise<SlotSpinResult> {
     return this.slots.spin(user, body);
   }
@@ -64,5 +67,16 @@ export class SlotsController {
   ): Promise<GmSlots> {
     // The service answers 404 for a key the code does not have.
     return this.slots.saveMachine(key as SlotMachineKey, body, { username: user.username, ip: req.ip ?? '' });
+  }
+
+  @Put('gm/slots/jackpot')
+  @UseGuards(GmGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  saveJackpot(
+    @Body(new ZodValidationPipe(slotJackpotSettingsSchema)) body: SlotJackpotSettingsInput,
+    @CurrentUser() user: SessionUser,
+    @Req() req: Request,
+  ): Promise<GmSlots> {
+    return this.slots.saveJackpot(body, { username: user.username, ip: req.ip ?? '' });
   }
 }

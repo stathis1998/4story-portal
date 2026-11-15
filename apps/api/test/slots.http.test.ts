@@ -91,7 +91,20 @@ describe('/api/slots', () => {
         ],
         mine: [],
         bigWins: [],
+        jackpot: { live: true, pot: 0, cap: 50_000, floor: 5_000, last: null },
       });
+    });
+
+    it('shows the jackpot with the cap set, before any round has fed it', async () => {
+      const res = await player.get('/api/slots').expect(200);
+      expect(res.body.jackpot).toEqual({ live: true, pot: 0, cap: 50_000, floor: 5_000, last: null });
+    });
+
+    it('shows a pot of odd Bronze as nothing, under the cap set now', async () => {
+      slots.potRow = { pot: 284, cap: null };
+      slots.settingsRow.jackpot.cap = 80;
+      const res = await player.get('/api/slots').expect(200);
+      expect(res.body.jackpot).toMatchObject({ pot: 0, cap: 80_000, floor: 8_000 });
     });
   });
 
@@ -150,6 +163,69 @@ describe('/api/slots', () => {
       expect(other.body.mine).toEqual([]);
     });
 
+    it('a lost round adds its share and draws for the jackpot', async () => {
+      const calls = roll(1, 0, 0, 999_999_999);
+      const res = await spin({ stake: 50 }).expect(200);
+      expect(calls).toEqual([32, 32, 32, 1_000_000_000]);
+      expect(slots.betCalls[0]).toMatchObject({ add: 2784, cap: 50, roll: 999_999_999 });
+      expect(res.body.spin.jackpot).toBe(0);
+      expect(res.body.state.jackpot.pot).toBe(2);
+    });
+
+    it('a round that pays adds nothing and draws nothing more', async () => {
+      const calls = roll(...TINCTURES);
+      await spin().expect(200);
+      expect(calls).toEqual([32, 32, 32]);
+      expect(slots.betCalls[0].add).toBe(0);
+    });
+
+    it('the round that drops the pot is paid it', async () => {
+      slots.potRow = { pot: 49_999_500, cap: 50_000_000 };
+      roll(1, 0, 0, 999_999_999);
+      const res = await spin().expect(200);
+      expect(res.body.spin).toMatchObject({ payout: 0, jackpot: 50_002 });
+      expect(res.body.wallet).toEqual({ gold: 55, silver: 202, copper: 0 });
+      expect(res.body.state.jackpot).toMatchObject({ pot: 0, last: { character: 'Mounara', amount: 50_002 } });
+      expect(res.body.state.bigWins[0].jackpot).toBe(50_002);
+    });
+
+    it('adds nothing while the jackpot is off, and keeps the pot and its cap', async () => {
+      slots.settingsRow.jackpot.live = false;
+      slots.potRow = { pot: 7_000_000, cap: 50_000_000 };
+      const calls = roll(1, 0, 0, 999_999_999);
+      const first = await spin().expect(200);
+      expect(slots.betCalls[0].add).toBe(0);
+      expect(calls).toEqual([32, 32, 32]);
+      expect(slots.potRow).toEqual({ pot: 7_000_000, cap: 50_000_000 });
+      expect(first.body.state.jackpot.live).toBe(false);
+
+      slots.settingsRow.jackpot.live = true;
+      roll(1, 0, 0, 999_999_999);
+      await spin().expect(200);
+      expect(slots.potRow).toEqual({ pot: 7_002_784, cap: 50_000_000 });
+    });
+
+    it('opens without a jackpot when its table cannot be read, and refuses a lost round', async () => {
+      slots.potMissing = true;
+      const page = await player.get('/api/slots').expect(200);
+      expect(page.body.jackpot).toBeNull();
+      roll(1, 0, 0, 999_999_999);
+      slots.settingsRow.live = true;
+      const res = await spin().expect(503);
+      expect(res.body.message).toBe('Slots are not available right now');
+      untouched();
+    });
+
+    it('the spin throttle counts by account', async () => {
+      // moose was seeded just before newuser.
+      slots.characterRows.push({ level: 60, classCode: 0, copper: 0, online: false, charId: 20, userId: playerId - 1, name: 'Moosey', gold: 5, silver: 250 });
+      roll(...LOSS);
+      for (let i = 0; i < 30; i++) await spin({ stake: 10 }).expect(200);
+      const refused = await spin({ stake: 10 }).expect(429);
+      expect(refused.body.message).toBe('Too many attempts. Please try again later.');
+      await spin({ characterId: 20, stake: 10 }, moose).expect(200);
+    });
+
     it('refuses while the floor is closed, GMs included', async () => {
       slots.settingsRow.live = false;
       const calls = roll(...TINCTURES);
@@ -159,6 +235,7 @@ describe('/api/slots', () => {
       expect(gmRes.body.message).toBe('The slots are not open yet');
       expect(slots.betCalls).toEqual([]);
       expect(calls).toEqual([]);
+      expect(slots.potRow).toEqual({ pot: 0, cap: null });
       untouched();
     });
 
@@ -185,6 +262,7 @@ describe('/api/slots', () => {
       await spin({ stake: 51 }).expect(422);
       expect(slots.betCalls).toEqual([]);
       expect(calls).toEqual([]);
+      expect(slots.potRow).toEqual({ pot: 0, cap: null });
       untouched();
     });
 
@@ -197,6 +275,7 @@ describe('/api/slots', () => {
       expect(res.body.message).toBe('That stake is no longer offered on this machine');
       expect(slots.betCalls).toEqual([]);
       expect(calls).toEqual([]);
+      expect(slots.potRow).toEqual({ pot: 0, cap: null });
       untouched();
       // The new stakes work.
       const ok = await spin({ stake: 40 }).expect(200);
@@ -211,6 +290,7 @@ describe('/api/slots', () => {
       await spin({ characterId: undefined }).expect(400);
       expect(slots.betCalls).toEqual([]);
       expect(calls).toEqual([]);
+      expect(slots.potRow).toEqual({ pot: 0, cap: null });
       untouched();
     });
 
@@ -246,7 +326,7 @@ describe('/api/slots', () => {
       expect(res.body.message).toBe('Slots are not available right now');
       // failing is the slots' own tables only: the account's characters come from the wallets, which still read.
       const page = await player.get('/api/slots').expect(200);
-      expect(page.body).toMatchObject({ live: false, machines: STARTING, mine: [], bigWins: [] });
+      expect(page.body).toMatchObject({ live: false, machines: STARTING, mine: [], bigWins: [], jackpot: null });
       expect(page.body.characters.map((c: { name: string }) => c.name)).toEqual(['Mounara', 'Busy']);
       untouched();
     });
@@ -361,28 +441,68 @@ describe('/api/slots', () => {
       await spin({ machine: 'armoury', stake: 25 }).expect(200);
       // An older day only counts toward all time.
       now = new Date('2026-11-15T10:00:00Z');
+      // The lost round above drew a fourth number for the jackpot, so the cycle starts again.
+      roll(...LOSS);
       await spin({ stake: 10 }).expect(200);
 
       const res = await moose.get('/api/gm/slots').expect(200);
 
       expect(res.body.live).toBe(true);
       expect(res.body.machines).toEqual([
-        { key: 'shelf', live: true, stakes: [10, 25, 50], today: { spins: 1, staked: 10, paid: 0 }, allTime: { spins: 2, staked: 60, paid: 2500 } },
-        { key: 'armoury', live: true, stakes: [25, 50, 100], today: { spins: 0, staked: 0, paid: 0 }, allTime: { spins: 1, staked: 25, paid: 0 } },
-        { key: 'hoard', live: true, stakes: [50, 100, 200], today: { spins: 0, staked: 0, paid: 0 }, allTime: { spins: 0, staked: 0, paid: 0 } },
+        { key: 'shelf', live: true, stakes: [10, 25, 50], today: { spins: 1, staked: 10, paid: 0, added: 0 }, allTime: { spins: 2, staked: 60, paid: 2500, added: 0 } },
+        { key: 'armoury', live: true, stakes: [25, 50, 100], today: { spins: 0, staked: 0, paid: 0, added: 0 }, allTime: { spins: 1, staked: 25, paid: 0, added: 1 } },
+        { key: 'hoard', live: true, stakes: [50, 100, 200], today: { spins: 0, staked: 0, paid: 0, added: 0 }, allTime: { spins: 0, staked: 0, paid: 0, added: 0 } },
       ]);
       expect(res.body.latest.map((s: { stake: number }) => s.stake)).toEqual([10, 25, 50]);
       expect(res.body.latest[0]).toMatchObject({ character: 'Mounara', machine: 'shelf', stops: LOSS, payout: 0 });
     });
 
+    it('GM: shows the jackpot', async () => {
+      slots.settingsRow.live = true;
+      slots.potRow = { pot: 49_999_500, cap: 50_000_000 };
+      roll(1, 0, 0, 999_999_999);
+      await spin().expect(200);
+      const res = await moose.get('/api/gm/slots').expect(200);
+      expect(res.body.jackpot).toMatchObject({ live: true, setCap: 50, running: { pot: 0, cap: 50_000, floor: 5_000 }, added: 2, paid: 50_002, drops: 1 });
+      expect(res.body.jackpot.wins).toHaveLength(1);
+      expect(res.body.jackpot.wins[0]).toMatchObject({ character: 'Mounara', jackpot: 50_002 });
+      expect(res.body.machines[0].allTime.added).toBe(2);
+    });
+
+    it('GM: saves the switch and the cap, and logs it', async () => {
+      const res = await moose.put('/api/gm/slots/jackpot').send({ live: false, cap: 80 }).expect(200);
+      expect(res.body.jackpot).toMatchObject({ live: false, setCap: 80 });
+      expect(slots.settingsRow.jackpot).toEqual({ live: false, cap: 80 });
+      expect(gm.audits).toEqual([expect.objectContaining({ gmId: 'moose', command: 'SLOTS', log: 'JACKPOT off cap 80' })]);
+    });
+
+    it("GM: a changed cap shows beside the running pot's own", async () => {
+      slots.potRow = { pot: 10_000_000, cap: 50_000_000 };
+      const res = await moose.put('/api/gm/slots/jackpot').send({ live: true, cap: 80 }).expect(200);
+      expect(res.body.jackpot).toMatchObject({ setCap: 80, running: { pot: 10_000, cap: 50_000, floor: 5_000 } });
+      expect(gm.audits[0].log).toBe('JACKPOT on cap 80');
+    });
+
+    it.each([0, 10_001, 1.5])('GM: refuses a cap of %s', async (cap) => {
+      await moose.put('/api/gm/slots/jackpot').send({ live: true, cap }).expect(400);
+      expect(slots.settingsRow.jackpot).toEqual({ live: true, cap: 50 });
+      expect(gm.audits).toEqual([]);
+    });
+
+    it('GM: a non-GM cannot save the jackpot', async () => {
+      await player.put('/api/gm/slots/jackpot').send({ live: false, cap: 80 }).expect(403);
+      expect(slots.settingsRow.jackpot).toEqual({ live: true, cap: 50 });
+    });
+
     it('still opens, closed and empty, when the tables cannot be read', async () => {
       slots.failing = true;
       const res = await moose.get('/api/gm/slots').expect(200);
-      const empty = { spins: 0, staked: 0, paid: 0 };
+      const empty = { spins: 0, staked: 0, paid: 0, added: 0 };
       expect(res.body).toEqual({
         live: false,
         machines: STARTING.map((m) => ({ ...m, today: empty, allTime: empty })),
         latest: [],
+        jackpot: { live: true, setCap: 50, running: null, added: 0, paid: 0, drops: 0, wins: [] },
       });
     });
 

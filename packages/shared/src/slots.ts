@@ -281,6 +281,8 @@ export type SlotSpinView = {
   /** Whole Silver. */
   stake: number;
   payout: number;
+  /** Whole Silver won from the pot, 0 for a spin that did not win it. */
+  jackpot: number;
 };
 export type SlotsState = {
   live: boolean;
@@ -290,8 +292,29 @@ export type SlotsState = {
   mine: SlotSpinView[];
   /** The latest big wins by anyone, newest first. */
   bigWins: SlotSpinView[];
+  /** Null when the jackpot cannot be read. */
+  jackpot: SlotJackpot | null;
 };
 export type SlotSpinResult = { spin: SlotSpinView; wallet: Wallet; state: SlotsState };
-export type SlotTotals = { spins: number; staked: number; paid: number };
+export type SlotTotals = {
+  spins: number;
+  staked: number;
+  paid: number;
+  /** Whole Silver that went to the jackpot. */
+  added: number;
+};
 export type GmSlotMachine = SlotMachineState & { today: SlotTotals; allTime: SlotTotals };
-export type GmSlots = { live: boolean; machines: GmSlotMachine[]; latest: SlotSpinView[] };
+/** All money whole Silver, rounded down. */
+export type GmSlotJackpot = {
+  live: boolean;
+  /** The cap set for the next jackpot, whole Gold. */
+  setCap: number;
+  /** Null when the pot cannot be read. `cap` is what this pot runs under: the set cap while it has none. */
+  running: { pot: number; cap: number; floor: number } | null;
+  added: number;
+  paid: number;
+  drops: number;
+  /** The latest 10 drops, newest first. */
+  wins: SlotSpinView[];
+};
+export type GmSlots = { live: boolean; machines: GmSlotMachine[]; latest: SlotSpinView[]; jackpot: GmSlotJackpot };

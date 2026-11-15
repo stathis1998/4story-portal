@@ -6,7 +6,7 @@ import { renderRoute } from '../test/render-route'
 
 const gm = { userId: 1, username: 'moose', isGm: true }
 
-const NONE = { spins: 0, staked: 0, paid: 0 }
+const NONE = { spins: 0, staked: 0, paid: 0, added: 0 }
 
 const machine = (overrides: Partial<GmSlotMachine> & Pick<GmSlotMachine, 'key' | 'stakes'>): GmSlotMachine => ({
   live: true,
@@ -23,18 +23,20 @@ const spin = (overrides: Partial<SlotSpinView> = {}): SlotSpinView => ({
   stops: [0, 0, 0],
   stake: 25,
   payout: 125,
+  jackpot: 0,
   ...overrides,
 })
 
 const state = (overrides: Partial<GmSlots> = {}): GmSlots => ({
   live: false,
   machines: [
-    machine({ key: 'shelf', stakes: [10, 25, 50], today: { spins: 3, staked: 2500, paid: 1000 }, allTime: { spins: 120, staked: 1_500_000, paid: 1_400_000 } }),
+    machine({ key: 'shelf', stakes: [10, 25, 50], today: { spins: 3, staked: 2500, paid: 1000, added: 0 }, allTime: { spins: 120, staked: 1_500_000, paid: 1_400_000, added: 0 } }),
     machine({ key: 'armoury', stakes: [25, 50, 100] }),
     machine({ key: 'hoard', stakes: [50, 100, 200] }),
   ],
   // Stop 0 on the shelf is the lucky symbol on every reel; the armoury's win line at stop 1 shows three different symbols.
   latest: [spin(), spin({ id: 2, at: '2026-11-13T21:30:00.000Z', character: 'Mounara', machine: 'armoury', stops: [1, 1, 1], stake: 100, payout: 0 })],
+  jackpot: { live: true, setCap: 50, running: null, added: 0, paid: 0, drops: 0, wins: [] },
   ...overrides,
 })
 
@@ -185,7 +187,7 @@ describe('GM slots page', () => {
 
   it('shows the house down when a machine has paid more than it took, and the share paid back', async () => {
     const current = state()
-    current.machines[2] = machine({ key: 'hoard', stakes: [50, 100, 200], today: { spins: 1, staked: 1000, paid: 3600 } })
+    current.machines[2] = machine({ key: 'hoard', stakes: [50, 100, 200], today: { spins: 1, staked: 1000, paid: 3600, added: 0 } })
     mockApi(base({}, current))
     renderRoute('/gm/slots', { me: gm })
 

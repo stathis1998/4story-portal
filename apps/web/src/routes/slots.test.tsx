@@ -29,6 +29,7 @@ const state = (overrides: Partial<SlotsState> = {}): SlotsState => ({
   characters: [mounara, busy],
   mine: [],
   bigWins: [],
+  jackpot: null,
   ...overrides,
 })
 
@@ -41,6 +42,7 @@ const spinOf = (overrides: Partial<SlotSpinView> = {}): SlotSpinView => ({
   stops: [12, 8, 11],
   stake: 50,
   payout: 5000,
+  jackpot: 0,
   ...overrides,
 })
 
