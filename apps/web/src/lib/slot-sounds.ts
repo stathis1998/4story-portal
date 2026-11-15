@@ -4,6 +4,7 @@
 export type SlotSound =
   | 'press' | 'reelStop' | 'scatter' | 'lineWin' | 'smallWin' | 'win' | 'bigWin' | 'hugeWin'
   | 'count' | 'freeStart' | 'freeEnd' | 'jackpot' | 'refused'
+  | 'burst' | 'retrigger' | 'meterPoint' | 'meterFull' | 'jackpotMini' | 'jackpotMajor'
 
 export type SlotSounds = {
   /**
@@ -165,8 +166,67 @@ const refused: Recipe = (v) => {
   v.tone(98, 0.12, 0.25, { type: 'square', peak: 0.25, to: 70 })
 }
 
+/** A step as a whole number from 0 to `max`; anything that is not a number counts as 0. */
+function clampStep(step: number, max: number): number {
+  return Number.isFinite(step) ? Math.max(0, Math.min(max, Math.floor(step))) : 0
+}
+
+/** Winning symbols shatter: a short crack and a quick high tick. Later chain steps are a little higher and brighter. Under 0.25 s. */
+const burst: Recipe = (v, step) => {
+  const n = clampStep(step, 8)
+  const up = 2 ** (n / 12)
+  v.noise(0, 0.12, { peak: 0.4, freq: 3500 + n * 500 })
+  v.tone(1400 * up, 0, 0.1, { type: 'triangle', peak: 0.3, to: 700 * up })
+  v.tone(2800 * up, 0.01, 0.05, { type: 'sine', peak: 0.12 })
+}
+
+/** Free spins added during free spins: a short rising flourish. Under 1 s. */
+const retrigger: Recipe = (v) => {
+  const notes = [C5, E5, G5, C6, E6]
+  notes.forEach((f, i) => v.tone(f, i * 0.09, 0.22, { type: 'triangle', peak: 0.3 }))
+  for (const f of [C6, E6, G6]) v.tone(f, 0.4, 0.5, { type: 'sine', peak: 0.2 })
+}
+
+/** One point into the meter: a very soft, very short tick that rises gently as the meter fills. Under 0.12 s. */
+const meterPoint: Recipe = (v, step) => {
+  const n = clampStep(step, 12)
+  v.tone(900 * 2 ** (n / 12), 0, 0.06, { type: 'sine', peak: 0.12 })
+}
+
+/** The meter is full and pays free spins: a bright chord with a shimmer. Under 1.5 s. */
+const meterFull: Recipe = (v) => {
+  for (const f of [C5, E5, G5, C6]) v.tone(f, 0, 1.1, { type: 'triangle', peak: 0.25 })
+  v.tone(E6, 0.08, 1, { type: 'sine', peak: 0.18 })
+  v.tone(G6, 0.16, 0.9, { type: 'sine', peak: 0.15 })
+  v.noise(0, 0.15, { peak: 0.12, freq: 6000 })
+}
+
+/** A bell: a sine with a quiet octave-and-a-bit partial above it that dies sooner. */
+function bell(v: Voice, freq: number, at: number, length: number, peak: number) {
+  v.tone(freq, at, length, { type: 'sine', peak })
+  v.tone(freq * 2.76, at, length * 0.5, { type: 'sine', peak: peak * 0.35 })
+}
+
+/** The Mini jackpot: a short run of bells. Under 1.5 s. */
+const jackpotMini: Recipe = (v) => {
+  const notes = [C6, E6, G6, C6 * 2]
+  notes.forEach((f, i) => bell(v, f, i * 0.12, 0.5, 0.3))
+  bell(v, C6 * 2, 0.6, 0.8, 0.25)
+}
+
+/** The Major jackpot: a longer, fuller run of bells over a low note and a chord. Under 2.5 s. */
+const jackpotMajor: Recipe = (v) => {
+  const notes = [C5, E5, G5, C6, E6, G6, C6 * 2]
+  notes.forEach((f, i) => bell(v, f, i * 0.1, 0.55, 0.28))
+  for (const f of [C5, G5, C6, E6]) v.tone(f, 0.8, 1.4, { type: 'triangle', peak: 0.2 })
+  v.tone(65, 0.8, 0.5, { type: 'sine', peak: 0.6, to: 40 })
+  bell(v, C6 * 2, 0.9, 1.2, 0.22)
+  v.noise(0.8, 0.3, { peak: 0.2, freq: 5000 })
+}
+
 const RECIPES: Record<SlotSound, Recipe> = {
   press, reelStop, scatter, lineWin, smallWin, win, bigWin, hugeWin, count, freeStart, freeEnd, jackpot, refused,
+  burst, retrigger, meterPoint, meterFull, jackpotMini, jackpotMajor,
 }
 
 /** A loop that can be ended: its source and the gain it fades through. */
