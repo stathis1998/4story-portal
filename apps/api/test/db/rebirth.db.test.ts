@@ -19,7 +19,7 @@ import {
   type RebirthCode,
   START_SKILL_POINTS,
 } from '../../src/rebirth/rebirth-sql.js';
-import { type RebirthInput, SqlRebirthRepository } from '../../src/rebirth/rebirth.repository.js';
+import { ANNOUNCE_SKIPPED, ANNOUNCE_WAITING, type RebirthInput, SqlRebirthRepository } from '../../src/rebirth/rebirth.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
 const setupSql = ['TPORTALSETTING.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
@@ -454,5 +454,96 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
 
       await exec(tx, `UPDATE ${t.characters} SET bDelete = 1 WHERE dwCharID = @charId`, ids(character));
       expect(await repo.find(character.userId, character.charId)).toBeNull();
+    }));
+
+  const NONE: Settings = { live: null, priceGold: null, percent: null, limit: null };
+  const STARTING = { live: false, priceGold: 0, percent: 2, limit: 10 };
+
+  const logRow = (tx: sql.Transaction, c: Character, rebirth: number) =>
+    exec<{ id: number }>(
+      tx,
+      `INSERT INTO ${t.rebirthLog} (dwUserID, dwCharID, szCharName, bRebirth, bStatBonus, dwPriceGold, szBaseline, szText)
+       OUTPUT INSERTED.dwID AS id VALUES (@userId, @charId, @name, @rebirth, @rebirth * 2, 100, '{}', 'text')`,
+      { ...ids(c), name: c.name, rebirth },
+    ).then((rows) => rows[0].id);
+
+  it('is closed with the starting numbers when no setting rows exist', () =>
+    withReady(async ({ repo }) => {
+      expect(await repo.settings()).toEqual(STARTING);
+    }, { settings: NONE }));
+
+  it.each(['abc', '-5', '', '2.5'])('falls back to the starting numbers when a row holds %j', (value) =>
+    withReady(async ({ repo }) => {
+      expect(await repo.settings()).toEqual(STARTING);
+    }, { settings: { percent: value } }));
+
+  it('falls back to the starting numbers when the rows break the rules together', () =>
+    withReady(async ({ repo }) => {
+      expect(await repo.settings()).toEqual(STARTING);
+    }, { settings: { percent: '10', limit: '20' } }));
+
+  it('saves and reads the settings back', () =>
+    withReady(async ({ repo }) => {
+      expect(await repo.settings()).toEqual({ live: true, priceGold: 2000, percent: 2, limit: 10 });
+      await repo.saveSettings({ live: false, priceGold: 50, percent: 4, limit: 7 }, 'gm');
+      expect(await repo.settings()).toEqual({ live: false, priceGold: 50, percent: 4, limit: 7 });
+    }));
+
+  it('saves into an empty table', () =>
+    withReady(async ({ repo }) => {
+      await repo.saveSettings({ live: true, priceGold: 9, percent: 1, limit: 1 }, 'gm');
+      expect(await repo.settings()).toEqual({ live: true, priceGold: 9, percent: 1, limit: 1 });
+    }, { settings: NONE }));
+
+  it('recalculates every bonus when the percent or the limit changes', () =>
+    withReady(async ({ repo, tx, character }) => {
+      const [other] = await exec<{ charId: number }>(tx, `SELECT TOP 1 dwCharID AS charId FROM ${t.characters} WHERE dwCharID <> @charId`, ids(character));
+      await exec(tx, `DELETE FROM ${t.rebirths} WHERE dwCharID = @other`, { other: other.charId });
+      await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 3, 6), (@other, 12, 20)`, {
+        charId: character.charId,
+        other: other.charId,
+      });
+
+      await repo.saveSettings({ live: true, priceGold: 2000, percent: 3, limit: 5 }, 'gm');
+
+      const bonus = async (charId: number) =>
+        (await exec<{ b: number }>(tx, `SELECT bStatBonus AS b FROM ${t.rebirths} WHERE dwCharID = @charId`, { charId }))[0].b;
+      expect(await bonus(character.charId)).toBe(9);
+      expect(await bonus(other.charId)).toBe(15);
+    }));
+
+  it('lists the newest rebirths first', () =>
+    withReady(async ({ repo, tx, character }) => {
+      const first = await logRow(tx, character, 1);
+      const second = await logRow(tx, character, 2);
+      const rows = (await repo.recent(100)).filter((row) => row.charId === character.charId);
+      expect(rows.map((row) => row.id)).toEqual([second, first]);
+      expect(rows[0]).toMatchObject({ userId: character.userId, name: character.name, rebirth: 2, bonus: 4, priceGold: 100, text: 'text', announced: 0 });
+      expect(rows[0].at).toBeInstanceOf(Date);
+      expect(rows[0].ageSeconds).toBeGreaterThanOrEqual(0);
+      expect(await repo.recent(1)).toHaveLength(1);
+    }));
+
+  it('counts the characters that have a rebirth row', () =>
+    withReady(async ({ repo, tx, character }) => {
+      await exec(tx, `DELETE FROM ${t.rebirths}`);
+      expect(await repo.count()).toBe(0);
+      await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 1, 2)`, ids(character));
+      expect(await repo.count()).toBe(1);
+    }));
+
+  it('lets only one caller claim an announcement', () =>
+    withReady(async ({ repo, tx, character }) => {
+      const id = await logRow(tx, character, 1);
+      expect((await repo.waitingAnnouncements()).map((row) => row.id)).toContain(id);
+
+      expect(await repo.claimAnnouncement(id)).toBe(true);
+      expect(await repo.claimAnnouncement(id)).toBe(false);
+      expect((await repo.waitingAnnouncements()).map((row) => row.id)).not.toContain(id);
+
+      await repo.markAnnounced(id, ANNOUNCE_WAITING);
+      expect(await repo.claimAnnouncement(id)).toBe(true);
+      await repo.markAnnounced(id, ANNOUNCE_SKIPPED);
+      expect((await repo.recent(100)).find((row) => row.id === id)?.announced).toBe(ANNOUNCE_SKIPPED);
     }));
 });
