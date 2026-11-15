@@ -121,7 +121,7 @@ describe('roundLine', () => {
     ['two pots', chain, { stops: same(2), jackpot: 2100, pots: { mini: 100, major: 0, giga: 2000 } },
       'Mini and Giga jackpots. You won 2 Gold 100 Silver on a stake of 40 Silver.'],
     ['all pots', chain, { stops: same(2), jackpot: 3, pots: { mini: 1, major: 1, giga: 1 } },
-      'Mini and Major and Giga jackpots. You won 3 Silver on a stake of 40 Silver.'],
+      'Mini, Major and Giga jackpots. You won 3 Silver on a stake of 40 Silver.'],
     ['nothing', chain, { stops: same(2) }, 'No win this time. You staked 40 Silver.'],
     ['nothing after free spins', chain, { stops: SCATTERS, free: eight, stake: 20 }, 'No win this time. You staked 20 Silver.'],
     ['free spins', chain, { stops: SCATTERS, free: eight, stake: 20, payout: 1240 },
@@ -159,6 +159,7 @@ describe('bigWinLine', () => {
       "Tester won 12 Gold 500 Silver on Tranus's Shelf on a stake of 40 Silver, with 12 free spins"],
     ['a win with meter free spins', view({ payout: 12500, meterFree: twelve.slice(0, 8) }),
       "Tester won 12 Gold 500 Silver on Tranus's Shelf on a stake of 40 Silver, with 8 free spins"],
+    ['three pots', view({ jackpot: 3, pots: { mini: 1, major: 1, giga: 1 } }), 'Tester won the Mini, Major and Giga jackpots, 3 Silver'],
     ['a pot', view({ jackpot: 31420, pots: { mini: 0, major: 0, giga: 31420 } }), 'Tester won the Giga jackpot, 31 Gold 420 Silver'],
     ['two pots', view({ jackpot: 2100, pots: { mini: 100, major: 0, giga: 2000 } }), 'Tester won the Mini and Giga jackpots, 2 Gold 100 Silver'],
   ])('says a big win: %s', (_name, v, text) => expect(bigWinLine(named, v)).toBe(text));

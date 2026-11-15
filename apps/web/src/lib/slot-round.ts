@@ -103,12 +103,17 @@ function potNames(spin: SlotSpinView): string[] {
   return SLOT_POTS.filter((pot) => spin.pots[pot] > 0).map((pot) => pot[0].toUpperCase() + pot.slice(1));
 }
 
+/** "Mini", "Mini and Giga", "Mini, Major and Giga". */
+function potList(names: string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 /** The round in words. */
 export function roundLine(spin: SlotSpinView, spins: RoundSpin[]): string {
   const stake = silverText(spin.stake);
   const pots = potNames(spin);
   if (pots.length > 0)
-    return `${pots.join(' and ')} ${pots.length > 1 ? 'jackpots' : 'jackpot'}. You won ${silverText(spin.jackpot)} on a stake of ${stake}.`;
+    return `${potList(pots)} ${pots.length > 1 ? 'jackpots' : 'jackpot'}. You won ${silverText(spin.jackpot)} on a stake of ${stake}.`;
   if (spin.payout === 0) return `No win this time. You staked ${stake}.`;
   const payout = silverText(spin.payout);
   const n = spin.free.length + spin.meterFree.length;
@@ -134,7 +139,7 @@ export function roundListLine(machine: SlotMachine, spin: SlotSpinView): string 
 export function bigWinLine(machine: SlotMachine, spin: SlotSpinView): string {
   const pots = potNames(spin);
   if (pots.length > 0)
-    return `${spin.character} won the ${pots.join(' and ')} ${pots.length > 1 ? 'jackpots' : 'jackpot'}, ${silverText(spin.jackpot)}`;
+    return `${spin.character} won the ${potList(pots)} ${pots.length > 1 ? 'jackpots' : 'jackpot'}, ${silverText(spin.jackpot)}`;
   const n = spin.free.length + spin.meterFree.length;
   const free = n > 0 ? `, with ${n} free spins` : '';
   return `${spin.character} won ${silverText(spin.payout)} on ${machine.name} on a stake of ${silverText(spin.stake)}${free}`;
