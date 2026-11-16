@@ -1,4 +1,4 @@
-import type { GmSlotMachine, GmSlots, SlotSpinView } from '@4story-portal/shared'
+import type { GmSlotMachine, GmSlotPot, GmSlots, SlotPot, SlotSpinView } from '@4story-portal/shared'
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { json, mockApi, sentBodies } from '../test/mock-api'
@@ -22,11 +22,28 @@ const spin = (overrides: Partial<SlotSpinView> = {}): SlotSpinView => ({
   machine: 'shelf',
   stops: [0, 0, 0, 0, 0],
   free: [],
+  meterFree: [],
+  meterBefore: 0,
   stake: 40,
   payout: 1200,
   jackpot: 0,
+  pots: { mini: 0, major: 0, giga: 0 },
   ...overrides,
 })
+
+const POT_CAPS: Record<SlotPot, number> = { mini: 1, major: 10, giga: 50 }
+const pot = (key: SlotPot, overrides: Partial<GmSlotPot> = {}): GmSlotPot => ({
+  pot: key,
+  live: true,
+  setCap: POT_CAPS[key],
+  running: null,
+  added: 0,
+  paid: 0,
+  drops: 0,
+  wins: [],
+  ...overrides,
+})
+const pots = (overrides: Partial<Record<SlotPot, Partial<GmSlotPot>>> = {}): GmSlotPot[] => (['mini', 'major', 'giga'] as const).map((key) => pot(key, overrides[key]))
 
 const state = (overrides: Partial<GmSlots> = {}): GmSlots => ({
   live: false,
@@ -36,7 +53,8 @@ const state = (overrides: Partial<GmSlots> = {}): GmSlots => ({
     machine({ key: 'hoard', stakes: [60, 100, 200] }),
   ],
   latest: [spin(), spin({ id: 2, at: '2026-11-13T21:30:00.000Z', character: 'Mounara', machine: 'armoury', stops: [1, 1, 1, 1, 1], stake: 100, payout: 0 })],
-  jackpot: { live: true, setCap: 50, running: null, added: 0, paid: 0, drops: 0, wins: [] },
+  jackpots: pots(),
+  daily: { limit: 1500 },
   ...overrides,
 })
 
@@ -66,10 +84,11 @@ describe('GM slots page', () => {
     expect(shelf.getByRole('spinbutton', { name: 'Middle stake' })).toHaveValue(40)
     expect(shelf.getByRole('spinbutton', { name: 'Highest stake' })).toHaveValue(60)
     expect(shelf.getByRole('button', { name: 'Save stakes' })).toBeInTheDocument()
-    expect(shelf.getByText('The most one paid spin can win at these stakes is 14 Gold 490 Silver.')).toBeInTheDocument()
-    expect(shelf.getByText('Pays back 95.9% by its reels.')).toBeInTheDocument()
-    expect((await section('The Armoury')).getByText('Pays back 95.9% by its reels.')).toBeInTheDocument()
-    expect((await section("Dragon's Hoard")).getByText('Pays back 95.7% by its reels.')).toBeInTheDocument()
+    expect(shelf.getByText('The most one paid spin can win at these stakes is 21 Gold 627 Silver.')).toBeInTheDocument()
+    expect(shelf.getByText('Pays back 100.8% by its reels.')).toBeInTheDocument()
+    expect((await section('The Armoury')).getByText('Pays back 101.0% by its reels.')).toBeInTheDocument()
+    expect((await section("Dragon's Hoard")).getByText('Pays back 101.0% by its reels.')).toBeInTheDocument()
+    expect(shelf.getByText('At 105%, a player spinning nonstop at 60 Silver gains about 3 Gold 600 Silver an hour.')).toBeInTheDocument()
 
     const today = within(shelf.getByRole('region', { name: 'Today' }))
     expect(today.getByText('Spins').nextElementSibling).toHaveTextContent('3')
@@ -169,6 +188,41 @@ describe('GM slots page', () => {
     expect(sentBodies(fetchMock, 'PUT /gm/slots/machines/shelf')).toEqual([])
   })
 
+  it('does not send a stake above 5 Gold', async () => {
+    const fetchMock = mockApi(base())
+    const { user } = renderRoute('/gm/slots', { me: gm })
+
+    const armoury = await section('The Armoury')
+    const highest = armoury.getByRole('spinbutton', { name: 'Highest stake' })
+    await user.clear(highest)
+    await user.type(highest, '5020')
+    await user.click(armoury.getByRole('button', { name: 'Save stakes' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter three different stakes in multiples of 20 Silver, lowest first')
+    expect(sentBodies(fetchMock, 'PUT /gm/slots/machines/armoury')).toEqual([])
+  })
+
+  it('sends a top stake of exactly 5 Gold', async () => {
+    const fetchMock = mockApi(base({ 'PUT /gm/slots/machines/armoury': () => json(200, state()) }))
+    const { user } = renderRoute('/gm/slots', { me: gm })
+
+    const armoury = await section('The Armoury')
+    const highest = armoury.getByRole('spinbutton', { name: 'Highest stake' })
+    await user.clear(highest)
+    await user.type(highest, '5000')
+    await user.click(armoury.getByRole('button', { name: 'Save stakes' }))
+
+    await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/machines/armoury')).toEqual([{ live: true, stakes: [40, 60, 5000] }]))
+  })
+
+  it("says what each machine's top stake gains a player nonstop at 105%", async () => {
+    mockApi(base())
+    renderRoute('/gm/slots', { me: gm })
+
+    expect((await section('The Armoury')).getByText('At 105%, a player spinning nonstop at 100 Silver gains about 6 Gold an hour.')).toBeInTheDocument()
+    expect((await section("Dragon's Hoard")).getByText('At 105%, a player spinning nonstop at 200 Silver gains about 12 Gold an hour.')).toBeInTheDocument()
+  })
+
   it('does not send a stake that is not a whole number', async () => {
     const fetchMock = mockApi(base())
     const { user } = renderRoute('/gm/slots', { me: gm })
@@ -203,7 +257,7 @@ describe('GM slots page', () => {
     const { user } = renderRoute('/gm/slots', { me: gm })
 
     const hoard = await section("Dragon's Hoard")
-    expect(hoard.getByText('The most one paid spin can win at these stakes is 404 Gold 530 Silver.')).toBeInTheDocument()
+    expect(hoard.getByText('The most one paid spin can win at these stakes is 300 Gold 170 Silver.')).toBeInTheDocument()
     for (const [name, value] of [
       ['Lowest stake', '100'],
       ['Middle stake', '200'],
@@ -213,10 +267,11 @@ describe('GM slots page', () => {
       await user.type(hoard.getByRole('spinbutton', { name }), value)
     }
 
-    expect(hoard.getByText('The most one paid spin can win at these stakes is 1,011 Gold 325 Silver.')).toBeInTheDocument()
+    expect(hoard.getByText('The most one paid spin can win at these stakes is 750 Gold 425 Silver.')).toBeInTheDocument()
     expect(hoard.getByText('500 Silver')).toBeInTheDocument()
+    expect(hoard.getByText('At 105%, a player spinning nonstop at 500 Silver gains about 30 Gold an hour.')).toBeInTheDocument()
     // The other machines keep what they had.
-    expect((await section('The Armoury')).getByText('The most one paid spin can win at these stakes is 150 Gold.')).toBeInTheDocument()
+    expect((await section('The Armoury')).getByText('The most one paid spin can win at these stakes is 61 Gold 625 Silver.')).toBeInTheDocument()
   })
 
   it('shows the house down when a machine has paid more than it took, and the share paid back', async () => {
@@ -283,179 +338,200 @@ describe('GM slots page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the slot machines.')
   })
 
-  describe('jackpot', () => {
-    const jackpot = (overrides: Partial<GmSlots['jackpot']> = {}): GmSlots['jackpot'] => ({
-      live: true,
-      setCap: 50,
-      running: { pot: 12_345, cap: 50_000, floor: 5000 },
-      added: 20_000,
-      paid: 7000,
-      drops: 2,
-      wins: [],
-      ...overrides,
-    })
-    const jackpotSection = () => section('Jackpot')
-    const capField = 'Cap for the next jackpot, in Gold'
-
-    it('shows the switch, the saved cap, the pot and the totals', async () => {
-      mockApi(base({}, state({ jackpot: jackpot() })))
-      renderRoute('/gm/slots', { me: gm })
-
-      const box = await jackpotSection()
-      expect(box.getByRole('switch', { name: 'Jackpot on' })).toBeChecked()
-      expect(box.getByText('Lost rounds add to the pot.')).toBeInTheDocument()
-      expect(box.getByRole('spinbutton', { name: capField })).toHaveValue(50)
-      expect(box.getByText('Can drop from 5 Gold, must drop before 50 Gold.')).toBeInTheDocument()
-      expect(box.getByText('Pot now').nextElementSibling).toHaveTextContent('12 Gold 345 Silver')
-      expect(box.getByText('Must drop before 50 Gold.')).toBeInTheDocument()
-      expect(box.getByText('Added').nextElementSibling).toHaveTextContent('20 Gold')
-      expect(box.getByText('Paid out').nextElementSibling).toHaveTextContent('7 Gold')
-      expect(box.getByText('Drops').nextElementSibling).toHaveTextContent('2')
-    })
-
-    it('says what an off jackpot does', async () => {
-      mockApi(base({}, state({ jackpot: jackpot({ live: false }) })))
-      renderRoute('/gm/slots', { me: gm })
-
-      const box = await jackpotSection()
-      expect(box.getByRole('switch', { name: 'Jackpot on' })).not.toBeChecked()
-      expect(box.getByText('The pot is kept. Lost rounds add nothing and it cannot drop.')).toBeInTheDocument()
-    })
-
-    it('switches off, sending the saved cap and not what is typed', async () => {
-      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ live: false }) })) }))
-      const { user } = renderRoute('/gm/slots', { me: gm })
-
-      const box = await jackpotSection()
-      await user.clear(box.getByRole('spinbutton', { name: capField }))
-      await user.type(box.getByRole('spinbutton', { name: capField }), '9')
-      await user.click(box.getByRole('switch', { name: 'Jackpot on' }))
-
-      await waitFor(() => expect(screen.getByRole('switch', { name: 'Jackpot on' })).not.toBeChecked())
-      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: false, cap: 50 }])
-    })
-
-    it('saves a new cap, sending the saved switch', async () => {
-      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ setCap: 80 }) })) }))
-      const { user } = renderRoute('/gm/slots', { me: gm })
-
-      const box = await jackpotSection()
-      const field = box.getByRole('spinbutton', { name: capField })
+  describe('jackpots', () => {
+    const running = (potNow: number, cap: number) => ({ pot: potNow, cap, floor: cap / 10 })
+    const jackpotsSection = () => section('Jackpots')
+    const capField = (name: string) => `${name} cap, in Gold`
+    const fill = async (user: ReturnType<typeof renderRoute>['user'], box: ReturnType<typeof within>, name: string, value: string) => {
+      const field = box.getByRole('spinbutton', { name: capField(name) })
       await user.clear(field)
-      await user.type(field, '80')
-      await user.click(box.getByRole('button', { name: 'Save cap' }))
+      if (value) await user.type(field, value)
+    }
+    const livePots = () =>
+      pots({
+        mini: { running: running(600, 1000), added: 5000, paid: 700, drops: 3 },
+        major: { running: running(12_345, 10_000) },
+        giga: { running: running(12_345, 50_000), added: 20_000, paid: 7000, drops: 2 },
+      })
 
-      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: true, cap: 80 }]))
-      await waitFor(() => expect(field).toHaveValue(80))
+    it('shows each pot with its switch, its saved cap, its pot and its totals', async () => {
+      mockApi(base({}, state({ jackpots: livePots() })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotsSection()
+      for (const name of ['Mini', 'Major', 'Giga']) {
+        expect(box.getByRole('switch', { name: `${name} on` })).toBeChecked()
+      }
+      expect(box.getAllByText('Lost rounds add to the pot.')).toHaveLength(3)
+      expect(box.getByRole('spinbutton', { name: capField('Mini') })).toHaveValue(1)
+      expect(box.getByRole('spinbutton', { name: capField('Major') })).toHaveValue(10)
+      expect(box.getByRole('spinbutton', { name: capField('Giga') })).toHaveValue(50)
+      expect(box.getByText('Can drop from 100 Silver, must drop before 1 Gold.')).toBeInTheDocument()
+      expect(box.getByText('Can drop from 1 Gold, must drop before 10 Gold.')).toBeInTheDocument()
+      expect(box.getByText('Can drop from 5 Gold, must drop before 50 Gold.')).toBeInTheDocument()
+      const giga = within(box.getByRole('region', { name: 'Giga' }))
+      expect(giga.getByText('Pot now').nextElementSibling).toHaveTextContent('12 Gold 345 Silver')
+      expect(giga.getByText('Must drop before 50 Gold.')).toBeInTheDocument()
+      expect(giga.getByText('Added').nextElementSibling).toHaveTextContent('20 Gold')
+      expect(giga.getByText('Paid out').nextElementSibling).toHaveTextContent('7 Gold')
+      expect(giga.getByText('Drops').nextElementSibling).toHaveTextContent('2')
+      const mini = within(box.getByRole('region', { name: 'Mini' }))
+      expect(mini.getByText('Pot now').nextElementSibling).toHaveTextContent('600 Silver')
+      expect(mini.getByText('Drops').nextElementSibling).toHaveTextContent('3')
+    })
+
+    it('says what an off pot does', async () => {
+      mockApi(base({}, state({ jackpots: pots({ major: { live: false } }) })))
+      renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotsSection()
+      expect(box.getByRole('switch', { name: 'Major on' })).not.toBeChecked()
+      expect(box.getByText('The pot is kept. Lost rounds add nothing and it cannot drop.')).toBeInTheDocument()
+      expect(box.getAllByText('Lost rounds add to the pot.')).toHaveLength(2)
+    })
+
+    it('switches one pot off, sending all three with the saved caps and not what is typed', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpots': () => json(200, state({ jackpots: pots({ major: { live: false } }) })) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotsSection()
+      await fill(user, box, 'Major', '9')
+      await user.click(box.getByRole('switch', { name: 'Major on' }))
+
+      await waitFor(() => expect(screen.getByRole('switch', { name: 'Major on' })).not.toBeChecked())
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toEqual([
+        { mini: { live: true, cap: 1 }, major: { live: false, cap: 10 }, giga: { live: true, cap: 50 } },
+      ])
+    })
+
+    it('saves all three caps at once, sending the saved switches', async () => {
+      const fetchMock = mockApi(
+        base({ 'PUT /gm/slots/jackpots': () => json(200, state({ jackpots: pots({ mini: { setCap: 2 }, major: { setCap: 20 }, giga: { setCap: 100 } }) })) }),
+      )
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotsSection()
+      await fill(user, box, 'Mini', '2')
+      await fill(user, box, 'Major', '20')
+      await fill(user, box, 'Giga', '100')
+      await user.click(box.getByRole('button', { name: 'Save jackpots' }))
+
+      await waitFor(() =>
+        expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toEqual([
+          { mini: { live: true, cap: 2 }, major: { live: true, cap: 20 }, giga: { live: true, cap: 100 } },
+        ]),
+      )
+      await waitFor(() => expect(box.getByRole('spinbutton', { name: capField('Giga') })).toHaveValue(100))
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
 
     it.each([
-      ['0', 'From 1 to 10,000 Gold'],
-      ['10001', 'From 1 to 10,000 Gold'],
-      ['1.5', 'Enter a whole number'],
-      ['abc', 'Enter a whole number'],
-      ['', 'Enter a whole number'],
-    ])('does not send a cap of %j', async (typed, message) => {
-      const fetchMock = mockApi(base({}, state({ jackpot: jackpot() })))
+      ['Mini', '0', 'From 1 to 10,000 Gold'],
+      ['Giga', '10001', 'From 1 to 10,000 Gold'],
+      ['Major', '1.5', 'Enter a whole number'],
+      ['Mini', 'abc', 'Enter a whole number'],
+      ['Giga', '', 'Enter a whole number'],
+    ])('does not send a %s cap of %j', async (name, typed, message) => {
+      const fetchMock = mockApi(base())
       const { user } = renderRoute('/gm/slots', { me: gm })
 
-      const box = await jackpotSection()
-      const field = box.getByRole('spinbutton', { name: capField })
-      await user.clear(field)
-      if (typed) await user.type(field, typed)
-      await user.click(box.getByRole('button', { name: 'Save cap' }))
+      const box = await jackpotsSection()
+      await fill(user, box, name, typed)
+      await user.click(box.getByRole('button', { name: 'Save jackpots' }))
 
       expect(await screen.findByRole('alert')).toHaveTextContent(message)
-      expect(field).toHaveAttribute('aria-invalid', 'true')
-      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([])
+      expect(box.getByRole('spinbutton', { name: capField(name) })).toHaveAttribute('aria-invalid', 'true')
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toEqual([])
+    })
+
+    it.each([
+      ['Mini', '10'],
+      ['Mini', '20'],
+      ['Giga', '10'],
+      ['Giga', '5'],
+    ])('does not send caps that do not rise, with %s set to %s', async (name, typed) => {
+      const fetchMock = mockApi(base())
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await jackpotsSection()
+      await fill(user, box, name, typed)
+      await user.click(box.getByRole('button', { name: 'Save jackpots' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('The caps must rise: Mini below Major below Giga')
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toEqual([])
     })
 
     it('sends the edge caps 1 and 10000', async () => {
-      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot() })) }))
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpots': () => json(200, state()) }))
       const { user } = renderRoute('/gm/slots', { me: gm })
 
-      const box = await jackpotSection()
-      const field = box.getByRole('spinbutton', { name: capField })
-      for (const [typed, count] of [
-        ['1', 1],
-        ['10000', 2],
-      ] as const) {
-        await user.clear(field)
-        await user.type(field, typed)
-        await user.click(box.getByRole('button', { name: 'Save cap' }))
-        await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toHaveLength(count))
-      }
-      expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([
-        { live: true, cap: 1 },
-        { live: true, cap: 10_000 },
-      ])
+      const box = await jackpotsSection()
+      await fill(user, box, 'Major', '2')
+      await fill(user, box, 'Giga', '10000')
+      await user.click(box.getByRole('button', { name: 'Save jackpots' }))
+
+      await waitFor(() =>
+        expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toEqual([
+          { mini: { live: true, cap: 1 }, major: { live: true, cap: 2 }, giga: { live: true, cap: 10_000 } },
+        ]),
+      )
     })
 
     it('shows the range the typed cap gives, and none while it is not a whole number in range', async () => {
-      mockApi(base({}, state({ jackpot: jackpot() })))
+      mockApi(base())
       const { user } = renderRoute('/gm/slots', { me: gm })
 
-      const box = await jackpotSection()
-      const field = box.getByRole('spinbutton', { name: capField })
-      await user.clear(field)
-      await user.type(field, '80')
+      const box = await jackpotsSection()
+      await fill(user, box, 'Giga', '80')
       expect(box.getByText('Can drop from 8 Gold, must drop before 80 Gold.')).toBeInTheDocument()
-      await user.clear(field)
-      await user.type(field, '0')
-      expect(box.queryByText(/Can drop from/)).not.toBeInTheDocument()
+      await fill(user, box, 'Giga', '0')
+      expect(box.queryByText(/Can drop from 8 Gold/)).not.toBeInTheDocument()
+      expect(box.getAllByText(/Can drop from/)).toHaveLength(2)
     })
 
     it('shows both caps when the running jackpot keeps an older one', async () => {
-      mockApi(base({}, state({ jackpot: jackpot({ setCap: 80, running: { pot: 1000, cap: 50_000, floor: 5000 } }) })))
+      mockApi(base({}, state({ jackpots: pots({ giga: { setCap: 80, running: running(1000, 50_000) } }) })))
       renderRoute('/gm/slots', { me: gm })
 
-      const box = await jackpotSection()
-      expect(box.getByText('This jackpot must drop before 50 Gold. The next one: 80 Gold.')).toBeInTheDocument()
-      expect(box.queryByText('Must drop before 50 Gold.')).not.toBeInTheDocument()
+      const giga = within((await jackpotsSection()).getByRole('region', { name: 'Giga' }))
+      expect(giga.getByText('This jackpot must drop before 50 Gold. The next one: 80 Gold.')).toBeInTheDocument()
+      expect(giga.queryByText('Must drop before 50 Gold.')).not.toBeInTheDocument()
     })
 
-    it('says so when the pot cannot be read, and the switch and cap still work', async () => {
-      const fetchMock = mockApi(
-        base({ 'PUT /gm/slots/jackpot': () => json(200, state({ jackpot: jackpot({ running: null, live: false }) })) }, state({ jackpot: jackpot({ running: null }) })),
-      )
+    it('says so when a pot cannot be read, and the switches and caps still work', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/jackpots': () => json(200, state({ jackpots: pots({ mini: { live: false } }) })) }))
       const { user } = renderRoute('/gm/slots', { me: gm })
 
-      const box = await jackpotSection()
-      expect(box.getByText("The jackpot's table is not in this database yet.")).toBeInTheDocument()
+      const box = await jackpotsSection()
+      expect(box.getAllByText("The jackpot's table is not in this database yet.")).toHaveLength(3)
       expect(box.queryByText('Pot now')).not.toBeInTheDocument()
-      await user.click(box.getByRole('switch', { name: 'Jackpot on' }))
-      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toEqual([{ live: false, cap: 50 }]))
-      await user.clear(box.getByRole('spinbutton', { name: capField }))
-      await user.type(box.getByRole('spinbutton', { name: capField }), '70')
-      await user.click(box.getByRole('button', { name: 'Save cap' }))
-      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpot')).toHaveLength(2))
+      await user.click(box.getByRole('switch', { name: 'Mini on' }))
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toHaveLength(1))
+      await fill(user, box, 'Giga', '70')
+      await user.click(box.getByRole('button', { name: 'Save jackpots' }))
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/jackpots')).toHaveLength(2))
     })
 
-    it('lists the drops', async () => {
-      const wins = [spin({ id: 9, at: '2026-11-14T09:05:00.000Z', character: 'Moosey', machine: 'hoard', stake: 200, payout: 50_000, jackpot: 50_000 })]
-      mockApi(base({}, state({ jackpot: jackpot({ wins }), latest: [] })))
+    it("lists each pot's drops", async () => {
+      const wins = [spin({ id: 9, at: '2026-11-14T09:05:00.000Z', character: 'Moosey', machine: 'hoard', stake: 200, payout: 50_000, jackpot: 50_000, pots: { mini: 0, major: 0, giga: 50_000 } })]
+      mockApi(base({}, state({ jackpots: pots({ giga: { wins } }), latest: [] })))
       renderRoute('/gm/slots', { me: gm })
 
-      const table = (await jackpotSection()).getByRole('table', { name: 'Jackpot drops' })
+      const box = await jackpotsSection()
+      const table = box.getByRole('table', { name: 'Giga drops' })
       expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['When', 'Character', 'Machine', 'Won'])
       expect(within(table).getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))).toEqual([
         ['14 Nov, 09:05', 'Moosey', "Dragon's Hoard", '50 Gold'],
       ])
-    })
-
-    it('says so when nobody has won the jackpot', async () => {
-      mockApi(base({}, state({ jackpot: jackpot() })))
-      renderRoute('/gm/slots', { me: gm })
-
-      expect((await jackpotSection()).getByText('Nobody has won the jackpot yet.')).toBeInTheDocument()
+      expect(box.queryByRole('table', { name: 'Mini drops' })).not.toBeInTheDocument()
+      expect(box.getAllByText('Nobody has won this jackpot yet.')).toHaveLength(2)
     })
 
     it('shows why a jackpot save failed', async () => {
-      mockApi(base({ 'PUT /gm/slots/jackpot': () => json(403, { statusCode: 403, message: 'Not allowed' }) }))
+      mockApi(base({ 'PUT /gm/slots/jackpots': () => json(403, { statusCode: 403, message: 'Not allowed' }) }))
       const { user } = renderRoute('/gm/slots', { me: gm })
 
-      await user.click((await jackpotSection()).getByRole('switch', { name: 'Jackpot on' }))
+      await user.click((await jackpotsSection()).getByRole('switch', { name: 'Giga on' }))
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed')
     })
@@ -477,6 +553,80 @@ describe('GM slots page', () => {
 
       const table = await screen.findByRole('table', { name: 'Latest spins' })
       expect(within(table).getAllByRole('row')[1]).toHaveTextContent('Jackpot 50 Gold 2 Silver')
+    })
+  })
+
+  describe('daily limit', () => {
+    const limitField = 'Rounds per account per day'
+    const dailySection = () => section('Daily limit')
+
+    it('shows the saved limit', async () => {
+      mockApi(base())
+      renderRoute('/gm/slots', { me: gm })
+
+      expect((await dailySection()).getByRole('spinbutton', { name: limitField })).toHaveValue(1500)
+    })
+
+    it('saves a new limit', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/daily': () => json(200, state({ daily: { limit: 2000 } })) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await dailySection()
+      const field = box.getByRole('spinbutton', { name: limitField })
+      await user.clear(field)
+      await user.type(field, '2000')
+      await user.click(box.getByRole('button', { name: 'Save limit' }))
+
+      await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/daily')).toEqual([{ rounds: 2000 }]))
+      await waitFor(() => expect(field).toHaveValue(2000))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['99', 'From 100 to 10,000 rounds'],
+      ['10001', 'From 100 to 10,000 rounds'],
+      ['1.5', 'Enter a whole number'],
+      ['', 'Enter a whole number'],
+    ])('does not send a limit of %j', async (typed, message) => {
+      const fetchMock = mockApi(base())
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await dailySection()
+      const field = box.getByRole('spinbutton', { name: limitField })
+      await user.clear(field)
+      if (typed) await user.type(field, typed)
+      await user.click(box.getByRole('button', { name: 'Save limit' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(message)
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/daily')).toEqual([])
+    })
+
+    it('sends the edge limits 100 and 10000', async () => {
+      const fetchMock = mockApi(base({ 'PUT /gm/slots/daily': () => json(200, state()) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      const box = await dailySection()
+      const field = box.getByRole('spinbutton', { name: limitField })
+      for (const [typed, count] of [
+        ['100', 1],
+        ['10000', 2],
+      ] as const) {
+        await user.clear(field)
+        await user.type(field, typed)
+        await user.click(box.getByRole('button', { name: 'Save limit' }))
+        await waitFor(() => expect(sentBodies(fetchMock, 'PUT /gm/slots/daily')).toHaveLength(count))
+      }
+      expect(sentBodies(fetchMock, 'PUT /gm/slots/daily')).toEqual([{ rounds: 100 }, { rounds: 10_000 }])
+    })
+
+    it('shows why a save failed', async () => {
+      mockApi(base({ 'PUT /gm/slots/daily': () => json(400, { statusCode: 400, message: 'Not allowed' }) }))
+      const { user } = renderRoute('/gm/slots', { me: gm })
+
+      await user.click((await dailySection()).getByRole('button', { name: 'Save limit' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed')
     })
   })
 })

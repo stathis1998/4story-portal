@@ -51,6 +51,7 @@ export function tableNames(config: AppConfig) {
     rouletteSpins: `${game}.TPORTALROULETTESPIN`,
     slotSpins: `${game}.TPORTALSLOTSPIN`,
     slotJackpot: `${game}.TPORTALSLOTJACKPOT`,
+    slotMeters: `${game}.TPORTALSLOTMETER`,
     rebirths: `${game}.TCHARREBIRTHTABLE`,
     rebirthLog: `${game}.TCHARREBIRTHLOGTABLE`,
     quests: `${game}.TQUESTTABLE`,

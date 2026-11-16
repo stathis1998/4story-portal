@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 /*
+  A screen from sm up too short for the slots page's full layout (Spin rests near 990 px down it): the page puts
+  the jackpots under the machine, as on a phone, so Spin is on the first screen at 1280 x 800 and 1366 x 768.
+*/
+@custom-variant short (@media (width >= 40rem) and (height < 62.5rem));
+
+/*
   Visual direction: "Bloodstone", dark only. Near-black with a red undertone, one crimson accent,
   pale stone for secondary actions, amber for errors so they never read as the accent.
   Alegreya SC for headings, Alegreya Sans for text. Sharp corners and hairline borders.

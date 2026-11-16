@@ -1,14 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { slotRoundPayout, slotSpin, type SlotSpinView } from '@4story-portal/shared';
-import { BOTTOM, TOP, at, showing } from '../test/slot-fixture';
+import { SLOT_MACHINES, SLOT_METER_FREE, slotChain, slotPlayRound, slotReplayRound, type SlotMachine, type SlotSpinView, type SlotStops } from '@4story-portal/shared';
+import { BOTTOM, TOP, at, bottom, same, showing, stacked } from '../test/slot-fixture';
 import { bigWinLine, roundLine, roundListLine, roundSpins, winTier, wonTiles } from './slot-round';
 
-// Window 0 pays 10 line stakes, window 1 pays 40, window 2 pays nothing.
-const machine = showing([TOP, 'BBBCD', BOTTOM], [TOP, 'BBBBD', BOTTOM], [TOP, 'CDEFG', BOTTOM]);
+// The middle line wins 10 line stakes, then the letters above make the top line win 10 again, then nothing.
+// Its rows 0-2 (stop 1) show 3 scatters and win nothing.
+const TWO_WINS = ['CEJHG', 'DFHJH', 'CEGHJ', 'DFEGH', 'BBBGH', 'CEGHG', 'BBBCD', 'DFHGH'];
+const chain = stacked(TWO_WINS);
+const CHAIN = bottom(TWO_WINS);
+const SCATTERS = same(1);
+// One winning line, then nothing.
+const ONE_WIN = ['DFEGH', 'CEGHG', 'BBBCD', 'DFHGH'];
+const oneWin = stacked(ONE_WIN);
+
+// Window at stop 1 shows 2 scatters and wins nothing; the window at stop 5 wins 10 once and nothing falls into a win.
+const METER = ['GHGHJ', 'CDEFG', 'JGHGH', 'DFEDG', 'CDEFG', 'BBBCD', 'DFHGH'];
+// Rows 2 and 3 show B B B and C C C at stop 3, so two lines win on one step; nothing falls into a win.
+const TWO_LINES = ['DFEDG', 'EDFFH', 'BBBGH', 'CCCDE', 'HGHGH'];
+
 const view = (over: Partial<SlotSpinView>): SlotSpinView => ({
   id: 1, at: '2026-11-15T00:00:00Z', character: 'Tester', machine: 'shelf',
-  stops: at(0), free: [], stake: 40, payout: 0, jackpot: 0, ...over,
+  stops: at(0), free: [], meterFree: [], meterBefore: 0, stake: 40, payout: 0, jackpot: 0,
+  pots: { mini: 0, major: 0, giga: 0 }, ...over,
 });
+const times = (steps: { times: number }[]) => steps.map((s) => s.times);
+/** What the rules say the round pays, in Silver. */
+const paid = (m: SlotMachine, v: SlotSpinView) => (slotReplayRound(m, v).lineStakes * v.stake) / 20;
 
 describe('winTier', () => {
   it.each([[0, 40, 'none'], [39, 40, 'small'], [40, 40, 'win'], [399, 40, 'win'], [400, 40, 'big'], [1999, 40, 'big'], [2000, 40, 'huge']])(
@@ -18,70 +35,179 @@ describe('winTier', () => {
 });
 
 describe('roundSpins', () => {
-  const spin = { stops: at(0), free: [at(1), at(2)], stake: 40 };
-  it('lists the paid spin and then each free spin with a doubled win and a running total', () => {
-    const spins = roundSpins(machine, spin);
-    expect(spins.map((s) => ({ free: s.free, won: s.won, total: s.total }))).toEqual([
-      { free: null, won: 20, total: 20 },
-      { free: 0, won: 160, total: 180 },
-      { free: 1, won: 0, total: 180 },
+  it('shows a paid chain at times 1, 2, 3 with what each step won and the running total', () => {
+    const v = view({ stops: CHAIN, stake: 40 });
+    const [spin, ...rest] = roundSpins(chain, v);
+    expect(rest).toEqual([]);
+    expect(spin.kind).toEqual({ paid: true });
+    expect(spin.steps.map((s) => ({ times: s.times, won: s.won, total: s.total }))).toEqual([
+      { times: 1, won: 20, total: 20 },
+      { times: 2, won: 40, total: 60 },
+      { times: 3, won: 0, total: 60 },
     ]);
-    expect(spins[1].stops).toEqual(at(1));
-    expect(spins[1].outcome).toEqual(slotSpin(machine, at(1)));
+    expect(spin.steps.map((s) => s.grid)).toEqual(slotChain(chain, CHAIN).steps.map((s) => s.grid));
+    expect(spin).toMatchObject({ won: 60, total: 60, scatters: 0, added: 0, stops: CHAIN });
+    expect(spin.total).toBe(paid(chain, v));
   });
-  it('the last total is what the API paid', () =>
-    expect(roundSpins(machine, spin).at(-1)!.total).toBe(slotRoundPayout(machine, spin, 40)));
-});
 
-it('gives each winning tile once', () => {
-  const m = showing([TOP, 'AACDE', BOTTOM]);
-  expect(wonTiles(slotSpin(m, at(0)))).toEqual([[0, 1], [1, 1]]);
-  expect(wonTiles(slotSpin(showing([TOP, 'CDEFG', BOTTOM]), at(0)))).toEqual([]);
+  it('caps the paid multiplier at 5', () => {
+    // Every tile is B: 12 winning steps.
+    const m = stacked(['BBBBB', 'BBBBB', 'BBBBB', 'BBBBB']);
+    const [spin] = roundSpins(m, view({ stops: same(1), stake: 20 }));
+    expect(times(spin.steps)).toEqual([1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5]);
+  });
+
+  it('plays free spins at a multiplier that starts at 2, climbs after each win and carries across spins', () => {
+    const v = view({ stops: SCATTERS, free: Array.from({ length: 8 }, () => CHAIN), stake: 20 });
+    const spins = roundSpins(chain, v);
+    expect(spins).toHaveLength(9);
+    expect(spins[0]).toMatchObject({ kind: { paid: true }, added: 8, scatters: 3, won: 0, total: 0 });
+    expect(spins.slice(1).map((s) => s.kind)).toEqual(Array.from({ length: 8 }, (_, free) => ({ free })));
+    // A winning step pays at the multiplier and raises it; the last step of a chain wins nothing and shows the new one.
+    expect(times(spins[1].steps)).toEqual([2, 3, 4]);
+    expect(times(spins[2].steps)).toEqual([4, 5, 6]);
+    expect(times(spins[4].steps)).toEqual([8, 9, 10]);
+    expect(times(spins[5].steps)).toEqual([10, 10, 10]);
+    expect(spins[1]).toMatchObject({ won: 50, total: 50, added: 0 });
+    expect(spins[1].steps.map((s) => s.won)).toEqual([20, 30, 0]);
+    expect(spins[8].total).toBe(10 * (2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 8 * 10));
+    expect(spins.at(-1)!.total).toBe(paid(chain, v));
+  });
+
+  it('adds 5 spins for a retrigger and only what fits under 50', () => {
+    const v = view({ stops: SCATTERS, free: Array.from({ length: 50 }, () => SCATTERS), stake: 20 });
+    const spins = roundSpins(chain, v);
+    expect(spins).toHaveLength(51);
+    expect(spins[0].added).toBe(8);
+    expect(spins.slice(1).map((s) => s.added)).toEqual([...Array(8).fill(5), 2, ...Array(41).fill(0)]);
+    expect(spins.at(-1)!.total).toBe(paid(chain, v));
+  });
+
+  it('plays meter free spins after the paid spin, from times 2', () => {
+    // Two scatters on the paid spin, then a window that pays 10.
+    const m = stacked(METER, 3);
+    const v = view({ stops: same(1), meterFree: Array.from({ length: 8 }, () => same(5)), meterBefore: 2, stake: 20 });
+    const spins = roundSpins(m, v);
+    expect(spins).toHaveLength(9);
+    expect(spins[0]).toMatchObject({ kind: { paid: true }, scatters: 2, added: 0, won: 0 });
+    expect(spins.slice(1).map((s) => s.kind)).toEqual(Array.from({ length: 8 }, (_, meter) => ({ meter })));
+    expect(spins[1].steps[0]).toMatchObject({ times: 2, won: 20 });
+    expect(spins[8].steps[0].times).toBe(9);
+    expect(spins.map((s) => s.added)).toEqual(Array(9).fill(0));
+    expect(spins.at(-1)!.total).toBe(10 * (2 + 3 + 4 + 5 + 6 + 7 + 8 + 9));
+    expect(spins.at(-1)!.total).toBe(paid(m, v));
+  });
+
+  it('keeps the winning tiles of a step as its burst', () => {
+    const step = roundSpins(oneWin, view({ stops: bottom(ONE_WIN) }))[0].steps[0];
+    expect(wonTiles(step)).toEqual([[0, 1], [1, 1], [2, 1]]);
+    expect(wonTiles(step)).toBe(step.burst);
+  });
 });
 
 describe('roundLine', () => {
-  const lose = Array.from({ length: 8 }, () => at(2));
-  const winFree = [at(1), at(2)];
-  it.each([
-    ['jackpot', view({ stops: at(2), jackpot: 31420, payout: 0, stake: 40 }),
-      'Jackpot. This round made it drop. You won 31 Gold 420 Silver on a stake of 40 Silver.'],
-    ['nothing', view({ stops: at(2) }), 'No win this time. You staked 40 Silver.'],
-    ['nothing with free spins', view({ stops: at(2), free: lose }), '8 free spins won you nothing. You staked 40 Silver.'],
-    ['paid, one line', view({ payout: 20 }), '1 line won. You won 20 Silver on a stake of 40 Silver.'],
-    ['paid with free spins', view({ free: winFree, payout: 180 }),
-      '2 free spins won you 160 Silver. You won 180 Silver in all on a stake of 40 Silver.'],
-    ['paid with free spins that paid nothing', view({ free: lose, payout: 20 }),
-      '8 free spins won you nothing. You won 20 Silver in all on a stake of 40 Silver.'],
-  ])('says the round in words: %s', (_name, v, line) => {
-    expect(roundLine(v, roundSpins(machine, v))).toBe(line);
-  });
+  const pots = { mini: 0, major: 0, giga: 0 };
+  const eight = Array.from({ length: 8 }, () => CHAIN);
+  const quiet = {
+    ...showing(['GHGHJ', 'CDEFG', 'JGHGH'], [TOP, 'BBBCD', BOTTOM], [TOP, 'CDEFG', BOTTOM]),
+    meterSize: 3,
+  };
+  // Two lines on one step: the top and the middle row both show B B B.
+  const twoLines = stacked(TWO_LINES);
 
-  it('counts lines in the plural', () => {
-    const m = showing(['CCCGH', 'BBBDE', 'HGHGH']);
-    const v = view({ payout: 50 });
-    expect(roundLine(v, roundSpins(m, v))).toBe('2 lines won. You won 50 Silver on a stake of 40 Silver.');
+  it.each<[string, SlotMachine, Partial<SlotSpinView>, string]>([
+    ['one pot', chain, { stops: same(2), jackpot: 5000, pots: { ...pots, major: 5000 } },
+      'Major jackpot. You won 5 Gold on a stake of 40 Silver.'],
+    ['two pots', chain, { stops: same(2), jackpot: 2100, pots: { mini: 100, major: 0, giga: 2000 } },
+      'Mini and Giga jackpots. You won 2 Gold 100 Silver on a stake of 40 Silver.'],
+    ['all pots', chain, { stops: same(2), jackpot: 3, pots: { mini: 1, major: 1, giga: 1 } },
+      'Mini, Major and Giga jackpots. You won 3 Silver on a stake of 40 Silver.'],
+    ['nothing', chain, { stops: same(2) }, 'No win this time. You staked 40 Silver.'],
+    ['nothing after free spins', chain, { stops: SCATTERS, free: eight, stake: 20 }, 'No win this time. You staked 20 Silver.'],
+    ['free spins', chain, { stops: SCATTERS, free: eight, stake: 20, payout: 1240 },
+      '8 free spins won you 1 Gold 240 Silver. You won 1 Gold 240 Silver in all on a stake of 20 Silver.'],
+    ['free spins that paid nothing', quiet, { stops: at(0), meterFree: Array.from({ length: 8 }, () => at(2)), meterBefore: 2, payout: 20 },
+      '8 free spins won you nothing. You won 20 Silver in all on a stake of 40 Silver.'],
+    ['a chain', chain, { stops: CHAIN, stake: 20, payout: 30 }, 'A chain of 2. You won 30 Silver on a stake of 20 Silver.'],
+    ['one line', oneWin, { stops: bottom(ONE_WIN), stake: 20, payout: 10 }, '1 line won. You won 10 Silver on a stake of 20 Silver.'],
+    ['two lines', twoLines, { stops: same(3), stake: 20, payout: 25 }, '2 lines won. You won 25 Silver on a stake of 20 Silver.'],
+  ])('says the round in words: %s', (_name, m, over, text) => {
+    const v = view(over);
+    expect(roundLine(v, roundSpins(m, v))).toBe(text);
   });
 });
 
 describe('roundListLine', () => {
-  const named = { ...machine, name: "Tranus's Shelf" };
+  const named = { ...chain, name: "Tranus's Shelf" };
+  const eight = Array.from({ length: 8 }, () => CHAIN);
   it.each([
     ['nothing', view({}), "Tranus's Shelf: staked 40 Silver, won nothing"],
     ['an amount', view({ payout: 20 }), "Tranus's Shelf: staked 40 Silver, won 20 Silver"],
-    ['the jackpot', view({ payout: 0, jackpot: 31420 }), "Tranus's Shelf: staked 40 Silver, won the jackpot, 31 Gold 420 Silver"],
-    ['free spins', view({ payout: 1200, free: Array.from({ length: 8 }, () => at(1)) }),
-      "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins"],
-  ])('says a list entry: %s', (_name, v, line) => expect(roundListLine(named, v)).toBe(line));
+    ['the jackpot', view({ jackpot: 31420, pots: { mini: 0, major: 0, giga: 31420 } }),
+      "Tranus's Shelf: staked 40 Silver, won the jackpot, 31 Gold 420 Silver"],
+    ['free spins', view({ payout: 1200, free: eight }), "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins"],
+    ['meter free spins', view({ payout: 1200, meterFree: eight }), "Tranus's Shelf: staked 40 Silver, won 1 Gold 200 Silver with 8 free spins"],
+  ])('says a list entry: %s', (_name, v, text) => expect(roundListLine(named, v)).toBe(text));
 });
 
 describe('bigWinLine', () => {
-  const named = { ...machine, name: "Tranus's Shelf" };
+  const named = { ...chain, name: "Tranus's Shelf" };
+  const twelve = Array.from({ length: 12 }, () => CHAIN);
   it.each([
     ['a win', view({ payout: 2400 }), "Tester won 2 Gold 400 Silver on Tranus's Shelf on a stake of 40 Silver"],
-    ['a win with free spins', view({ payout: 12500, free: Array.from({ length: 12 }, () => at(1)) }),
+    ['a win with free spins', view({ payout: 12500, free: twelve }),
       "Tester won 12 Gold 500 Silver on Tranus's Shelf on a stake of 40 Silver, with 12 free spins"],
-    ['the jackpot', view({ payout: 0, jackpot: 31420 }), 'Tester won the jackpot, 31 Gold 420 Silver'],
-    ['the jackpot after free spins', view({ payout: 0, jackpot: 31420, free: Array.from({ length: 8 }, () => at(2)) }),
-      'Tester won the jackpot, 31 Gold 420 Silver'],
-  ])('says a big win: %s', (_name, v, line) => expect(bigWinLine(named, v)).toBe(line));
+    ['a win with meter free spins', view({ payout: 12500, meterFree: twelve.slice(0, 8) }),
+      "Tester won 12 Gold 500 Silver on Tranus's Shelf on a stake of 40 Silver, with 8 free spins"],
+    ['three pots', view({ jackpot: 3, pots: { mini: 1, major: 1, giga: 1 } }), 'Tester won the Mini, Major and Giga jackpots, 3 Silver'],
+    ['a pot', view({ jackpot: 31420, pots: { mini: 0, major: 0, giga: 31420 } }), 'Tester won the Giga jackpot, 31 Gold 420 Silver'],
+    ['two pots', view({ jackpot: 2100, pots: { mini: 100, major: 0, giga: 2000 } }), 'Tester won the Mini and Giga jackpots, 2 Gold 100 Silver'],
+  ])('says a big win: %s', (_name, v, text) => expect(bigWinLine(named, v)).toBe(text));
+});
+
+describe('roundSpins against the shared rules, on real rounds', () => {
+  /** A fixed 32-bit generator, so every run plays the same rounds. Its high bits make the stops: the low bits of an LCG repeat. */
+  function seeded(seed: number) {
+    let s = seed >>> 0;
+    return () => {
+      s = (Math.imul(s, 1_664_525) + 1_013_904_223) >>> 0;
+      return s;
+    };
+  }
+
+  it.each(SLOT_MACHINES.map((machine) => [machine.name, machine] as const))(
+    'plays 400 rounds of %s as slotPlayRound does: the total, the free spins and the meter',
+    (_name, machine) => {
+      const next = seeded(20_261_115);
+      const stops = () => [0, 1, 2, 3, 4].map(() => next() >>> 27) as SlotStops;
+      const seen = { free: 0, meter: 0 };
+      for (let round = 0; round < 400; round++) {
+        const meterBefore = (next() >>> 16) % machine.meterSize;
+        const stake = machine.stakes[round % 3];
+        const play = slotPlayRound(machine, meterBefore, stops);
+        const v = view({ machine: machine.key, stops: play.stops, free: play.free, meterFree: play.meterFree, meterBefore, stake });
+        const spins = roundSpins(machine, v);
+        const where = `round ${round}`;
+
+        expect(spins).toHaveLength(1 + play.free.length + play.meterFree.length);
+        expect(spins.at(-1)!.total, where).toBe((play.lineStakes * stake) / 20);
+        // The free spins each spin adds are the ones the round played: the award, then every retrigger.
+        const free = spins.slice(1, 1 + play.free.length);
+        const meter = spins.slice(1 + play.free.length);
+        expect(spins[0].added + free.reduce((sum, spin) => sum + spin.added, 0), where).toBe(play.free.length);
+        if (play.meterFree.length > 0) expect(SLOT_METER_FREE + meter.reduce((sum, spin) => sum + spin.added, 0), where).toBe(play.meterFree.length);
+        // The meter as the page shows it: the paid spin's scatters unless they won free spins, less a full meter's size.
+        const points = spins[0].added === 0 ? spins[0].scatters : 0;
+        const full = meterBefore + points >= machine.meterSize;
+        expect(play.meterFree.length > 0, where).toBe(full);
+        expect(meterBefore + points - (full ? machine.meterSize : 0), where).toBe(play.meterAfter);
+
+        if (play.free.length > 0) seen.free++;
+        if (full) seen.meter++;
+      }
+      // The rounds played include free rounds and full meters, so both re-implementations were compared.
+      expect(seen.free).toBeGreaterThan(0);
+      expect(seen.meter).toBeGreaterThan(0);
+    },
+  );
 });

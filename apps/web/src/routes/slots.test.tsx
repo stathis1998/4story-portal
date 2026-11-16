@@ -1,8 +1,11 @@
-import { SLOT_MACHINES, SLOT_SCATTER, silverText, slotJackpotShare, slotRoundPayout, slotWindow } from '@4story-portal/shared'
+import { SLOT_MACHINES, SLOT_SCATTER, silverText, slotChain, slotPaidChainPay, slotReplayRound, slotWindow } from '@4story-portal/shared'
 import type {
-  SlotJackpot,
+  SlotChain,
+  SlotGrid,
+  SlotJackpotView,
   SlotMachine,
   SlotMachineState,
+  SlotPot,
   SlotSpinResult,
   SlotSpinView,
   SlotStakes,
@@ -16,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { REEL_BLURS } from '../lib/reel-blur'
 import { bigWinLine, roundLine, roundListLine, roundSpins, winTier, wonTiles } from '../lib/slot-round'
 import type { SlotSounds } from '../lib/slot-sounds'
-import { reelTimes, slotsQueryOptions } from '../lib/slots'
+import { reelTimes, slotsQueryOptions, suspenseReels } from '../lib/slots'
 import { setSlotSoundsForTest } from '../lib/use-slot-round'
 import { json, mockApi, sentBodies } from '../test/mock-api'
 import { renderRoute } from '../test/render-route'
@@ -47,40 +50,68 @@ const state = (overrides: Partial<SlotsState> = {}): SlotsState => ({
   characters: [mounara, busy],
   mine: [],
   bigWins: [],
-  jackpot: null,
+  jackpots: [],
+  meters: [],
+  daily: { limit: 1500, played: 0 },
   ...overrides,
 })
 
-// Spins on the real Tranus's Shelf, found from its strips, so the tests hold whatever the strips are.
+// Spins on the real Tranus's Shelf, found from its strips through its chains, so the tests hold whatever the strips are.
+const where = (want: (chain: SlotChain, stops: SlotStops) => boolean) => stopsWhere(shelf, (_, stops) => want(slotChain(shelf, stops), stops), { spread: true })
+/** The steps that win. */
+const wins = (chain: SlotChain) => chain.steps.filter((step) => step.lines.length > 0).length
+/** What a paid spin's chain pays, in line stakes: Silver at a stake of 20. */
+const pays = (chain: SlotChain) => slotPaidChainPay(chain)
+/** What a chain pays as a free spin that starts the free round, in line stakes. */
+function freePays(chain: SlotChain) {
+  let times = 2
+  let sum = 0
+  for (const step of chain.steps) {
+    if (step.lines.length === 0) continue
+    sum += step.multiple * times
+    times = Math.min(times + 1, 10)
+  }
+  return sum
+}
 const scatterReels = (stops: SlotStops) => slotWindow(shelf, stops).map((rows) => rows.includes(SLOT_SCATTER))
 const sameReels = (a: boolean[], b: boolean[]) => a.every((x, i) => x === b[i])
 /** No line and no scatter. */
-const BLANK = stopsWhere(shelf, (o) => o.multiple === 0 && o.scatters === 0)
+const BLANK = where((c) => pays(c) === 0 && c.scatters === 0)
 /** Less than the stake. */
-const SMALL = stopsWhere(shelf, (o) => o.multiple > 0 && o.multiple < 20 && o.scatters === 0)
-/** Three lines or more, paying the stake up to ten times it. */
-const LINES = stopsWhere(shelf, (o) => o.lines.length >= 3 && o.multiple >= 20 && o.multiple < 200 && o.freeSpins === 0)
+const SMALL = where((c) => pays(c) > 0 && pays(c) < 20 && c.scatters === 0)
+/** One winning step of two lines or more, paying the stake up to ten times it. */
+const LINES = where((c) => wins(c) === 1 && c.steps[0].lines.length >= 2 && pays(c) >= 20 && pays(c) < 200 && c.scatters === 0)
+/** A chain of two winning steps or more, paying the stake up to ten times it. */
+const CHAIN = where((c) => wins(c) >= 2 && c.steps[0].multiple >= 20 && pays(c) < 200 && c.scatters === 0)
+/** A chain of three winning steps or more. */
+const CHAIN3 = where((c) => wins(c) >= 3 && pays(c) < 400 && c.scatters === 0)
 /** Ten to fifty times the stake. */
-const BIG = stopsWhere(shelf, (o) => o.multiple >= 200 && o.multiple < 1000 && o.freeSpins === 0)
+const BIG = where((c) => pays(c) >= 200 && pays(c) < 1000 && c.scatters === 0)
 /** Fifty times the stake or more. */
-const HUGE = stopsWhere(shelf, (o) => o.multiple >= 1000 && o.freeSpins === 0)
-/** Three scatters and no line: 8 free spins. */
-const EIGHT = stopsWhere(shelf, (o) => o.freeSpins === 8 && o.multiple === 0)
+const HUGE = where((c) => pays(c) >= 1000 && c.scatters === 0)
+/** Three scatters and no line: 8 free spins, or a retrigger in a free spin. */
+const EIGHT = where((c) => c.scatters === 3 && pays(c) === 0)
+/** Three scatters, and lines of its own that pay less than the stake. */
+const EIGHT_SMALL = where((c) => c.scatters === 3 && pays(c) > 0 && pays(c) < 20)
+/** As a free spin, less than the stake. */
+const TINY = where((c) => freePays(c) > 0 && freePays(c) < 20 && c.scatters === 0)
+/** One scatter and no line: one meter point. */
+const ONE_SCATTER = where((c) => pays(c) === 0 && c.scatters === 1)
+/** A chain that wins, then leaves two scatters in its last window: two meter points once it has ended. */
+const METER_CHAIN = where((c) => wins(c) >= 1 && c.scatters === 2)
 /** Scatters on reels 1 and 4, nothing else. */
-const SCATTERS_1_4 = stopsWhere(shelf, (o, s) => o.multiple === 0 && sameReels(scatterReels(s), [true, false, false, true, false]))
+const SCATTERS_1_4 = where((c, s) => pays(c) === 0 && sameReels(scatterReels(s), [true, false, false, true, false]))
 /** Scatters on reels 1 and 2, nothing else: reels 3 to 5 turn in suspense. */
-const SCATTERS_1_2 = stopsWhere(shelf, (o, s) => o.multiple === 0 && sameReels(scatterReels(s), [true, true, false, false, false]))
+const SCATTERS_1_2 = where((c, s) => pays(c) === 0 && sameReels(scatterReels(s), [true, true, false, false, false]))
 /** Eight free spins: two pay well, one a little, the rest nothing. */
 const FREE = [LINES, BLANK, SMALL, BLANK, BLANK, BLANK, LINES, BLANK]
-/** Eight free spins, and lines of its own that pay less than the stake. */
-const EIGHT_SMALL = stopsWhere(shelf, (o) => o.freeSpins === 8 && o.multiple > 0 && o.multiple < 20)
-/** Less than half the stake, so even doubled in a free spin it stays below it. */
-const TINY = stopsWhere(shelf, (o) => o.multiple > 0 && o.multiple < 10 && o.freeSpins === 0)
 
 let ids = 100
-/** A round on Tranus's Shelf by Mounara, paying what its stops pay. */
+/** A round on Tranus's Shelf by Mounara, paying what the rules say its stops pay. */
 const roundOf = (stops: SlotStops, overrides: Partial<SlotSpinView> = {}): SlotSpinView => {
   const free = overrides.free ?? []
+  const meterFree = overrides.meterFree ?? []
+  const meterBefore = overrides.meterBefore ?? 0
   const stake = overrides.stake ?? 20
   return {
     id: ids++,
@@ -89,12 +120,17 @@ const roundOf = (stops: SlotStops, overrides: Partial<SlotSpinView> = {}): SlotS
     machine: 'shelf',
     stops,
     free,
+    meterFree,
+    meterBefore,
     stake,
-    payout: slotRoundPayout(shelf, { stops, free }, stake),
+    payout: (slotReplayRound(shelf, { stops, free, meterFree, meterBefore }).lineStakes * stake) / 20,
     jackpot: 0,
+    pots: { mini: 0, major: 0, giga: 0 },
     ...overrides,
   }
 }
+/** The meter a round leaves, by the rules. */
+const meterAfter = (spin: SlotSpinView) => slotReplayRound(shelf, spin).meterAfter
 
 const silverWallet = (silver: number): Wallet => ({ gold: Math.floor(silver / 1000), silver: silver % 1000, copper: 0 })
 const walletAfter = (spin: SlotSpinView) => silverWallet(BEFORE - spin.stake + spin.payout + spin.jackpot)
@@ -102,46 +138,48 @@ const walletAfter = (spin: SlotSpinView) => silverWallet(BEFORE - spin.stake + s
 const walletText = (spin: SlotSpinView) => silverText(BEFORE - spin.stake + spin.payout + spin.jackpot)
 
 /** What the API answers for a round by Mounara. */
-const result = (spin: SlotSpinView, overrides: Partial<SlotsState> = {}): SlotSpinResult => ({
-  spin,
-  wallet: walletAfter(spin),
-  state: state({ characters: [{ ...mounara, wallet: walletAfter(spin) }, busy], mine: [spin], ...overrides }),
-})
+const result = (spin: SlotSpinView, overrides: Partial<SlotsState> = {}): SlotSpinResult => {
+  const meter = { machine: spin.machine, stake: spin.stake, points: meterAfter(spin) }
+  return {
+    spin,
+    wallet: walletAfter(spin),
+    state: state({ characters: [{ ...mounara, wallet: walletAfter(spin) }, busy], mine: [spin], meters: [meter], daily: { limit: 1500, played: 1 }, ...overrides }),
+    meter,
+  }
+}
 
 const lineOf = (spin: SlotSpinView) => roundLine(spin, roundSpins(shelf, spin))
 const ROWS = ['top', 'middle', 'bottom']
-/** The reels' name at rest on `stops`. */
-const reelsName = (stops: SlotStops, machine: SlotMachine = shelf) => {
-  const window = slotWindow(machine, stops)
-  return `Reels: ${ROWS.map((name, row) => `${name} row ${window.map((rows) => machine.symbols[rows[row]].name).join(', ')}`).join('; ')}`
-}
+/** The reels' name showing `grid`. */
+const gridName = (grid: SlotGrid, machine: SlotMachine = shelf) =>
+  `Reels: ${ROWS.map((name, row) => `${name} row ${grid.map((rows) => machine.symbols[rows[row]].name).join(', ')}`).join('; ')}`
+/** The reels' name at rest on `stops`, before any step has fallen. */
+const reelsName = (stops: SlotStops, machine: SlotMachine = shelf) => gridName(slotWindow(machine, stops), machine)
+/** The reels' name at the end of the chain from `stops`: its last step. */
+const endName = (stops: SlotStops) => gridName(slotChain(shelf, stops).steps.at(-1)!.grid)
 
 const lost = result(roundOf(BLANK, { stake: 60 }))
 const lines = result(roundOf(LINES, { stake: 60 }))
 
-const pot: SlotJackpot = {
-  live: true,
-  pot: 31_420,
-  cap: 50_000,
-  floor: 5_000,
-  last: { character: 'Moosey', amount: 27_310, at: '2026-11-12T09:00:00.000Z' },
-}
-/** A lost round at 60 Silver that made the whole pot drop for Mounara. */
-const dropSpin = roundOf(BLANK, { stake: 60, jackpot: 50_002 })
-const dropped: SlotJackpot = { ...pot, pot: 0, last: { character: 'Mounara', amount: 50_002, at: '2026-11-15T10:05:00.000Z' } }
-const dropState = result(dropSpin, { jackpot: dropped })
-const banner = () => screen.getByRole('region', { name: 'Jackpot' })
-const pays = () => within(screen.getByRole('region', { name: 'What it pays' }))
-const JACKPOT_LINE = 'With the jackpot, the slots pay back everything staked, over time.'
+const AT = '2026-11-12T09:00:00.000Z'
+/** The three pots, Mini first; `change` replaces what it names. */
+const pots = (change: Partial<Record<SlotPot, Partial<SlotJackpotView>>> = {}): SlotJackpotView[] => [
+  { pot: 'mini', live: true, amount: 640, cap: 1_000, floor: 100, last: null, ...change.mini },
+  { pot: 'major', live: true, amount: 4_210, cap: 10_000, floor: 1_000, last: { character: 'Kael', amount: 9_870, at: AT }, ...change.major },
+  { pot: 'giga', live: true, amount: 31_420, cap: 50_000, floor: 5_000, last: { character: 'Moosey', amount: 27_310, at: AT }, ...change.giga },
+]
+const jackpots = () => screen.getByRole('region', { name: 'Jackpots' })
+const pot = (name: string) => within(jackpots()).getByRole('group', { name })
+const payTable = () => within(screen.getByRole('region', { name: 'What it pays' }))
 
 const open = (current: SlotsState = state(), extra: Parameters<typeof mockApi>[0] = {}) => {
   const fetchMock = mockApi({ 'GET /slots': () => json(200, current), ...extra })
   return { fetchMock, ...renderRoute('/slots', { me }) }
 }
 
-/** A server that answers each spin in turn, and afterwards serves the state that spin left. */
-function server(...results: SlotSpinResult[]) {
-  let current = state()
+/** A server that serves `first`, answers each spin in turn, and afterwards serves the state that spin left. */
+function serverFrom(first: SlotsState, ...results: SlotSpinResult[]) {
+  let current = first
   let spins = 0
   return {
     'GET /slots': () => json(200, current),
@@ -152,6 +190,7 @@ function server(...results: SlotSpinResult[]) {
     },
   }
 }
+const server = (...results: SlotSpinResult[]) => serverFrom(state(), ...results)
 
 /** Lets a poll reach the page: React Query tells it a moment after the answer. */
 async function poll(queryClient: ReturnType<typeof open>['queryClient']) {
@@ -177,12 +216,20 @@ const stakeNames = () =>
     .getAllByRole('radio')
     .map((radio) => radio.getAttribute('aria-label'))
 const reels = () => screen.getByRole('img', { name: /^Reels/ })
+const reelsLabel = () => reels().getAttribute('aria-label')
 const getGets = (fetchMock: ReturnType<typeof open>['fetchMock']) =>
   fetchMock.mock.calls.filter(([input, init]) => String(input) === '/api/slots' && !init?.method)
 const quickSwitch = () => screen.getByRole('button', { name: 'Quick spin' })
 const soundSwitch = () => screen.getByRole('button', { name: 'Sound' })
 const skipButton = () => screen.queryByRole('button', { name: 'Skip to the total' })
 const lastRounds = () => within(screen.getByRole('region', { name: 'Your last rounds' }))
+/** The multiplier on the cabinet, or null when none is shown. */
+const multiplier = () => within(reels()).queryByTestId('slot-multiplier')?.textContent ?? null
+/** "Meter 12 / 30" */
+const meterText = () => within(panel()).getByText(/^Meter \d+ \/ \d+$/).textContent
+/** The banner drawn over the window, if any. */
+const bannerText = () => within(reels()).queryByText(/free spins|^Meter full/)?.textContent ?? null
+const roundsLeft = () => within(panel()).queryByText(/rounds? left today$/)?.textContent ?? null
 
 /** The text a screen reader reads: icons and coin sprites read as their names. */
 function spoken(element: Element): string {
@@ -201,6 +248,12 @@ const winFigure = () => {
   const label = within(panel()).queryByText('Win', { selector: 'dt' })
   return label ? spoken(label.nextElementSibling!) : null
 }
+/** "1 Gold 260 Silver" as 1260. */
+const silverIn = (text: string) => {
+  const gold = /(\d+) Gold/.exec(text)
+  const silver = /(\d+) Silver/.exec(text)
+  return Number(gold?.[1] ?? 0) * 1000 + Number(silver?.[1] ?? 0)
+}
 
 /** A reel's strip of tiles, and how far it is moved down, in rows: tile n sits at row offset + n. */
 function strip(reel: number) {
@@ -209,8 +262,10 @@ function strip(reel: number) {
   return { element, offset: (percent / 100) * element.children.length }
 }
 
-/** The tile drawn in `row` (0 top, 1 middle, 2 bottom) of a reel. */
+/** The tile drawn in `row` (0 top, 1 middle, 2 bottom) of a reel: a step's when one is on the reels, else the strip's. */
 function tileAt(reel: number, row: number): HTMLElement {
+  const step = screen.queryByTestId(`step-${reel}`)
+  if (step) return step.children[row] as HTMLElement
   const { element, offset } = strip(reel)
   const index = row - offset
   // At rest the strip sits on whole rows.
@@ -229,7 +284,8 @@ const shownWindow = (machine: SlotMachine = shelf) =>
 
 /** The filter on a reel at full speed: the strongest of the page's vertical blurs. */
 const STRONGEST = `#${REEL_BLURS[REEL_BLURS.length - 1].id}`
-const allLit = () => screen.queryAllByTestId(/^reel-/).flatMap((reel) => [...reel.children].filter((tile) => (tile as HTMLElement).dataset.won))
+/** The lit tiles, on the strips and on a step. */
+const allLit = () => screen.queryAllByTestId(/^(reel|step)-/).flatMap((layer) => [...layer.children].filter((tile) => (tile as HTMLElement).dataset.won))
 /** The win lines drawn over the window. */
 const drawnLines = () => reels().querySelectorAll('polyline').length
 
@@ -242,6 +298,17 @@ function animate() {
 /** Moves the clock by `ms` at once: the reels' frames, but no part of the show that waits for the page to be drawn. */
 const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms))
 
+/**
+ * Waits for the reels to start turning, then lets React run the effects that come with it. Reels asks for its first
+ * frame in a passive effect, which React runs a moment after the page is drawn: under load the clock could
+ * otherwise be moved before any frame was asked for.
+ */
+async function reelsStarted() {
+  const turning = await screen.findByRole('img', { name: 'Reels, spinning' })
+  await act(async () => {})
+  return turning
+}
+
 /** Moves the clock in steps, drawing the page between them as a browser would: each spin of a round starts from a drawn page. */
 function run(ms: number, each?: () => void) {
   for (let t = 0; t < ms; t += 100) {
@@ -250,11 +317,20 @@ function run(ms: number, each?: () => void) {
   }
 }
 
+/** Moves the clock until `done`, in steps of `ms`, calling `each` after every one. */
+function until(done: () => boolean, each?: () => void, ms = 50) {
+  for (let t = 0; t < 180_000 && !done(); t += ms) {
+    advance(ms)
+    each?.()
+  }
+  expect(done()).toBe(true)
+}
+
 /** Moves the clock until the round has been shown and Spin is back, past the pause after the round. */
-function playOut(each?: () => void) {
+function playOut(each?: () => void, ms = 200) {
   const back = () => spinButton().textContent === 'Spin' && !spinButton().hasAttribute('aria-disabled')
-  for (let t = 0; t < 120_000 && !back(); t += 200) {
-    advance(200)
+  for (let t = 0; t < 180_000 && !back(); t += ms) {
+    advance(ms)
     each?.()
   }
   expect(spinButton()).toHaveTextContent('Spin')
@@ -267,6 +343,16 @@ function seen(read: () => string | null) {
   const look = () => {
     const text = read()
     if (text !== null && texts[texts.length - 1] !== text && !texts.includes(text)) texts.push(text)
+  }
+  return { texts, look }
+}
+
+/** Every change of what `read` gives over a run, in order: a text seen again after another is listed again. */
+function changes(read: () => string | null) {
+  const texts: (string | null)[] = []
+  const look = () => {
+    const text = read()
+    if (texts.length === 0 || texts[texts.length - 1] !== text) texts.push(text)
   }
   return { texts, look }
 }
@@ -301,6 +387,7 @@ function fakeSounds(muted = false) {
 
 const reelSounds = (calls: string[]) => calls.filter((call) => call === 'reelStop' || call.startsWith('scatter'))
 const WIN_SOUNDS = ['lineWin', 'win', 'bigWin', 'hugeWin', 'count']
+const POT_SOUNDS = ['jackpot', 'jackpotMajor', 'jackpotMini']
 
 describe('slots', () => {
   let calls: string[]
@@ -329,6 +416,9 @@ describe('slots', () => {
     // On a phone the tagline goes, and the sentence is shown under the machine, before everything below it.
     expect(screen.getByText('Three machines, one pull at a time.')).toHaveClass('hidden', 'sm:block')
     expect(screen.getByText("This is real gambling with your character's money. Each machine shows what it pays back.")).toHaveClass('order-1')
+    // On a screen too short for the full layout (from sm up, under 1000 px high) the page does the same.
+    expect(screen.getByRole('main')).toHaveClass('flex', 'sm:block', 'short:flex')
+    expect(screen.getByText('Three machines, one pull at a time.')).toHaveClass('short:hidden')
     for (const name of ['What it pays', 'Your last rounds', 'Big wins']) expect(screen.getByRole('region', { name }).closest('.order-2')).not.toBeNull()
     expect(tabNames()).toEqual(["Tranus's Shelf", 'The Armoury', "Dragon's Hoard"])
     expect(tab("Tranus's Shelf")).toHaveAttribute('aria-selected', 'true')
@@ -340,17 +430,21 @@ describe('slots', () => {
     expect(winFigure()).toBeNull()
     expect(quickSwitch()).toHaveAttribute('aria-pressed', 'false')
     expect(soundSwitch()).toHaveAttribute('aria-pressed', 'true')
+    // The meter for this machine and stake, at its own size; far from the daily limit nothing is said of it.
+    expect(meterText()).toBe(`Meter 0 / ${shelf.meterSize}`)
+    expect(roundsLeft()).toBeNull()
 
     // At rest on the machine's rest stops, with each strip's real neighbours above and below the middle row.
     expect(reels()).toHaveAccessibleName('Reels')
     expect(shownWindow()).toEqual(slotWindow(shelf, shelf.rest))
     expect(allLit()).toEqual([])
     expect(drawnLines()).toBe(0)
+    expect(multiplier()).toBeNull()
 
     // The pay table draws its own sentences.
-    expect(pays().getAllByRole('row')[1]).toHaveTextContent(shelf.symbols[7].name)
-    expect(pays().getByText(/^This machine pays back \d+\.\d% of what goes into it/)).toBeInTheDocument()
-    expect(pays().getByText(/^The most one paid spin can win at these stakes is/)).toBeInTheDocument()
+    expect(payTable().getAllByRole('row')[1]).toHaveTextContent(shelf.symbols[7].name)
+    expect(payTable().getByText(/^This machine pays back \d+\.\d% of what goes into it/)).toBeInTheDocument()
+    expect(payTable().getByText(/^The most one paid spin can win at these stakes is/)).toBeInTheDocument()
   })
 
   it('offers offline characters and marks one in the game', async () => {
@@ -371,10 +465,16 @@ describe('slots', () => {
     expect(wallet()).toBe('900 Silver')
   })
 
-  it("switches machine and shows that machine's stakes and payout table", async () => {
-    const { user } = open()
+  it("switches machine and shows that machine's stakes, meter and payout table", async () => {
+    const meters = [
+      { machine: 'shelf' as const, stake: 20, points: 4 },
+      { machine: 'armoury' as const, stake: 40, points: 11 },
+      { machine: 'armoury' as const, stake: 100, points: 27 },
+    ]
+    const { user } = open(state({ meters }))
     await loaded()
     const armoury = SLOT_MACHINES[1]
+    expect(meterText()).toBe(`Meter 4 / ${shelf.meterSize}`)
 
     await user.click(tab('The Armoury'))
 
@@ -382,15 +482,20 @@ describe('slots', () => {
     expect(panel()).toHaveAccessibleName('The Armoury')
     expect(stakeNames()).toEqual(['40 Silver', '60 Silver', '100 Silver'])
     expect(stake('40 Silver')).toBeChecked()
+    expect(meterText()).toBe(`Meter 11 / ${armoury.meterSize}`)
     expect(reels()).toHaveAccessibleName('Reels')
     expect(shownWindow(armoury)).toEqual(slotWindow(armoury, armoury.rest))
     // The money in the table follows the stake: the top prize for five is that many line stakes.
-    const top = () => pays().getAllByRole('row')[1]
+    const top = () => payTable().getAllByRole('row')[1]
     expect(top()).toHaveTextContent(armoury.symbols[7].name)
     expect(top()).toHaveTextContent(silverText((armoury.pays[7][2] * 40) / 20))
 
+    // One meter for each stake.
     await user.click(stake('100 Silver'))
     expect(top()).toHaveTextContent(silverText((armoury.pays[7][2] * 100) / 20))
+    expect(meterText()).toBe(`Meter 27 / ${armoury.meterSize}`)
+    await user.click(stake('60 Silver'))
+    expect(meterText()).toBe(`Meter 0 / ${armoury.meterSize}`)
 
     await user.click(tab("Dragon's Hoard"))
     expect(stakeNames()).toEqual(['60 Silver', '100 Silver', '200 Silver'])
@@ -451,12 +556,12 @@ describe('slots', () => {
     await user.click(stake('60 Silver'))
     animate()
     const times = reelTimes(scatterReels(LINES), false)
-    const outcome = roundSpins(shelf, lines.spin)[0].outcome
+    const first = roundSpins(shelf, lines.spin)[0].steps[0]
 
     await user.click(spinButton())
 
-    expect(await screen.findByRole('img', { name: 'Reels, spinning' })).toBeInTheDocument()
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60 }])
+    expect(await reelsStarted()).toBeInTheDocument()
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60, rules: 3 }])
     expect(status()).toHaveTextContent('Good luck...')
     // A press now stops the reels: it never sends another spin.
     expect(spinButton()).toHaveTextContent('Stop')
@@ -489,22 +594,24 @@ describe('slots', () => {
     expect(allLit()).toEqual([])
     expect(drawnLines()).toBe(0)
 
-    // All five have stopped: the winning tiles light and the first line is drawn. The money still waits.
+    // All five have stopped: the first step's winning tiles light and its first line is drawn. The money still waits.
     advance((times[4] - times[0]) * 1000)
     expect(reels()).toHaveAccessibleName(reelsName(LINES))
     expect(shownWindow()).toEqual(slotWindow(shelf, LINES))
-    expect(allLit()).toHaveLength(wonTiles(outcome).length)
+    expect(allLit()).toHaveLength(wonTiles(first).length)
     expect(drawnLines()).toBe(1)
     expect(calls).toContain('lineWin 0')
+    expect(multiplier()).toBe('x1')
     expect(wallet()).toBe('5 Gold 190 Silver')
     expect(status()).toHaveTextContent('Good luck...')
 
     playOut()
 
     expect(status()).toHaveTextContent(lineOf(lines.spin))
-    expect(status()).toHaveTextContent(`${outcome.lines.length} lines won.`)
-    expect(drawnLines()).toBe(outcome.lines.length)
-    expect(allLit()).toHaveLength(wonTiles(outcome).length)
+    expect(status()).toHaveTextContent(`${first.lines.length} lines won.`)
+    // The winning tiles burst and the reels end on the step that won nothing.
+    expect(reels()).toHaveAccessibleName(endName(LINES))
+    expect(drawnLines()).toBe(0)
     expect(winFigure()).toBe(silverText(lines.spin.payout))
     expect(wallet()).toBe(walletText(lines.spin))
     expect(spinButton()).toHaveTextContent('Spin')
@@ -532,21 +639,20 @@ describe('slots', () => {
     expect(wallet()).toBe('5 Gold 190 Silver')
   })
 
-  it('says how many lines won, and draws them', async () => {
+  it('says how many lines won, and ends on the step after them', async () => {
     open(state(), server(lines))
     await loaded()
     fireEvent.click(stake('60 Silver'))
 
     fireEvent.click(spinButton())
 
-    expect(await screen.findByRole('img', { name: reelsName(LINES) })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: endName(LINES) })).toBeInTheDocument()
     await settled()
-    const outcome = roundSpins(shelf, lines.spin)[0].outcome
-    expect(status()).toHaveTextContent(`${outcome.lines.length} lines won. You won ${silverText(lines.spin.payout)} on a stake of 60 Silver.`)
+    const first = roundSpins(shelf, lines.spin)[0].steps[0]
+    expect(status()).toHaveTextContent(`${first.lines.length} lines won. You won ${silverText(lines.spin.payout)} on a stake of 60 Silver.`)
     // A win of the stake or more is told in bold.
     expect(within(status()).getByText(lineOf(lines.spin))).toHaveClass('font-bold')
-    expect(allLit()).toHaveLength(wonTiles(outcome).length)
-    expect(drawnLines()).toBe(outcome.lines.length)
+    expect(shownWindow()).toEqual(slotChain(shelf, LINES).steps.at(-1)!.grid)
     expect(winFigure()).toBe(silverText(lines.spin.payout))
     expect(wallet()).toBe(walletText(lines.spin))
   })
@@ -558,14 +664,15 @@ describe('slots', () => {
 
     fireEvent.click(spinButton())
     fireEvent.click(spinButton())
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
     // Stops the reels; the space bar while they settle does nothing more.
     await user.click(spinButton())
     fireEvent.keyDown(document.body, { key: ' ' })
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
 
     // The lines are showing. A held key is not a press; a new press ends the show and sends nothing.
-    run(1000)
+    run(500)
+    expect(drawnLines()).toBeGreaterThan(0)
     expect(spinButton()).toHaveTextContent('Stop')
     fireEvent.keyDown(document.body, { key: ' ', repeat: true })
     expect(spinButton()).toHaveTextContent('Stop')
@@ -581,7 +688,7 @@ describe('slots', () => {
 
     fireEvent.keyDown(document.body, { key: ' ' })
     await screen.findByRole('img', { name: /^Reels: / })
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 20 }])
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 20, rules: 3 }])
     expect(await screen.findByRole('button', { name: 'Spin' })).toBeEnabled()
 
     // The key is still down: the browser repeats it, and that is not a new pull.
@@ -591,7 +698,7 @@ describe('slots', () => {
 
     await ready()
     fireEvent.keyDown(document.body, { key: ' ' })
-    await screen.findByRole('img', { name: reelsName(LINES) })
+    await screen.findByRole('img', { name: endName(LINES) })
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
   })
 
@@ -603,7 +710,7 @@ describe('slots', () => {
 
     // Down, three repeats, then up: the first is a press, and starts the round.
     await user.keyboard('{Enter>4/}')
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
     expect(spinButton()).toHaveTextContent('Stop')
 
@@ -657,7 +764,7 @@ describe('slots', () => {
 
     await act(async () => answer(json(200, lines)))
 
-    expect(await screen.findByRole('img', { name: reelsName(LINES) })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: endName(LINES) })).toBeInTheDocument()
     expect(wallet()).toBe(walletText(lines.spin))
     expect(lastRounds().getAllByRole('listitem')).toHaveLength(1)
   })
@@ -702,6 +809,37 @@ describe('slots', () => {
     expect(wallet()).toBe('5 Gold 250 Silver')
     expect(spinButton()).toBeEnabled()
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+  })
+
+  it('a changed meter refusal reloads the state and the next press plays', async () => {
+    let loads = 0
+    let spins = 0
+    const moved = state({ meters: [{ machine: 'shelf', stake: 20, points: 7 }] })
+    const next = result(roundOf(BLANK, { meterBefore: 7 }))
+    const { user, fetchMock } = open(state(), {
+      // Another tab of the same account played the same machine and stake meanwhile.
+      'GET /slots': () => json(200, ++loads === 1 ? state({ meters: [{ machine: 'shelf', stake: 20, points: 6 }] }) : moved),
+      'POST /slots/spin': () =>
+        spins++ === 0 ? json(409, { statusCode: 409, message: 'Your meter changed. Press Spin again.' }) : json(200, next),
+    })
+    await loaded()
+    expect(meterText()).toBe('Meter 6 / 30')
+
+    await user.click(spinButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your meter changed. Press Spin again.')
+    expect(calls).toEqual(['unlock', 'press', 'refused'])
+    await waitFor(() => expect(meterText()).toBe('Meter 7 / 30'))
+    expect(getGets(fetchMock)).toHaveLength(2)
+    expect(wallet()).toBe('5 Gold 250 Silver')
+    expect(reels()).toHaveAccessibleName('Reels')
+
+    await user.click(spinButton())
+    expect(await screen.findByRole('img', { name: reelsName(BLANK) })).toBeInTheDocument()
+    await settled()
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(status()).toHaveTextContent(lineOf(next.spin))
   })
 
   it('keeps a chosen character that went into the game, and says so', async () => {
@@ -777,7 +915,7 @@ describe('slots', () => {
 
     await user.click(spinButton())
 
-    await screen.findByRole('img', { name: reelsName(LINES) })
+    await screen.findByRole('img', { name: endName(LINES) })
     const line = lineOf(lines.spin)
     const note = 'The slots are not open yet. Have a look at the machines: they open soon.'
     expect(status()).toHaveTextContent(line)
@@ -798,12 +936,13 @@ describe('slots', () => {
 
     await user.click(spinButton())
 
-    const spinning = await screen.findByRole('img', { name: 'Reels, spinning' })
+    const spinning = await reelsStarted()
     expect(scrolled).toHaveBeenCalledTimes(1)
     // The cabinet down to the status line, so on a phone Spin and the result are in view with the reels.
     const shown = scrolled.mock.contexts[0] as Element
     expect(shown).toContainElement(spinning)
     expect(shown).toContainElement(screen.getByRole('radiogroup', { name: 'Stake' }))
+    expect(shown).toContainElement(screen.getByRole('progressbar', { name: 'Meter' }))
     expect(shown).toContainElement(spinButton())
     expect(shown).toContainElement(status())
     expect(scrolled).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' })
@@ -821,7 +960,7 @@ describe('slots', () => {
     await user.click(stake('60 Silver'))
     animate()
     await user.click(spinButton())
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
 
     // Straight on the tab, as if it had kept the focus when it was turned off.
     fireEvent.keyDown(tab("Tranus's Shelf"), { key: 'ArrowRight' })
@@ -831,8 +970,22 @@ describe('slots', () => {
     expect(localStorage.getItem('slots.machine')).toBeNull()
 
     playOut()
-    expect(reels()).toHaveAccessibleName(reelsName(LINES))
+    expect(reels()).toHaveAccessibleName(endName(LINES))
     expect(status()).toHaveTextContent(lineOf(lines.spin))
+  })
+
+  it('shows a machine played earlier at the step its last round ended on', async () => {
+    const { user } = open(state(), server(lines))
+    await loaded()
+    await user.click(stake('60 Silver'))
+    await user.click(spinButton())
+    await screen.findByRole('img', { name: endName(LINES) })
+    await settled()
+
+    await user.click(tab('The Armoury'))
+    expect(reels()).toHaveAccessibleName('Reels')
+    await user.click(tab("Tranus's Shelf"))
+    expect(reels()).toHaveAccessibleName(endName(LINES))
   })
 
   it('does not bring back a stake the machine dropped once it is offered again', async () => {
@@ -882,7 +1035,7 @@ describe('slots', () => {
       expect(spinButton()).toBeEnabled()
       await user.click(spinButton())
       await screen.findByRole('img', { name: /^Reels: / })
-      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 100 }])
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 100, rules: 3 }])
     })
 
     it('picks the new lowest, and says so, when it is no higher than the stake the player had', async () => {
@@ -931,7 +1084,7 @@ describe('slots', () => {
       await user.click(stake('60 Silver'))
       animate()
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
 
       current = { ...moved, characters: lines.state.characters, mine: lines.state.mine }
       await poll(queryClient)
@@ -941,7 +1094,7 @@ describe('slots', () => {
 
       playOut()
 
-      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60 }])
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60, rules: 3 }])
       expect(stake('20 Silver')).toBeChecked()
       const line = lineOf(lines.spin)
       const note = 'The stakes on this machine changed. Your stake is now 20 Silver.'
@@ -960,7 +1113,7 @@ describe('slots', () => {
     await user.keyboard(' ')
 
     await screen.findByRole('img', { name: /^Reels: / })
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 40 }])
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 40, rules: 3 }])
   })
 
   it('takes the stake from the wallet at the press, and puts it back when the spin is refused', async () => {
@@ -1020,17 +1173,308 @@ describe('slots', () => {
     expect(status()).toHaveTextContent('Not enough money in that wallet for this stake.')
   })
 
+  describe('the daily limit', () => {
+    const DONE = "You have played today's 1,500 rounds. The slots open again for you tomorrow."
+
+    it('shows rounds left near the limit and switches Spin off at 0', async () => {
+      let current = state({ daily: { limit: 1500, played: 1299 } })
+      const last = result(roundOf(BLANK), { daily: { limit: 1500, played: 1500 } })
+      const { user, queryClient, fetchMock } = open(current, {
+        'GET /slots': () => json(200, current),
+        'POST /slots/spin': () => {
+          current = last.state
+          return json(200, last)
+        },
+      })
+      await loaded()
+      // 201 left: nothing is said yet.
+      expect(roundsLeft()).toBeNull()
+
+      current = state({ daily: { limit: 1500, played: 1300 } })
+      await poll(queryClient)
+      expect(roundsLeft()).toBe('200 rounds left today')
+      // Under Spin.
+      expect(spinButton().compareDocumentPosition(within(panel()).getByText('200 rounds left today')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+      current = state({ daily: { limit: 1500, played: 1499 } })
+      await poll(queryClient)
+      expect(roundsLeft()).toBe('1 round left today')
+      expect(spinButton()).toBeEnabled()
+
+      // The last round of the day plays, and then Spin is off.
+      await user.click(spinButton())
+      await screen.findByRole('img', { name: reelsName(BLANK) })
+      await settled()
+      expect(roundsLeft()).toBe('0 rounds left today')
+      expect(spinButton()).toBeDisabled()
+      expect(status()).toHaveTextContent(lineOf(last.spin))
+      expect(status()).toHaveTextContent(DONE)
+      await ready()
+      fireEvent.keyDown(document.body, { key: ' ' })
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+    })
+
+    it('a daily refusal says so, and the page then shows no rounds left and Spin off', async () => {
+      let loads = 0
+      const { user, fetchMock } = open(state(), {
+        'GET /slots': () => json(200, ++loads === 1 ? state({ daily: { limit: 1500, played: 1499 } }) : state({ daily: { limit: 1500, played: 1500 } })),
+        // Another tab played the last round first.
+        'POST /slots/spin': () => json(403, { statusCode: 403, message: DONE }),
+      })
+      await loaded()
+
+      await user.click(spinButton())
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(DONE)
+      expect(calls).toEqual(['unlock', 'press', 'refused'])
+      await waitFor(() => expect(roundsLeft()).toBe('0 rounds left today'))
+      expect(spinButton()).toBeDisabled()
+      // Said once, not twice.
+      expect(within(panel()).getAllByText(DONE)).toHaveLength(1)
+      expect(wallet()).toBe('5 Gold 250 Silver')
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+    })
+  })
+
   // A round with free spins runs a minute of clock, drawn step by step.
-  describe('a round', { timeout: 30_000 }, () => {
+  describe('a round', { timeout: 60_000 }, () => {
     /** Eight free spins at 20 Silver: the paid spin wins nothing itself. */
     const freeSpin = () => roundOf(EIGHT, { free: FREE })
 
-    it('holds the wallet and the pot until the whole round, free spins included, has been shown', async () => {
-      const spin = freeSpin()
-      const answer = result(spin, { jackpot: { ...pot, pot: 31_423 } })
+    it("shows a chain step by step, each step's lines and win only once that step has landed", async () => {
+      const spin = roundOf(CHAIN)
+      const { user } = open(state(), server(result(spin)))
+      await loaded()
+      animate()
+      const [paid] = roundSpins(shelf, spin)
+      const names = paid.steps.map((step) => gridName(step.grid))
+      expect(paid.steps.filter((step) => step.lines.length > 0).length).toBeGreaterThanOrEqual(2)
+
+      await user.click(spinButton())
+      await reelsStarted()
+      const labels = changes(reelsLabel)
+      // The step on the reels: the latest whose grid has been seen.
+      let landed = -1
+      playOut(() => {
+        labels.look()
+        const label = reelsLabel()
+        const k = names.indexOf(label!, Math.max(landed, 0))
+        if (k >= 0) landed = k
+        const figure = winFigure()
+        if (label === 'Reels, spinning' || label === 'Reels, tiles falling') {
+          // Between steps nothing of either is drawn.
+          expect(drawnLines()).toBe(0)
+          expect(allLit()).toEqual([])
+        }
+        if (label === 'Reels, spinning') expect(figure).toBeNull()
+        if (k >= 0 && drawnLines() > 0) {
+          expect(allLit()).toHaveLength(wonTiles(paid.steps[k]).length)
+          expect(drawnLines()).toBeLessThanOrEqual(paid.steps[k].lines.length)
+        }
+        // The figure never runs ahead of the step on the reels.
+        if (figure !== null) expect(silverIn(figure)).toBeLessThanOrEqual(paid.steps[Math.max(landed, 0)].total)
+      }, 50)
+
+      // The strips stop on step 1; each later step's tiles fall in before it is read.
+      expect(labels.texts).toEqual(['Reels, spinning', names[0], ...names.slice(1).flatMap((name) => ['Reels, tiles falling', name])])
+      expect(winFigure()).toBe(silverText(spin.payout))
+      expect(status()).toHaveTextContent(lineOf(spin))
+      expect(status()).toHaveTextContent(/^A chain of \d+\./)
+    })
+
+    it('shows the step multiplier on the cabinet, x1 then x2', async () => {
+      const spin = roundOf(CHAIN)
+      const { user } = open(state(), server(result(spin)))
+      await loaded()
+      animate()
+      const [paid] = roundSpins(shelf, spin)
+      const won = paid.steps.filter((step) => step.lines.length > 0)
+
+      await user.click(spinButton())
+      await reelsStarted()
+      expect(multiplier()).toBeNull()
+      const shown = changes(multiplier)
+      const names = paid.steps.map((step) => gridName(step.grid))
+      let landed = -1
+      playOut(() => {
+        shown.look()
+        const k = names.indexOf(reelsLabel()!, Math.max(landed, 0))
+        if (k >= 0) landed = k
+        // Each multiplier with its own step: x2 never before step 2 has landed.
+        const text = multiplier()
+        if (text !== null) expect(landed).toBeGreaterThanOrEqual(Number(text.slice(1)) - 1)
+      }, 50)
+
+      expect(shown.texts).toEqual([null, ...won.map((step) => `x${step.times}`), null])
+      expect(shown.texts.slice(1, 3)).toEqual(['x1', 'x2'])
+    })
+
+    it("a press during a chain jumps to the end of that spin's chain with the right total", async () => {
+      // A free spin's chain is cut short and the free spins go on; a lone paid spin's chain cut short ends the round.
+      const free = [CHAIN3, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK]
+      const freeRound = roundOf(EIGHT, { free })
+      const alone = roundOf(CHAIN3)
+      const { user, fetchMock } = open(state(), server(result(freeRound), result(alone)))
+      await loaded()
+      animate()
+      const spins = roundSpins(shelf, freeRound)
+      const chain = spins[1]
+      expect(chain.steps.filter((step) => step.lines.length > 0).length).toBeGreaterThanOrEqual(3)
+
+      await user.click(spinButton())
+      await reelsStarted()
+      // To free spin 1's first step, its lines showing.
+      until(() => status().textContent === 'Free spin 1 of 8' && reelsLabel() === gridName(chain.steps[0].grid) && drawnLines() > 0)
+      fireEvent.click(spinButton())
+
+      // Its last step at once, every step's win in the figure; the free spins carry on by themselves.
+      expect(reels()).toHaveAccessibleName(gridName(chain.steps.at(-1)!.grid))
+      expect(winFigure()).toBe(silverText(chain.total))
+      expect(spinButton()).toHaveTextContent('Stop')
+      // The multiplier climbed with every step that won, the skipped ones too.
+      until(() => status().textContent === 'Free spin 2 of 8')
+      const lastWin = chain.steps.filter((step) => step.lines.length > 0).at(-1)!
+      expect(multiplier()).toBe(`x${Math.min(lastWin.times + 1, 10)}`)
+      playOut()
+      expect(winFigure()).toBe(silverText(freeRound.payout))
+      expect(status()).toHaveTextContent(lineOf(freeRound))
+
+      // A lone paid spin: the press ends the round on the chain's last step, with its whole win.
+      const [paid] = roundSpins(shelf, alone)
+      await user.click(spinButton())
+      await reelsStarted()
+      until(() => reelsLabel() === gridName(paid.steps[0].grid) && drawnLines() > 0)
+      fireEvent.click(spinButton())
+
+      expect(reels()).toHaveAccessibleName(gridName(paid.steps.at(-1)!.grid))
+      expect(spinButton()).toHaveTextContent('Spin')
+      expect(winFigure()).toBe(silverText(alone.payout))
+      expect(status()).toHaveTextContent(lineOf(alone))
+      expect(wallet()).toBe(walletText(alone))
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
+    })
+
+    it("adds meter points only after the paid spin's chain has ended", async () => {
+      const spin = roundOf(METER_CHAIN, { meterBefore: 5 })
+      const [paid] = roundSpins(shelf, spin)
+      expect(paid.scatters).toBe(2)
+      const before = state({ meters: [{ machine: 'shelf', stake: 20, points: 5 }] })
+      const { user } = open(before, serverFrom(before, result(spin)))
+      await loaded()
+      animate()
+      expect(meterText()).toBe('Meter 5 / 30')
+      const end = gridName(paid.steps.at(-1)!.grid)
+
+      await user.click(spinButton())
+      await reelsStarted()
+      const meters = seen(meterText)
+      playOut(() => {
+        meters.look()
+        // Not at a reel's stop, nor at a step: a later step could still have brought a third scatter.
+        if (calls.some((call) => call.startsWith('meterPoint')) || meterText() !== 'Meter 5 / 30') expect(reels()).toHaveAccessibleName(end)
+      }, 50)
+
+      expect(meters.texts).toEqual(['Meter 5 / 30', 'Meter 6 / 30', 'Meter 7 / 30'])
+      expect(calls.filter((call) => call.startsWith('meterPoint'))).toEqual(['meterPoint 6', 'meterPoint 7'])
+      expect(calls).not.toContain('meterFull')
+      // Once the round has been shown, the meter is the one the server keeps.
+      expect(meterText()).toBe(`Meter ${meterAfter(spin)} / 30`)
+    })
+
+    it('plays meter free spins after a full meter, with their banner', async () => {
+      const meterFree = [LINES, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK]
+      const spin = roundOf(ONE_SCATTER, { meterBefore: 29, meterFree })
+      expect(meterAfter(spin)).toBe(0)
+      const before = state({ meters: [{ machine: 'shelf', stake: 20, points: 29 }] })
+      const { user, fetchMock } = open(before, serverFrom(before, result(spin)))
+      await loaded()
+      animate()
+      const spins = roundSpins(shelf, spin)
+
+      await user.click(spinButton())
+      await reelsStarted()
+      const told = seen(() => status().textContent)
+      const banners = seen(bannerText)
+      const meters = seen(meterText)
+      playOut(() => {
+        told.look()
+        banners.look()
+        meters.look()
+      })
+
+      expect(banners.texts).toEqual([
+        'Meter full: 8 free spins',
+        '8 free spins. The multiplier climbs.',
+        `8 free spins won ${silverText(spin.payout - spins[0].won)}.`,
+      ])
+      expect(meters.texts).toEqual(['Meter 29 / 30', 'Meter 30 / 30', 'Meter 0 / 30'])
+      expect(told.texts.filter((text) => text.startsWith('Free spin'))).toEqual(Array.from({ length: 8 }, (_, i) => `Free spin ${i + 1} of 8`))
+      // The meter fills, then its free spins start: each heard once, in that order.
+      const meterFull = calls.indexOf('meterFull')
+      expect(calls.filter((call) => call === 'meterFull')).toHaveLength(1)
+      expect(calls.filter((call) => call === 'freeStart')).toHaveLength(1)
+      expect(meterFull).toBeGreaterThan(calls.indexOf('meterPoint 30'))
+      expect(calls.indexOf('freeStart')).toBeGreaterThan(meterFull)
+      expect(calls.filter((call) => call === 'spinning true')).toHaveLength(9)
+      expect(status()).toHaveTextContent(lineOf(spin))
+      expect(winFigure()).toBe(silverText(spin.payout))
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
+    })
+
+    it('carries the climbing multiplier across free spins and shows a retrigger', async () => {
+      // Free spin 3 shows three scatters: 5 more, 13 in all.
+      const free = [CHAIN, LINES, EIGHT, ...Array<SlotStops>(10).fill(BLANK)]
+      const spin = roundOf(EIGHT, { free })
+      const spins = roundSpins(shelf, spin)
+      expect(spins[3].added).toBe(5)
+      const { user } = open(state(), server(result(spin)))
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await reelsStarted()
+      const told = seen(() => status().textContent)
+      const banners = seen(bannerText)
+      const shown = changes(multiplier)
+      let retold = false
+      playOut(() => {
+        told.look()
+        banners.look()
+        shown.look()
+        retold ||= bannerText() === '+5 free spins'
+        // The spins it adds are told only with its banner.
+        if (!retold) expect(status().textContent).not.toMatch(/of 13$/)
+      })
+
+      expect(banners.texts).toEqual(['8 free spins. The multiplier climbs.', '+5 free spins', `13 free spins won ${silverText(spin.payout)}.`])
+      expect(told.texts.filter((text) => text.startsWith('Free spin'))).toEqual([
+        'Free spin 1 of 8',
+        'Free spin 2 of 8',
+        'Free spin 3 of 8',
+        'Free spin 3 of 13',
+        ...Array.from({ length: 10 }, (_, i) => `Free spin ${i + 4} of 13`),
+      ])
+      expect(calls.filter((call) => call === 'retrigger')).toHaveLength(1)
+      // From x2, up one after every win, carried from one free spin to the next and never back down.
+      const climbed = shown.texts.filter((text): text is string => text !== null).map((text) => Number(text.slice(1)))
+      expect(climbed[0]).toBe(2)
+      expect(climbed).toEqual([...climbed].sort((a, b) => a - b))
+      const winning = spins.slice(1).flatMap((s) => s.steps.filter((step) => step.lines.length > 0))
+      expect(Math.max(...climbed)).toBe(Math.min(winning.at(-1)!.times + 1, 10))
+      expect(climbed).toEqual(expect.arrayContaining(winning.map((step) => step.times)))
+      expect(winFigure()).toBe(silverText(spin.payout))
+      expect(status()).toHaveTextContent(lineOf(spin))
+    })
+
+    it('holds the wallet, the pots and the meter until the whole round has been shown', async () => {
+      // A lost round at a meter of 3: it feeds the pots and its two scatters go into the meter.
+      const spin = roundOf(SCATTERS_1_2, { meterBefore: 3 })
+      expect(meterAfter(spin)).toBe(5)
+      const before = state({ jackpots: pots(), meters: [{ machine: 'shelf', stake: 20, points: 3 }] })
+      const answer = result(spin, { jackpots: pots({ mini: { amount: 641 }, major: { amount: 4_211 }, giga: { amount: 31_421 } }) })
       let spun = false
-      const { user, queryClient } = open(state({ jackpot: pot }), {
-        'GET /slots': () => json(200, spun ? answer.state : state({ jackpot: pot })),
+      const { user, queryClient } = open(before, {
+        'GET /slots': () => json(200, spun ? answer.state : before),
         'POST /slots/spin': () => {
           spun = true
           return json(200, answer)
@@ -1040,29 +1484,100 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const held = () => {
         expect(wallet()).toBe('5 Gold 230 Silver')
-        expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
+        expect(within(pot('Mini')).getByText('640 Silver')).toBeInTheDocument()
+        expect(within(pot('Major')).getByText('4 Gold 210 Silver')).toBeInTheDocument()
+        expect(within(pot('Giga')).getByText('31 Gold 420 Silver')).toBeInTheDocument()
         expect(lastRounds().queryAllByRole('listitem')).toHaveLength(0)
       }
       held()
       await poll(queryClient)
       held()
-
-      // Through the free spins, and up to the last one: nothing of the money moves.
-      run(100, held)
-      for (let t = 0; t < 120_000 && !status().textContent!.includes('Free spin 8 of 8'); t += 100) {
-        advance(100)
+      // The meter too, until the chain has ended: then its points arrive one by one.
+      until(() => reelsLabel() !== 'Reels, spinning', () => {
         held()
+        expect(meterText()).toBe('Meter 3 / 30')
+      })
+      playOut(() => {
+        if (spinButton().textContent === 'Stop') held()
+      }, 50)
+
+      // Only now.
+      await waitFor(() => expect(wallet()).toBe(walletText(spin)))
+      expect(within(pot('Mini')).getByText('641 Silver')).toBeInTheDocument()
+      expect(within(pot('Giga')).getByText('31 Gold 421 Silver')).toBeInTheDocument()
+      expect(meterText()).toBe('Meter 5 / 30')
+      expect(lastRounds().getAllByRole('listitem')[0]).toHaveTextContent(roundListLine(shelf, spin))
+    })
+
+    it('holds the wallet and the pots through free spins, up to the last one', async () => {
+      const spin = freeSpin()
+      const answer = result(spin, { jackpots: pots() })
+      let spun = false
+      const before = state({ jackpots: pots({ giga: { amount: 31_000 } }) })
+      const { user, queryClient } = open(before, {
+        'GET /slots': () => json(200, spun ? answer.state : before),
+        'POST /slots/spin': () => {
+          spun = true
+          return json(200, answer)
+        },
+      })
+      await loaded()
+      animate()
+
+      await user.click(spinButton())
+      await reelsStarted()
+      const held = () => {
+        expect(wallet()).toBe('5 Gold 230 Silver')
+        expect(within(pot('Giga')).getByText('31 Gold')).toBeInTheDocument()
+        expect(lastRounds().queryAllByRole('listitem')).toHaveLength(0)
       }
-      expect(status()).toHaveTextContent('Free spin 8 of 8')
+      await poll(queryClient)
+      until(() => status().textContent === 'Free spin 8 of 8', held, 100)
       playOut()
 
       expect(wallet()).toBe(walletText(spin))
-      expect(await within(banner()).findByText('31 Gold 423 Silver')).toBeInTheDocument()
+      expect(await within(pot('Giga')).findByText('31 Gold 420 Silver')).toBeInTheDocument()
       expect(lastRounds().getAllByRole('listitem')[0]).toHaveTextContent(roundListLine(shelf, spin))
       expect(status()).toHaveTextContent(lineOf(spin))
+    })
+
+    it("sounds a burst for each later step, and never before that step", async () => {
+      const spin = roundOf(CHAIN3)
+      const { user } = open(state(), server(result(spin), lost))
+      await loaded()
+      animate()
+      const [paid] = roundSpins(shelf, spin)
+      const names = paid.steps.map((step) => gridName(step.grid))
+
+      await user.click(spinButton())
+      await reelsStarted()
+      let landed = -1
+      let bursts = 0
+      playOut(() => {
+        const label = reelsLabel()
+        const k = names.indexOf(label!, Math.max(landed, 0))
+        if (k >= 0) landed = k
+        const now = calls.filter((call) => call.startsWith('burst'))
+        if (now.length > bursts) {
+          // Its tiles are going this moment, and the step they won in has had its lines shown.
+          expect(label).toBe('Reels, tiles falling')
+          expect(now).toEqual(Array.from({ length: now.length }, (_, j) => `burst ${j}`))
+          expect(now.length).toBe(landed + 1)
+          bursts = now.length
+        }
+      }, 50)
+
+      // One for every step after the first, in order, each a step higher.
+      expect(calls.filter((call) => call.startsWith('burst'))).toEqual(Array.from({ length: paid.steps.length - 1 }, (_, j) => `burst ${j}`))
+      // A round that wins nothing has no step after the first, so no burst.
+      calls.length = 0
+      await user.click(spinButton())
+      await reelsStarted()
+      playOut()
+      expect(calls.filter((call) => call.startsWith('burst'))).toEqual([])
     })
 
     it('plays eight free spins by themselves after one press and sends one request', async () => {
@@ -1074,10 +1589,10 @@ describe('slots', () => {
       const freeWon = spin.payout - spins[0].won
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const told = seen(() => status().textContent)
       // Drawn over the window.
-      const banners = seen(() => within(reels()).queryByText(/free spins/)?.textContent ?? null)
+      const banners = seen(bannerText)
       const figures = seen(winFigure)
       playOut(() => {
         told.look()
@@ -1087,20 +1602,20 @@ describe('slots', () => {
 
       expect(told.texts.filter((text) => text.startsWith('Free spin'))).toEqual(Array.from({ length: 8 }, (_, i) => `Free spin ${i + 1} of 8`))
       expect(told.texts[0]).toBe('Good luck...')
-      expect(banners.texts).toEqual(['8 free spins. Every win is doubled.', `8 free spins won ${silverText(freeWon)}.`])
-      // The Win figure goes up with each winning spin: doubled, as the round adds it.
-      const runningTotals = [...new Set(spins.filter((s) => s.won > 0).map((s) => silverText(s.total)))]
+      expect(banners.texts).toEqual(['8 free spins. The multiplier climbs.', `8 free spins won ${silverText(freeWon)}.`])
+      // The Win figure goes up with each winning step, as the round adds it.
+      const runningTotals = [...new Set(spins.flatMap((s) => s.steps.filter((step) => step.won > 0).map((step) => silverText(step.total))))]
       for (const total of runningTotals) expect(figures.texts).toContain(total)
       expect(status()).toHaveTextContent(lineOf(spin))
       expect(status()).toHaveTextContent(`8 free spins won you ${silverText(freeWon)}. You won ${silverText(spin.payout)} in all on a stake of 20 Silver.`)
-      expect(reels()).toHaveAccessibleName(reelsName(FREE[7]))
+      expect(reels()).toHaveAccessibleName(endName(FREE[7]))
       expect(winFigure()).toBe(silverText(spin.payout))
       expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
       expect(calls.filter((call) => call === 'spinning true')).toHaveLength(9)
       expect(calls.filter((call) => call === 'freeStart')).toHaveLength(1)
       expect(calls.filter((call) => call === 'freeEnd')).toHaveLength(1)
-      // No suspense in a free spin, whatever its scatters.
-      expect(calls.filter((call) => call === 'suspense true')).toHaveLength(1)
+      // No suspense in a free spin, whatever its scatters; the paid spin's only if two scatters showed before its last reel.
+      expect(calls.filter((call) => call === 'suspense true')).toHaveLength(suspenseReels(scatterReels(EIGHT)).length > 0 ? 1 : 0)
     })
 
     it('a press while the reels turn stops them and sends nothing', async () => {
@@ -1110,7 +1625,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance(600)
       expect(reelSounds(calls)).toEqual([])
 
@@ -1136,9 +1651,8 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      for (let t = 0; t < 20_000 && !screen.queryByText('Big win'); t += 100) advance(100)
-      expect(screen.getByText('Big win')).toBeInTheDocument()
+      await reelsStarted()
+      until(() => screen.queryByText('Big win') !== null, undefined, 100)
       expect(calls).toContain('bigWin')
       expect(wallet()).toBe('5 Gold 230 Silver')
 
@@ -1165,12 +1679,12 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       expect(skipButton()).toBeNull()
       // Offered from the banner on.
-      for (let t = 0; t < 20_000 && !skipButton(); t += 100) advance(100)
-      expect(within(reels()).getByText('8 free spins. Every win is doubled.')).toBeInTheDocument()
-      for (let t = 0; t < 20_000 && !status().textContent!.includes('Free spin 3 of 8'); t += 100) advance(100)
+      until(() => skipButton() !== null, undefined, 100)
+      expect(within(reels()).getByText('8 free spins. The multiplier climbs.')).toBeInTheDocument()
+      until(() => status().textContent!.includes('Free spin 3 of 8'), undefined, 100)
       expect(skipButton()).toBeInTheDocument()
 
       fireEvent.click(skipButton()!)
@@ -1178,8 +1692,9 @@ describe('slots', () => {
       expect(skipButton()).toBeNull()
       expect(status()).toHaveTextContent(lineOf(spin))
       expect(wallet()).toBe(walletText(spin))
-      expect(reels()).toHaveAccessibleName(reelsName(FREE[7]))
+      expect(reels()).toHaveAccessibleName(endName(FREE[7]))
       expect(winFigure()).toBe(silverText(spin.payout))
+      expect(multiplier()).toBeNull()
       expect(spinButton()).toHaveTextContent('Spin')
       const after = calls.length
       run(10_000)
@@ -1188,16 +1703,19 @@ describe('slots', () => {
       expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
     })
 
-    it('stops offering Skip once the last free spin has stopped', async () => {
-      const { user } = open(state(), server(result(freeSpin())))
+    it('offers Skip through the last free spin and puts it away with the closing banner', async () => {
+      // The last free spin wins, so its chain is shown before the closing banner.
+      const { user } = open(state(), server(result(roundOf(EIGHT, { free: [...FREE.slice(0, 7), LINES] }))))
       await loaded()
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      for (let t = 0; t < 120_000 && !status().textContent!.includes('Free spin 8 of 8'); t += 100) advance(100)
+      await reelsStarted()
+      until(() => status().textContent!.includes('Free spin 8 of 8'), undefined, 100)
+      // Even once the last free spin has stopped: hidden then, it would tell that no retrigger was coming.
+      until(() => reelsLabel() !== 'Reels, spinning', undefined, 100)
       expect(skipButton()).toBeInTheDocument()
-      for (let t = 0; t < 20_000 && reels().getAttribute('aria-label') === 'Reels, spinning'; t += 100) advance(100)
+      until(() => bannerText()?.startsWith('8 free spins won') === true, undefined, 50)
       expect(skipButton()).toBeNull()
       playOut()
     })
@@ -1210,15 +1728,19 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
-      playOut(overlays.look)
+      let drew = 0
+      playOut(() => {
+        overlays.look()
+        drew = Math.max(drew, drawnLines())
+      }, 50)
 
       expect(calls.filter((call) => call === 'smallWin')).toHaveLength(1)
       expect(calls.filter((call) => WIN_SOUNDS.includes(call.split(' ')[0]))).toEqual([])
       expect(overlays.texts).toEqual([])
       // Shown plainly: its lines and its amount, and the line not in bold.
-      expect(drawnLines()).toBe(roundSpins(shelf, small.spin)[0].outcome.lines.length)
+      expect(drew).toBe(Math.max(...roundSpins(shelf, small.spin)[0].steps.map((step) => step.lines.length)))
       expect(winFigure()).toBe(silverText(small.spin.payout))
       expect(status()).toHaveTextContent(lineOf(small.spin))
       expect(within(status()).getByText(lineOf(small.spin))).not.toHaveClass('font-bold')
@@ -1234,21 +1756,22 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       let overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
       playOut(overlays.look)
       expect(overlays.texts).toEqual(['Big win'])
       expect(calls).toContain('bigWin')
       expect(calls).not.toContain('hugeWin')
-      // The count ticks while the figure moves, but never more than about 12 a second.
+      // The count ticks while the figure moves with each winning step, but never more than about 12 a second.
+      const steps = roundSpins(shelf, big.spin)[0].steps.filter((step) => step.lines.length > 0).length
       const ticks = calls.filter((call) => call === 'count').length
-      expect(ticks).toBeGreaterThan(5)
-      expect(ticks).toBeLessThanOrEqual(3 * 12 + 1)
+      expect(ticks).toBeGreaterThan(steps)
+      expect(ticks).toBeLessThanOrEqual(steps * (0.6 * 12 + 1))
       expect(screen.queryByText('Big win')).not.toBeInTheDocument()
 
       calls.length = 0
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
       playOut(overlays.look)
       expect(overlays.texts).toEqual(['Huge win'])
@@ -1264,7 +1787,7 @@ describe('slots', () => {
       const times = reelTimes(scatterReels(SCATTERS_1_4), false)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       expect(calls).toEqual(['unlock', 'press', 'spinning true'])
       let now = 0
       const to = (seconds: number) => {
@@ -1290,7 +1813,7 @@ describe('slots', () => {
       const times = reelTimes([true, true, false, false, false], false)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance((times[1] - 0.05) * 1000)
       expect(calls).not.toContain('suspense true')
       advance(100)
@@ -1316,7 +1839,7 @@ describe('slots', () => {
     })
 
     it('calls no sound before the first press', async () => {
-      const { user, queryClient } = open(state({ jackpot: pot }), server(lines))
+      const { user, queryClient } = open(state({ jackpots: pots() }), server(lines))
       await loaded()
       await user.click(stake('40 Silver'))
       await poll(queryClient)
@@ -1328,7 +1851,7 @@ describe('slots', () => {
       expect(calls.slice(0, 2)).toEqual(['unlock', 'press'])
     })
 
-    it('the Sound switch mutes and is remembered; Quick spin halves the reel times and is remembered', async () => {
+    it('the Sound switch mutes and is remembered; Quick spin halves the reel and step times and is remembered', async () => {
       // The real engine, which remembers its switch itself. jsdom has no sound generator, so it stays silent.
       setSlotSoundsForTest(null)
       const first = open(state(), server(lost))
@@ -1342,7 +1865,8 @@ describe('slots', () => {
       expect(localStorage.getItem('slots.quick')).toBe('on')
 
       cleanup()
-      const { user } = open(state(), server(lost))
+      const chain = result(roundOf(CHAIN))
+      const { user } = open(state(), server(lost, chain))
       await loaded()
       expect(soundSwitch()).toHaveAttribute('aria-pressed', 'false')
       expect(quickSwitch()).toHaveAttribute('aria-pressed', 'true')
@@ -1351,11 +1875,24 @@ describe('slots', () => {
       const quick = reelTimes(scatterReels(BLANK), true)
       expect(quick[4]).toBeCloseTo(reelTimes(scatterReels(BLANK), false)[4] / 2, 6)
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance((quick[4] - 0.05) * 1000)
       expect(reels()).toHaveAccessibleName('Reels, spinning')
       advance(100)
       expect(reels()).toHaveAccessibleName(reelsName(BLANK))
+      playOut()
+
+      // A chain's step: lines at 0.3 s each, a count of 0.3 s, then a burst of 0.15 s and a fall of 0.175 s.
+      const [paid] = roundSpins(shelf, chain.spin)
+      const lineSeconds = Math.min(0.6, 2.4 / paid.steps[0].lines.length) * 0.5
+      await user.click(spinButton())
+      await reelsStarted()
+      until(() => reelsLabel() === gridName(paid.steps[0].grid), undefined, 10)
+      advance((paid.steps[0].lines.length * lineSeconds + 0.3) * 1000 + 40)
+      expect(reels()).toHaveAccessibleName('Reels, tiles falling')
+      // Frames come every 16 ms: a little more for the frames that start and end the fall.
+      advance((0.15 + 0.175) * 1000 + 50)
+      expect(reels()).toHaveAccessibleName(gridName(paid.steps[1].grid))
       playOut()
 
       // Switched off again, it is remembered as off.
@@ -1374,10 +1911,11 @@ describe('slots', () => {
 
       expect(await within(status()).findByText(lineOf(spin))).toBeInTheDocument()
       expect(calls).toEqual(['unlock', 'press', ...sound])
-      // The reels show the last free spin, with its lines; the line says the rest.
-      expect(reels()).toHaveAccessibleName(reelsName(FREE[7]))
+      // The reels show the last free spin's last step; the line says the rest.
+      expect(reels()).toHaveAccessibleName(endName(FREE[7]))
       expect(winFigure()).toBe(silverText(spin.payout))
-      expect(within(reels()).queryByText(/free spins/)).not.toBeInTheDocument()
+      expect(bannerText()).toBeNull()
+      expect(multiplier()).toBeNull()
       expect(skipButton()).toBeNull()
 
       // A lost round has no sound of its own.
@@ -1417,8 +1955,8 @@ describe('slots', () => {
       await loaded()
       animate()
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      for (let t = 0; t < 60_000 && !status().textContent!.includes('Free spin 2 of 8'); t += 100) advance(100)
+      await reelsStarted()
+      until(() => status().textContent!.includes('Free spin 2 of 8'), undefined, 100)
       expect(vi.getTimerCount()).toBeGreaterThan(0)
 
       cleanup()
@@ -1432,7 +1970,7 @@ describe('slots', () => {
       expect(errors).not.toHaveBeenCalled()
     })
 
-    it('chimes no line until the running total has reached the stake, and from that spin on', async () => {
+    it('chimes no line until the running total has reached the stake, and from that step on', async () => {
       // The paid spin's own lines pay less than the stake; the second free spin takes the round past it.
       const free = [BLANK, LINES, BLANK, LINES, BLANK, BLANK, BLANK, BLANK]
       const spin = roundOf(EIGHT_SMALL, { free })
@@ -1445,17 +1983,16 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const cheers = () => calls.filter((call) => call.startsWith('lineWin') || call === 'count')
       // Up to free spin 2 coming to rest, nothing cheers, though the paid spin's lines are drawn.
       let drewLines = false
-      for (let t = 0; t < 60_000 && !(status().textContent === 'Free spin 2 of 8' && reels().getAttribute('aria-label') !== 'Reels, spinning'); t += 50) {
-        advance(50)
+      const atRest = () => status().textContent === 'Free spin 2 of 8' && reelsLabel() !== 'Reels, spinning'
+      until(atRest, () => {
         drewLines ||= drawnLines() > 0
-        if (status().textContent !== 'Free spin 2 of 8' || reels().getAttribute('aria-label') === 'Reels, spinning') expect(cheers()).toEqual([])
-      }
+        if (!atRest()) expect(cheers()).toEqual([])
+      })
       expect(drewLines).toBe(true)
-      expect(status()).toHaveTextContent('Free spin 2 of 8')
       expect(calls).toContain('lineWin 0')
       playOut()
       // The fourth free spin's lines chime too.
@@ -1470,8 +2007,8 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      const banners = seen(() => within(reels()).queryByText(/free spins/)?.textContent ?? null)
+      await reelsStarted()
+      const banners = seen(bannerText)
       playOut(banners.look)
 
       expect(banners.texts).toContain(`8 free spins won ${silverText(spin.payout)}.`)
@@ -1489,31 +2026,31 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      const banners = seen(() => within(reels()).queryByText(/free spins/)?.textContent ?? null)
+      await reelsStarted()
+      const banners = seen(bannerText)
       playOut(banners.look)
       expect(banners.texts).toContain('8 free spins won nothing.')
       expect(calls).toContain('freeStart')
       expect(calls).not.toContain('freeEnd')
-      expect(status()).toHaveTextContent('8 free spins won you nothing. You staked 20 Silver.')
+      expect(status()).toHaveTextContent(lineOf(nothing))
 
       calls.length = 0
       advance(500)
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       playOut()
       expect(calls.filter((call) => call === 'freeEnd')).toHaveLength(1)
     })
 
     describe('a press that ends a round', () => {
       it('during Big win, two clicks on Spin send one spin in all', async () => {
-        const { user, fetchMock } = open(state(), server(result(roundOf(BIG))))
+        const big = result(roundOf(BIG))
+        const { user, fetchMock } = open(state(), server(big))
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
-        for (let t = 0; t < 20_000 && !screen.queryByText('Big win'); t += 100) advance(100)
-        expect(screen.getByText('Big win')).toBeInTheDocument()
+        await reelsStarted()
+        until(() => screen.queryByText('Big win') !== null, undefined, 100)
 
         fireEvent.click(spinButton())
         expect(spinButton()).toHaveTextContent('Spin')
@@ -1522,7 +2059,7 @@ describe('slots', () => {
         fireEvent.click(spinButton())
 
         expect(spinButton()).toHaveTextContent('Spin')
-        expect(reels()).toHaveAccessibleName(reelsName(BIG))
+        expect(reels()).toHaveAccessibleName(endName(BIG))
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
       })
 
@@ -1531,12 +2068,13 @@ describe('slots', () => {
         await loaded()
         animate()
         fireEvent.keyDown(document.body, { key: ' ' })
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         advance(reelTimes(scatterReels(LINES), false)[4] * 1000 + 100)
         expect(drawnLines()).toBe(1)
 
         fireEvent.keyDown(document.body, { key: ' ' })
         expect(status()).toHaveTextContent(lineOf(lines.spin))
+        expect(reels()).toHaveAccessibleName(endName(LINES))
         fireEvent.keyDown(document.body, { key: ' ' })
         advance(350)
         fireEvent.keyDown(document.body, { key: ' ' })
@@ -1546,7 +2084,7 @@ describe('slots', () => {
         // The pause is over: a press is a new round.
         advance(100)
         fireEvent.keyDown(document.body, { key: ' ' })
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -1557,15 +2095,15 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
-        for (let t = 0; t < 20_000 && !skipButton(); t += 100) advance(100)
+        await reelsStarted()
+        until(() => skipButton() !== null, undefined, 100)
 
         fireEvent.click(skipButton()!)
         fireEvent.click(spinButton())
 
         expect(spinButton()).toHaveTextContent('Spin')
         expect(status()).toHaveTextContent(lineOf(spin))
-        expect(reels()).toHaveAccessibleName(reelsName(FREE[7]))
+        expect(reels()).toHaveAccessibleName(endName(FREE[7]))
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
       })
 
@@ -1574,10 +2112,9 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         // To the very frame the round ends.
-        for (let t = 0; t < 20_000 && spinButton().textContent !== 'Spin'; t += 10) advance(10)
-        expect(spinButton()).toHaveTextContent('Spin')
+        until(() => spinButton().textContent === 'Spin', undefined, 10)
         expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
         // Not the native switch: the focus stays on Spin.
         expect(spinButton()).toBeEnabled()
@@ -1592,7 +2129,7 @@ describe('slots', () => {
         advance(250)
         expect(spinButton()).not.toHaveAttribute('aria-disabled')
         fireEvent.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -1602,7 +2139,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         advance(300)
         expect(spinButton()).toHaveTextContent('Stop')
 
@@ -1616,7 +2153,7 @@ describe('slots', () => {
 
         advance(400)
         fireEvent.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -1636,7 +2173,7 @@ describe('slots', () => {
 
         await ready()
         fireEvent.click(spinButton())
-        expect(await screen.findByRole('img', { name: reelsName(LINES) })).toBeInTheDocument()
+        expect(await screen.findByRole('img', { name: endName(LINES) })).toBeInTheDocument()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
       })
 
@@ -1645,8 +2182,8 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
-        for (let t = 0; t < 20_000 && spinButton().textContent !== 'Spin'; t += 10) advance(10)
+        await reelsStarted()
+        until(() => spinButton().textContent === 'Spin', undefined, 10)
         expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
         expect(vi.getTimerCount()).toBeGreaterThan(0)
 
@@ -1672,14 +2209,15 @@ describe('slots', () => {
     })
   })
 
-  it('says each round in the lists, with its free spins', async () => {
+  it('says each round in the lists, with its free spins and jackpots', async () => {
     const free = roundOf(EIGHT, { id: 99, free: FREE })
     const mine = [free, ...Array.from({ length: 11 }, (_, i) => roundOf(i === 0 ? LINES : BLANK, { id: 98 - i, stake: 60 }))]
     mine[2] = { ...mine[2], machine: 'retired' as SlotSpinView['machine'] }
     const armoury = SLOT_MACHINES[1]
+    const giga = roundOf(BLANK, { id: 89, character: 'Mounara', stake: 60, jackpot: 50_002, pots: { mini: 0, major: 0, giga: 50_002 } })
     const bigWins = [
       { ...roundOf(BLANK, { id: 90, character: 'Kael', machine: 'armoury', stake: 40, at: '2026-11-13T23:59:00.000Z' }), payout: 12_500 },
-      roundOf(BLANK, { id: 89, character: 'Mounara', stake: 60, jackpot: 50_002 }),
+      giga,
       { ...roundOf(BLANK, { id: 88, character: 'Kael', machine: 'retired' as SlotSpinView['machine'] }), payout: 99_000 },
     ]
     open(state({ mine, bigWins }))
@@ -1699,7 +2237,8 @@ describe('slots', () => {
     expect(big[0].firstElementChild).toHaveTextContent(`Kael won 12 Gold 500 Silver on ${armoury.name} on a stake of 40 Silver`)
     expect(big[0].firstElementChild?.textContent).toBe(bigWinLine(armoury, bigWins[0]))
     expect(big[0]).toHaveTextContent('13 Nov, 23:59')
-    expect(big[1]).toHaveTextContent('Mounara won the jackpot, 50 Gold 2 Silver')
+    expect(big[1].firstElementChild?.textContent).toBe(bigWinLine(shelf, giga))
+    expect(big[1]).toHaveTextContent('Mounara won the Giga jackpot, 50 Gold 2 Silver')
   })
 
   it('says so when there are no rounds yet', async () => {
@@ -1709,106 +2248,91 @@ describe('slots', () => {
     expect(within(screen.getByRole('region', { name: 'Big wins' })).getByText('Nobody has had a big win yet.')).toBeInTheDocument()
   })
 
-  describe('the jackpot', () => {
-    it('shows the jackpot above the machines', async () => {
-      open(state({ jackpot: pot }))
+  describe('the jackpots', () => {
+    it('shows three jackpots above the machines, each with its pot, its cap and its last winner', async () => {
+      open(state({ jackpots: pots() }))
       await loaded()
 
-      const region = within(banner())
-      expect(region.getByText('31 Gold 420 Silver')).toBeInTheDocument()
-      expect(region.getByText('Must be won before 50 Gold')).toBeInTheDocument()
-      expect(region.getByText('Every lost round adds to it, on any machine. It can drop from 5 Gold.')).toBeInTheDocument()
-      expect(region.getByText('Last won by Moosey: 27 Gold 310 Silver.')).toBeInTheDocument()
-      const bar = region.getByRole('progressbar', { name: 'Jackpot' })
+      expect(within(jackpots()).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual(['Mini', 'Major', 'Giga'])
+      const mini = within(pot('Mini'))
+      expect(mini.getByText('640 Silver')).toBeInTheDocument()
+      expect(mini.getByText('must drop before 1 Gold')).toBeInTheDocument()
+      expect(mini.queryByText(/Last won by/)).not.toBeInTheDocument()
+      const giga = within(pot('Giga'))
+      expect(giga.getByText('31 Gold 420 Silver')).toBeInTheDocument()
+      expect(giga.getByText('must drop before 50 Gold')).toBeInTheDocument()
+      expect(giga.getByText('Last won by Moosey: 27 Gold 310 Silver.')).toBeInTheDocument()
+      expect(within(pot('Major')).getByText('Last won by Kael: 9 Gold 870 Silver.')).toBeInTheDocument()
+      const bar = giga.getByRole('progressbar', { name: 'Giga jackpot' })
       expect(bar).toHaveAttribute('aria-valuenow', '31420')
       expect(bar).toHaveAttribute('aria-valuemin', '0')
       expect(bar).toHaveAttribute('aria-valuemax', '50000')
-      // Above the machines; on a phone the long lines go and it is drawn under the machine, so that Spin stays on the
-      // first screen.
-      expect(banner().compareDocumentPosition(screen.getByRole('tablist', { name: 'Machine' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(banner()).toHaveClass('order-1', 'sm:order-none')
-      expect(region.getByText(/^Every lost round adds/)).toHaveClass('hidden', 'sm:block')
-      expect(region.getByText(/^Last won by/)).toHaveClass('hidden', 'sm:block')
+      // Above the machines; on a phone the three sit in one row under the machine, so that Spin stays on the first
+      // screen, and the last winners go.
+      expect(jackpots().compareDocumentPosition(screen.getByRole('tablist', { name: 'Machine' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(jackpots()).toHaveClass('order-1', 'sm:order-none', 'short:order-1', 'grid-cols-3')
+      expect(giga.getByText(/^Last won by/)).toHaveClass('hidden', 'sm:block')
     })
 
-    it('has no banner when the jackpot cannot be read', async () => {
-      open(state({ jackpot: null }))
+    it('shows nothing when the pots cannot be read', async () => {
+      open(state({ jackpots: [] }))
       await loaded()
 
-      expect(screen.queryByRole('region', { name: 'Jackpot' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-      expect(pays().queryByText(/jackpot/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Jackpots' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('progressbar', { name: /jackpot/ })).not.toBeInTheDocument()
+      expect(payTable().queryByText(/adds .* of its stake to the jackpots/)).not.toBeInTheDocument()
     })
 
-    it('says the jackpot is paused', async () => {
-      open(state({ jackpot: { ...pot, live: false } }))
+    it('says a pot switched off is paused', async () => {
+      open(state({ jackpots: pots({ major: { live: false } }) }))
       await loaded()
 
-      expect(within(banner()).getByText('The jackpot is paused.')).toBeInTheDocument()
-      expect(within(banner()).queryByText(/Must be won before/)).not.toBeInTheDocument()
-      expect(pays().queryByText(/jackpot/)).not.toBeInTheDocument()
+      expect(within(pot('Major')).getByText('Paused')).toBeInTheDocument()
+      expect(within(pot('Major')).queryByText(/must drop before/)).not.toBeInTheDocument()
+      expect(within(pot('Mini')).getByText('must drop before 1 Gold')).toBeInTheDocument()
     })
 
-    it('shows an unfed pot as 0 Silver under the cap set', async () => {
-      open(state({ jackpot: { ...pot, pot: 0, last: null } }))
+    it('shows an unfed pot as 0 Silver, and never a bar past full', async () => {
+      open(state({ jackpots: pots({ mini: { amount: 0 }, giga: { amount: 60_000 } }) }))
       await loaded()
 
-      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
-      expect(within(banner()).getByText('Must be won before 50 Gold')).toBeInTheDocument()
-      expect(within(banner()).queryByText(/Last won by/)).not.toBeInTheDocument()
-    })
-
-    it('never shows the bar past full', async () => {
-      open(state({ jackpot: { ...pot, pot: 60_000 } }))
-      await loaded()
-
-      expect(within(banner()).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50000')
+      expect(within(pot('Mini')).getByText('0 Silver')).toBeInTheDocument()
+      expect(within(pot('Giga')).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50000')
     })
 
     it('follows a pot someone else won between two polls', async () => {
-      let current = state({ jackpot: pot })
+      let current = state({ jackpots: pots() })
       const { user, queryClient } = open(current, { 'GET /slots': () => json(200, current), 'POST /slots/spin': () => json(200, lost) })
       await loaded()
 
-      current = state({ jackpot: dropped })
+      current = state({ jackpots: pots({ major: { amount: 0, last: { character: 'Moosey', amount: 10_002, at: AT } } }) })
       await poll(queryClient)
 
-      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
-      expect(within(banner()).getByText('Last won by Mounara: 50 Gold 2 Silver.')).toBeInTheDocument()
+      expect(within(pot('Major')).getByText('0 Silver')).toBeInTheDocument()
+      expect(within(pot('Major')).getByText('Last won by Moosey: 10 Gold 2 Silver.')).toBeInTheDocument()
+      // Someone else's drop is not celebrated here.
+      expect(pot('Major')).not.toHaveAttribute('data-won')
       await user.click(spinButton())
       expect(await screen.findByRole('img', { name: /^Reels: / })).toBeInTheDocument()
     })
 
-    it('holds the pot still until the round has been shown, on a lost round', async () => {
-      const grown = { ...lost, state: { ...lost.state, jackpot: { ...pot, pot: 31_423 } } }
-      let spun = false
-      const { user } = open(state({ jackpot: pot }), {
-        'GET /slots': () => json(200, spun ? grown.state : state({ jackpot: pot })),
-        'POST /slots/spin': () => {
-          spun = true
-          return json(200, grown)
-        },
+    it('shows three jackpots and celebrates only the pot that dropped', async () => {
+      const at = '2026-11-15T10:05:00.000Z'
+      const mini = roundOf(BLANK, { stake: 60, jackpot: 1_002, pots: { mini: 1_002, major: 0, giga: 0 } })
+      const two = roundOf(BLANK, { stake: 60, jackpot: 51_004, pots: { mini: 1_001, major: 0, giga: 50_003 } })
+      const afterMini = result(mini, { jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 1_002, at } } }) })
+      const afterTwo = result(two, {
+        jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 1_001, at } }, giga: { amount: 0, last: { character: 'Mounara', amount: 50_003, at } } }),
       })
-      await loaded()
-      animate()
-
-      await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
-      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
-
-      advance(600)
-      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
-      playOut()
-      expect(await within(banner()).findByText('31 Gold 423 Silver')).toBeInTheDocument()
-    })
-
-    it('tells a jackpot only when the round has been shown, with its sound', async () => {
-      let spun = false
-      const { user, queryClient } = open(state({ jackpot: pot }), {
-        'GET /slots': () => json(200, spun ? dropState.state : state({ jackpot: pot })),
+      const before = state({ jackpots: pots() })
+      let current = before
+      let spins = 0
+      const { user, queryClient } = open(before, {
+        'GET /slots': () => json(200, current),
         'POST /slots/spin': () => {
-          spun = true
-          return json(200, dropState)
+          const next = spins++ === 0 ? afterMini : afterTwo
+          current = next.state
+          return json(200, next)
         },
       })
       await loaded()
@@ -1816,46 +2340,157 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       // A poll that brings the drop in mid-spin does not give it away.
       await poll(queryClient)
+      playOut(() => {
+        if (spinButton().textContent !== 'Stop') return
+        expect(within(pot('Mini')).getByText('640 Silver')).toBeInTheDocument()
+        expect(within(pot('Mini')).queryByText(/Last won by Mounara/)).not.toBeInTheDocument()
+        expect(within(jackpots()).queryAllByRole('group').filter((group) => group.hasAttribute('data-won'))).toEqual([])
+        expect(calls.filter((call) => POT_SOUNDS.includes(call))).toEqual([])
+      })
+      // The sound comes with the end, the meter and the money with the result.
+      await waitFor(() => expect(within(pot('Mini')).getByText('0 Silver')).toBeInTheDocument())
+      expect(status()).toHaveTextContent(`Mini jackpot. You won ${silverText(1_002)} on a stake of 60 Silver.`)
+      // At least the stake: celebrated.
+      expect(within(status()).getByText(`Mini jackpot. You won ${silverText(1_002)} on a stake of 60 Silver.`)).toHaveClass('font-bold')
+      expect(calls.filter((call) => POT_SOUNDS.includes(call))).toEqual(['jackpotMini'])
+      expect(wallet()).toBe(walletText(mini))
+      expect(pot('Mini')).toHaveAttribute('data-won', 'true')
+      expect(pot('Major')).not.toHaveAttribute('data-won')
+      expect(pot('Giga')).not.toHaveAttribute('data-won')
+      expect(within(pot('Mini')).getByText(`Last won by Mounara: ${silverText(1_002)}.`)).toBeInTheDocument()
 
-      expect(within(banner()).getByText('31 Gold 420 Silver')).toBeInTheDocument()
-      expect(within(banner()).queryByText(/Last won by Mounara/)).not.toBeInTheDocument()
-      expect(banner()).not.toHaveAttribute('data-won')
-      expect(wallet()).toBe('5 Gold 190 Silver')
-      expect(status()).toHaveTextContent('Good luck...')
-      expect(calls).not.toContain('jackpot')
-
+      // Two pots at once: the biggest one's sound, once, and both meters celebrate.
+      calls.length = 0
+      await user.click(spinButton())
+      await reelsStarted()
       playOut()
+      await waitFor(() => expect(within(pot('Giga')).getByText('0 Silver')).toBeInTheDocument())
+      expect(calls.filter((call) => POT_SOUNDS.includes(call))).toEqual(['jackpot'])
+      expect(status()).toHaveTextContent(`Mini and Giga jackpots. You won ${silverText(51_004)} on a stake of 60 Silver.`)
+      expect(pot('Mini')).toHaveAttribute('data-won', 'true')
+      expect(pot('Major')).not.toHaveAttribute('data-won')
+      expect(pot('Giga')).toHaveAttribute('data-won', 'true')
+    })
 
-      expect(status()).toHaveTextContent('Jackpot. This round made it drop. You won 50 Gold 2 Silver on a stake of 60 Silver.')
-      expect(calls).toContain('jackpot')
-      expect(wallet()).toBe(walletText(dropSpin))
-      expect(within(banner()).getByText('0 Silver')).toBeInTheDocument()
-      expect(banner()).toHaveAttribute('data-won', 'true')
-      expect(within(banner()).getByText('Last won by Mounara: 50 Gold 2 Silver.')).toBeInTheDocument()
+    describe('a pot that won less than the stake', () => {
+      const at = '2026-11-15T10:05:00.000Z'
+      const SMALL_LINE = 'Mini jackpot. You won 50 Silver on a stake of 60 Silver.'
+      /** A lost round at 60 Silver that won a 50 Silver Mini, and the state it leaves. */
+      const smallPot = (stops: SlotStops = BLANK, overrides: Partial<SlotSpinView> = {}) => {
+        const spin = roundOf(stops, { stake: 60, jackpot: 50, pots: { mini: 50, major: 0, giga: 0 }, ...overrides })
+        return result(spin, { jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 50, at } } }) })
+      }
+      const glowing = () => within(jackpots()).queryAllByRole('group').filter((group) => group.hasAttribute('data-won'))
+      /** The small win's tick, and no pot's sound and no cheer. */
+      const ticked = () => expect(calls.filter((call) => [...POT_SOUNDS, ...WIN_SOUNDS, 'smallWin'].includes(call))).toEqual(['smallWin'])
+      /** The meter shows the drop and its winner, without the glow, and the line says it plainly. */
+      async function toldPlainly() {
+        await waitFor(() => expect(within(pot('Mini')).getByText('0 Silver')).toBeInTheDocument())
+        expect(within(pot('Mini')).getByText('Last won by Mounara: 50 Silver.')).toBeInTheDocument()
+        expect(glowing()).toEqual([])
+        expect(within(status()).getByText(SMALL_LINE)).not.toHaveClass('font-bold')
+      }
+
+      it('is not celebrated when the round ends by itself: the small win tick, no glow, a plain line', async () => {
+        const round = smallPot()
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        await user.click(spinButton())
+        await reelsStarted()
+        playOut()
+
+        await toldPlainly()
+        ticked()
+        expect(wallet()).toBe(walletText(round.spin))
+      })
+
+      it('is not celebrated with reduce motion', async () => {
+        const round = smallPot()
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+
+        await user.click(spinButton())
+
+        expect(await within(status()).findByText(SMALL_LINE)).toBeInTheDocument()
+        await toldPlainly()
+        expect(calls).toEqual(['unlock', 'press', 'smallWin'])
+      })
+
+      it('is not celebrated when Skip to the total ends the round', async () => {
+        // Eight free spins that pay nothing: still a lost round, so it can win a pot.
+        const round = smallPot(EIGHT, { free: Array<SlotStops>(8).fill(BLANK) })
+        expect(round.spin.payout).toBe(0)
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        await user.click(spinButton())
+        await reelsStarted()
+        until(() => skipButton() !== null, undefined, 100)
+        calls.length = 0
+        fireEvent.click(skipButton()!)
+
+        await toldPlainly()
+        ticked()
+      })
+
+      it("a press as a lone lost round's reels land: a pot of the stake or more is still heard, one below it only ticks", async () => {
+        const big = roundOf(BLANK, { stake: 60, jackpot: 1_002, pots: { mini: 1_002, major: 0, giga: 0 } })
+        const afterBig = result(big, { jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 1_002, at } } }) })
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), afterBig, smallPot()))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        for (const sound of ['jackpotMini', 'smallWin']) {
+          await user.click(spinButton())
+          await reelsStarted()
+          calls.length = 0
+          // The last reel rests and step 1 is sent to the reels; the press comes before it has landed.
+          act(() => {
+            vi.advanceTimersByTime(reelTimes(scatterReels(BLANK), false)[4] * 1000 + 100)
+            fireEvent.keyDown(document.body, { key: ' ' })
+          })
+          expect(spinButton()).toHaveTextContent('Spin')
+          expect(calls.filter((call) => [...POT_SOUNDS, 'smallWin'].includes(call))).toEqual([sound])
+          // Past the rest after the round.
+          advance(500)
+        }
+        await toldPlainly()
+      })
     })
 
     it('lists a jackpot round in the last rounds and the big wins', async () => {
-      open(state({ jackpot: pot, mine: [dropSpin], bigWins: [dropSpin] }))
+      const drop = roundOf(BLANK, { stake: 60, jackpot: 50_002, pots: { mini: 0, major: 0, giga: 50_002 } })
+      open(state({ jackpots: pots(), mine: [drop], bigWins: [drop] }))
       await loaded()
 
       const mine = lastRounds().getAllByRole('listitem')
-      expect(mine[0].firstElementChild).toHaveTextContent(roundListLine(shelf, dropSpin))
-      expect(mine[0].firstElementChild).toHaveTextContent('staked 60 Silver, won the jackpot, 50 Gold 2 Silver')
+      expect(mine[0].firstElementChild).toHaveTextContent(roundListLine(shelf, drop))
       const big = within(screen.getByRole('region', { name: 'Big wins' })).getAllByRole('listitem')
-      expect(big[0]).toHaveTextContent('Mounara won the jackpot, 50 Gold 2 Silver')
+      expect(big[0]).toHaveTextContent(bigWinLine(shelf, drop))
     })
 
-    it('says what a lost round adds, per machine', async () => {
-      const { user } = open(state({ jackpot: pot }))
+    it('says what a lost round adds to each pot that is on, per machine', async () => {
+      // The figures themselves are pinned in the pay table's own tests.
+      const share = String.raw`\d+\.\d%`
+      const { user } = open(state({ jackpots: pots({ major: { live: false } }) }))
       await loaded()
 
       for (const machine of SLOT_MACHINES) {
         await user.click(tab(machine.name))
-        const { num, den } = slotJackpotShare(machine)
-        expect(pays().getByText(`A lost round on this machine adds ${((num / den) * 100).toFixed(1)}% of its stake to the jackpot. ${JACKPOT_LINE}`)).toBeInTheDocument()
+        expect(
+          payTable().getByText(new RegExp(`^A lost round adds ${share} of its stake to the jackpots: ${share} to the Mini and ${share} to the Giga\\.$`)),
+        ).toBeInTheDocument()
+        expect(payTable().getByText(/counting the meter and the jackpots that are on\./)).toBeInTheDocument()
       }
     })
 

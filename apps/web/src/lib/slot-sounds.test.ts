@@ -98,7 +98,7 @@ function fakeContext(opts: { resume?: () => Promise<void>; suspend?: () => Promi
   return { context: context as unknown as AudioContext, started, nodes, calls }
 }
 
-const ALL: SlotSound[] = ['press', 'reelStop', 'scatter', 'lineWin', 'smallWin', 'win', 'bigWin', 'hugeWin', 'count', 'freeStart', 'freeEnd', 'jackpot', 'refused']
+const ALL: SlotSound[] = ['press', 'reelStop', 'scatter', 'lineWin', 'smallWin', 'win', 'bigWin', 'hugeWin', 'count', 'freeStart', 'freeEnd', 'jackpot', 'refused', 'burst', 'retrigger', 'meterPoint', 'meterFull', 'jackpotMini', 'jackpotMajor']
 
 beforeEach(() => localStorage.clear())
 afterEach(() => vi.restoreAllMocks())
@@ -259,6 +259,20 @@ describe('slot sounds', () => {
       sounds.unlock()
       sounds.play(name)
       expect(fake.started.length, name).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps every frequency finite and positive for any step', () => {
+    for (const name of ['burst', 'meterPoint', 'retrigger'] as SlotSound[]) {
+      for (const step of [0, 1, 7, 50, 1e9, -3, Number.NaN]) {
+        const fake = fakeContext()
+        const sounds = createSlotSounds(() => fake.context)
+        sounds.unlock()
+        sounds.play(name, step)
+        const freqs = fake.started.map((n) => n.frequency.value).filter((f) => f !== 0)
+        expect(freqs.length, `${name} ${step}`).toBeGreaterThan(0)
+        expect(freqs.every((f) => Number.isFinite(f) && f > 0), `${name} ${step}`).toBe(true)
+      }
     }
   })
 

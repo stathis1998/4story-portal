@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   Inject,
   Injectable,
@@ -11,24 +12,30 @@ import {
 } from '@nestjs/common';
 import {
   BRONZE_PER_SILVER,
-  type GmSlotJackpot,
   type GmSlotMachine,
+  type GmSlotPot,
   type GmSlots,
   type SessionUser,
-  SLOT_JACKPOT_DEFAULT_CAP,
-  slotJackpotAdd,
-  type SlotJackpot,
-  type SlotJackpotSettingsInput,
+  SLOT_DAILY_DEFAULT,
   SLOT_JACKPOT_ROLLS,
+  SLOT_LINE_COUNT,
   SLOT_MACHINES,
+  SLOT_POT_DEFAULT_CAP,
+  SLOT_POTS,
   SLOT_REEL_STOPS,
   SLOT_REELS,
+  slotJackpotAdds,
+  type SlotJackpotView,
   slotMachine,
+  type SlotMachine,
   type SlotMachineKey,
   type SlotMachineSettingsInput,
   type SlotMachineState,
-  slotRoundPayout,
-  slotSpin,
+  type SlotMeterView,
+  slotPlayRound,
+  type SlotPot,
+  type SlotPotsSettingsInput,
+  slotReplayRound,
   type SlotSpinRequest,
   type SlotSpinResult,
   type SlotSpinView,
@@ -39,7 +46,17 @@ import {
 import { GM_REPOSITORY, type GmRepository } from '../gm/gm.repository.js';
 import { BET_CLOSED, BET_NOT_YOURS, BET_ONLINE, BET_POOR } from '../games/wallet-bet.js';
 import { WALLETS_REPOSITORY, type WalletCharacterRow, walletCharacterView, type WalletsRepository } from '../games/wallets.repository.js';
-import { SLOTS_REPOSITORY, type SlotPotRow, type SlotSettings, type SlotsRepository, type SlotSpinRow, type SlotTotalsRow } from './slots.repository.js';
+import {
+  SLOT_DAILY_REFUSED,
+  SLOT_METER_REFUSED,
+  SLOTS_REPOSITORY,
+  type SlotJackpotTotalsRow,
+  type SlotPotRow,
+  type SlotSettings,
+  type SlotsRepository,
+  type SlotSpinRow,
+  type SlotTotalsRow,
+} from './slots.repository.js';
 
 type Actor = { username: string; ip: string };
 
@@ -50,13 +67,18 @@ const LATEST = 20;
 const UNAVAILABLE = 'Slots are not available right now';
 const CLOSED_FLOOR = 'The slots are not open yet';
 
+/** A value for each pot, worked out in the order Mini, Major, Giga. */
+const eachPot = <T>(value: (pot: SlotPot) => T) => Object.fromEntries(SLOT_POTS.map((pot) => [pot, value(pot)])) as Record<SlotPot, T>;
+
 const CLOSED: SlotSettings = {
   live: false,
   machines: Object.fromEntries(SLOT_MACHINES.map((m) => [m.key, { live: true, stakes: [...m.stakes] }])) as SlotSettings['machines'],
-  jackpot: { live: true, cap: SLOT_JACKPOT_DEFAULT_CAP },
+  pots: eachPot((pot) => ({ live: true, cap: SLOT_POT_DEFAULT_CAP[pot] })),
+  daily: SLOT_DAILY_DEFAULT,
 };
 const NO_TOTALS: SlotTotalsRow = { spins: 0, staked: 0, paid: 0, added: 0 };
-const NO_POT: SlotPotRow | null = null;
+const NO_JACKPOT_TOTALS: SlotJackpotTotalsRow = { added: 0, paid: 0, drops: 0 };
+const NOTHING: Record<SlotPot, number> = { mini: 0, major: 0, giga: 0 };
 /** One Gold is this many Silver. */
 const SILVER_PER_GOLD = 1000;
 const JACKPOT_WINS = 10;
@@ -66,6 +88,8 @@ const MAX_MULTIPLE = 32_767;
 @Injectable()
 export class SlotsService {
   private readonly logger = new Logger(SlotsService.name);
+  /** The rows already said to be left out of the lists: each is said once, not on every read of the page. */
+  private readonly unshown = new Set<number>();
   /** A whole number from 0 up to (not including) `max`. The operating system's random source; tests replace it. */
   random: (max: number) => number = randomInt;
 
@@ -77,22 +101,27 @@ export class SlotsService {
 
   async state(user: SessionUser): Promise<SlotsState> {
     // The page still opens when the tables can't be read (before they are added to the game database,
-    // say): it shows a closed floor with the starting stakes and nothing on it.
-    const [settings, characters, mine, bigWins, pot, lastWin] = await Promise.all([
+    // say): it shows a closed floor with the starting stakes and nothing on it. On a database without the
+    // cascades' columns and tables, the lists, the pots and the meters are empty.
+    const [settings, characters, mine, bigWins, pots, lastWins, meters, played] = await Promise.all([
       this.readOr('settings', () => this.repo.settings(), CLOSED),
       this.readOr<WalletCharacterRow[]>("account's characters", () => this.wallets.characters(user.userId), []),
       this.readOr<SlotSpinRow[]>("account's spins", () => this.repo.spinsOf(user.userId, MINE), []),
       this.readOr<SlotSpinRow[]>('big wins', () => this.repo.bigWins(BIG_WINS), []),
-      this.readOr<SlotPotRow | null>('jackpot', () => this.repo.pot(), NO_POT),
-      this.readOr<SlotSpinRow[]>('latest jackpot win', () => this.repo.jackpotWins(1), []),
+      this.readOr<SlotPotRow[]>('jackpots', () => this.repo.pots(), []),
+      this.eachPotRead((pot) => this.readOr<SlotSpinRow[]>(`latest ${pot} win`, () => this.repo.jackpotWins(pot, 1), [])),
+      this.readOr<SlotMeterView[]>("account's meters", () => this.repo.meters(user.userId), []),
+      this.readOr("account's rounds today", () => this.repo.roundsToday(user.userId), 0),
     ]);
     return {
       live: settings.live,
       machines: machineStates(settings),
       characters: characters.map(walletCharacterView),
-      mine: spinViews(mine),
-      bigWins: spinViews(bigWins),
-      jackpot: pot ? jackpotView(settings, pot, lastWin[0]) : null,
+      mine: this.spinViews(mine),
+      bigWins: this.spinViews(bigWins),
+      jackpots: pots.map((row) => jackpotView(settings, row, lastWins[row.pot][0])),
+      meters,
+      daily: { limit: settings.daily, played },
     };
   }
 
@@ -105,30 +134,45 @@ export class SlotsService {
     const own = settings.machines[machine.key];
     if (!own.live) throw new ConflictException('That machine is closed');
     if (!own.stakes.includes(request.stake)) throw new UnprocessableEntityException('That stake is no longer offered on this machine');
-
-    // Draws, in order: the paid spin's five reels, then each free spin's five reels, then the jackpot's number.
-    const stops = this.reels();
-    const free = Array.from({ length: slotSpin(machine, stops).freeSpins }, () => this.reels());
     const stake = request.stake;
-    const payout = slotRoundPayout(machine, { stops, free }, stake);
+    // The round needs the meter to know whether it fills, so it is read before anything is drawn. A database
+    // without the meter table refuses here, with nothing drawn. The money step checks it has not moved since.
+    const meterBefore = await this.write(() => this.repo.meter(user.userId, machine.key, stake));
+
+    // Draws, in order: the paid spin's five reels, each free spin's five reels as played, each meter free spin's,
+    // then, for a lost round, the three jackpot numbers.
+    const round = slotPlayRound(machine, meterBefore, () => this.reels());
+    // Stakes are multiples of the line count, so this is whole Silver.
+    const payout = (round.lineStakes * stake) / SLOT_LINE_COUNT;
     // The column is a SMALLINT.
     const multiple = Math.min(MAX_MULTIPLE, Math.floor(payout / stake));
-    // Only a round that pays nothing in all feeds the pot, and only then is the jackpot's number drawn, after the stops.
-    const add = payout === 0 && settings.jackpot.live ? slotJackpotAdd(machine, stake) : 0;
-    const roll = add > 0 ? this.random(SLOT_JACKPOT_ROLLS) : 0;
+    // Only a round that pays nothing in all feeds the pots. The three numbers are drawn whenever any pot is on, even
+    // for the pots that are off, so the draws never depend on which pots are on.
+    const feeds = payout === 0 && SLOT_POTS.some((pot) => settings.pots[pot].live);
+    const shares = feeds ? slotJackpotAdds(machine, stake) : NOTHING;
+    // The money step does not read the switches: a pot that is off is kept out here, with an add of 0.
+    const adds = eachPot((pot) => (settings.pots[pot].live ? shares[pot] : 0));
+    // An object literal's values are worked out in the order written: Mini, Major, Giga.
+    const rolls = feeds
+      ? { mini: this.random(SLOT_JACKPOT_ROLLS), major: this.random(SLOT_JACKPOT_ROLLS), giga: this.random(SLOT_JACKPOT_ROLLS) }
+      : { ...NOTHING };
     const outcome = await this.write(() =>
       this.repo.bet({
         userId: user.userId,
         charId: request.characterId,
         machine: machine.key,
-        stops,
-        free,
+        stops: round.stops,
+        free: round.free,
+        meterFree: round.meterFree,
         stake,
         payout,
         multiple,
-        add,
-        cap: settings.jackpot.cap,
-        roll,
+        meterBefore,
+        meterAfter: round.meterAfter,
+        daily: settings.daily,
+        adds,
+        caps: eachPot((pot) => settings.pots[pot].cap),
+        rolls,
       }),
     );
 
@@ -141,6 +185,10 @@ export class SlotsService {
         throw new ConflictException(`Log out of ${outcome.name} in the game first`);
       case BET_POOR:
         throw new UnprocessableEntityException('Not enough money in that wallet');
+      case SLOT_DAILY_REFUSED:
+        throw new ForbiddenException(`You have played today's ${settings.daily.toLocaleString('en-US')} rounds. The slots open again for you tomorrow.`);
+      case SLOT_METER_REFUSED:
+        throw new ConflictException('Your meter changed. Press Spin again.');
     }
 
     const state = await this.state(user);
@@ -149,13 +197,16 @@ export class SlotsService {
       at: new Date().toISOString(),
       character: state.characters.find((c) => c.id === request.characterId)?.name ?? '',
       machine: machine.key,
-      stops,
-      free,
+      stops: round.stops,
+      free: round.free,
+      meterFree: round.meterFree,
+      meterBefore,
       stake,
       payout,
-      jackpot: outcome.jackpot,
+      jackpot: SLOT_POTS.reduce((sum, pot) => sum + outcome.pots[pot], 0),
+      pots: outcome.pots,
     };
-    return { spin, wallet: outcome.wallet, state };
+    return { spin, wallet: outcome.wallet, state, meter: { machine: machine.key, stake, points: round.meterAfter } };
   }
 
   /** One spin's five reels, reel 1 first. */
@@ -164,13 +215,13 @@ export class SlotsService {
   }
 
   async gmState(): Promise<GmSlots> {
-    const [settings, totals, latest, pot, jackpotTotals, wins] = await Promise.all([
+    const [settings, totals, latest, pots, jackpotTotals, wins] = await Promise.all([
       this.readOr('settings', () => this.repo.settings(), CLOSED),
       this.readOr('totals', () => this.repo.totals(), {} as Awaited<ReturnType<SlotsRepository['totals']>>),
       this.readOr<SlotSpinRow[]>('latest spins', () => this.repo.latest(LATEST), []),
-      this.readOr<SlotPotRow | null>('jackpot', () => this.repo.pot(), NO_POT),
-      this.readOr('jackpot totals', () => this.repo.jackpotTotals(), { added: 0, paid: 0, drops: 0 }),
-      this.readOr<SlotSpinRow[]>('jackpot wins', () => this.repo.jackpotWins(JACKPOT_WINS), []),
+      this.readOr<SlotPotRow[]>('jackpots', () => this.repo.pots(), []),
+      this.readOr<Record<SlotPot, SlotJackpotTotalsRow> | null>('jackpot totals', () => this.repo.jackpotTotals(), null),
+      this.eachPotRead((pot) => this.readOr<SlotSpinRow[]>(`${pot} wins`, () => this.repo.jackpotWins(pot, JACKPOT_WINS), [])),
     ]);
     return {
       live: settings.live,
@@ -181,22 +232,34 @@ export class SlotsService {
           allTime: totalsView(totals[machine.key]?.allTime),
         }),
       ),
-      latest: spinViews(latest),
-      jackpot: {
-        live: settings.jackpot.live,
-        setCap: settings.jackpot.cap,
-        running: pot ? potView(settings, pot) : null,
-        added: Math.floor(jackpotTotals.added / BRONZE_PER_SILVER),
-        paid: jackpotTotals.paid,
-        drops: jackpotTotals.drops,
-        wins: spinViews(wins),
-      } satisfies GmSlotJackpot,
+      latest: this.spinViews(latest),
+      jackpots: SLOT_POTS.map((pot): GmSlotPot => {
+        const row = pots.find((p) => p.pot === pot);
+        const sums = jackpotTotals?.[pot] ?? NO_JACKPOT_TOTALS;
+        return {
+          pot,
+          live: settings.pots[pot].live,
+          setCap: settings.pots[pot].cap,
+          running: row ? potView(settings, row) : null,
+          added: Math.floor(sums.added / BRONZE_PER_SILVER),
+          paid: sums.paid,
+          drops: sums.drops,
+          wins: this.spinViews(wins[pot]),
+        };
+      }),
+      daily: { limit: settings.daily },
     };
   }
 
-  async saveJackpot(settings: SlotJackpotSettingsInput, actor: Actor): Promise<GmSlots> {
-    await this.write(() => this.repo.saveJackpot(settings, actor.username));
-    await this.audit(`JACKPOT ${onOff(settings.live)} cap ${settings.cap}`, actor);
+  async savePots(settings: SlotPotsSettingsInput, actor: Actor): Promise<GmSlots> {
+    await this.write(() => this.repo.savePots(settings, actor.username));
+    await this.audit(`JACKPOTS ${SLOT_POTS.map((pot) => `${pot} ${onOff(settings[pot].live)} ${settings[pot].cap}`).join(' ')}`, actor);
+    return this.gmState();
+  }
+
+  async saveDaily(rounds: number, actor: Actor): Promise<GmSlots> {
+    await this.write(() => this.repo.saveDaily(rounds, actor.username));
+    await this.audit(`DAILY ${rounds}`, actor);
     return this.gmState();
   }
 
@@ -211,6 +274,21 @@ export class SlotsService {
     await this.write(() => this.repo.saveMachine(key, settings, actor.username));
     await this.audit(`SET ${key} ${onOff(settings.live)} stakes ${settings.stakes.join(',')}`, actor);
     return this.gmState();
+  }
+
+  /** One read per pot, together. The pot comes from SLOT_POTS only: the repository puts its name into SQL. */
+  private async eachPotRead<T>(read: (pot: SlotPot) => Promise<T>): Promise<Record<SlotPot, T>> {
+    const values = await Promise.all(SLOT_POTS.map(read));
+    return Object.fromEntries(SLOT_POTS.map((pot, i) => [pot, values[i]])) as Record<SlotPot, T>;
+  }
+
+  /** The rows as the lists show them. A row of a machine the code has that cannot be shown is left out, and said once. */
+  private spinViews(rows: SlotSpinRow[]): SlotSpinView[] {
+    return spinViews(rows, (row) => {
+      if (this.unshown.has(row.id)) return;
+      this.unshown.add(row.id);
+      this.logger.warn(`Slots round ${row.id} on ${row.machine} cannot be played again from its stops by the rules, so the lists leave it out`);
+    });
   }
 
   private async readOr<T>(what: string, read: () => Promise<T>, fallback: T): Promise<T> {
@@ -250,24 +328,47 @@ const machineStates = (settings: SlotSettings): SlotMachineState[] =>
 const totalsView = (row: SlotTotalsRow = NO_TOTALS): SlotTotals => ({ spins: row.spins, staked: row.staked, paid: row.paid, added: row.added });
 
 /** Whole Silver. The pot's own cap while it has one; the cap set now only while it has none. */
-const potView = (settings: SlotSettings, pot: SlotPotRow) => {
-  const cap = pot.cap === null ? settings.jackpot.cap * SILVER_PER_GOLD : Math.floor(pot.cap / BRONZE_PER_SILVER);
-  return { pot: Math.floor(pot.pot / BRONZE_PER_SILVER), cap, floor: Math.floor(cap / 10) };
+const potView = (settings: SlotSettings, row: SlotPotRow) => {
+  const cap = row.cap === null ? settings.pots[row.pot].cap * SILVER_PER_GOLD : Math.floor(row.cap / BRONZE_PER_SILVER);
+  return { pot: Math.floor(row.amount / BRONZE_PER_SILVER), cap, floor: Math.floor(cap / 10) };
 };
 
-const jackpotView = (settings: SlotSettings, pot: SlotPotRow, last: SlotSpinRow | undefined): SlotJackpot => ({
-  live: settings.jackpot.live,
-  ...potView(settings, pot),
-  last: last ? { character: last.character, amount: last.jackpot, at: last.spunAt.toISOString() } : null,
-});
+const jackpotView = (settings: SlotSettings, row: SlotPotRow, last: SlotSpinRow | undefined): SlotJackpotView => {
+  const { pot: amount, cap, floor } = potView(settings, row);
+  return {
+    pot: row.pot,
+    live: settings.pots[row.pot].live,
+    amount,
+    cap,
+    floor,
+    last: last ? { character: last.character, amount: last.pots[row.pot], at: last.spunAt.toISOString() } : null,
+  };
+};
 
 const stopsInRange = (stops: SlotStops) => stops.length === SLOT_REELS && stops.every((s) => Number.isInteger(s) && s >= 0 && s < SLOT_REEL_STOPS);
 
-/** A spin for a machine the code no longer has, or with stops that cannot be shown, is left out. */
-const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
+/** Whether the rules can play the round again from its stops, as the page does: the right number of free and meter spins. */
+const replays = (machine: SlotMachine, row: SlotSpinRow) => {
+  try {
+    slotReplayRound(machine, row);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * A spin for a machine the code no longer has, with stops that cannot be shown, or that the rules cannot replay, is
+ * left out. `unshown` hears of each row of a machine the code has that is left out.
+ */
+const spinViews = (rows: SlotSpinRow[], unshown: (row: SlotSpinRow) => void): SlotSpinView[] =>
   rows.flatMap((row) => {
     const machine = slotMachine(row.machine);
-    if (!machine || !stopsInRange(row.stops) || !row.free.every(stopsInRange)) return [];
+    if (!machine) return [];
+    if (!stopsInRange(row.stops) || !row.free.every(stopsInRange) || !row.meterFree.every(stopsInRange) || !replays(machine, row)) {
+      unshown(row);
+      return [];
+    }
     return [
       {
         id: row.id,
@@ -276,9 +377,12 @@ const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
         machine: machine.key,
         stops: [...row.stops] as SlotStops,
         free: row.free.map((stops) => [...stops] as SlotStops),
+        meterFree: row.meterFree.map((stops) => [...stops] as SlotStops),
+        meterBefore: row.meterBefore,
         stake: row.stake,
         payout: row.payout,
         jackpot: row.jackpot,
+        pots: { ...row.pots },
       },
     ];
   });

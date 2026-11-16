@@ -40,10 +40,10 @@ export function WinLines({ lines, colour }: { lines: readonly number[]; colour: 
   )
 }
 
-/** All 20 lines as small 5 x 3 grids, numbered, for the pay table. */
+/** All 20 lines as small 5 x 3 grids, numbered, for the pay table. From 1024 px the pay table is half the page: five a row again. */
 export function LineMap(): ReactNode {
   return (
-    <ol aria-label="The 20 win lines" className="grid grid-cols-5 gap-x-2 gap-y-3 sm:grid-cols-10">
+    <ol aria-label="The 20 win lines" className="grid grid-cols-5 gap-x-2 gap-y-3 sm:grid-cols-10 lg:grid-cols-5">
       {SLOT_LINES.map((rows, line) => (
         <li key={line} className="flex flex-col items-center gap-1 text-xs text-muted tabular-nums">
           <svg aria-hidden="true" viewBox={BOX} className="h-6 w-10">
