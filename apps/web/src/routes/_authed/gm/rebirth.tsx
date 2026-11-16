@@ -55,9 +55,21 @@ function GmRebirthPage() {
     onSuccess: (state) => queryClient.setQueryData(queryOptions.queryKey, state),
   })
 
-  const [liveValue, percent, limit] = useWatch({ control, name: ['live', 'percent', 'limit'] })
+  const [liveValue, percent, limit, expPercent, goldPercent] = useWatch({
+    control,
+    name: ['live', 'percent', 'limit', 'expPercent', 'goldPercent'],
+  })
   const live = liveValue ?? false
-  const top = Number(percent) * Number(limit)
+  const topOf = (each: unknown) => {
+    const value = Number(each) * Number(limit)
+    return Number.isFinite(value) ? value : 0
+  }
+  const topParts = [
+    `+${topOf(percent)}% to all stats`,
+    ...(topOf(expPercent) > 0 ? [`+${topOf(expPercent)}% EXP`] : []),
+    ...(topOf(goldPercent) > 0 ? [`+${topOf(goldPercent)}% monster gold`] : []),
+  ]
+  const topText = topParts.length > 1 ? `${topParts.slice(0, -1).join(', ')} and ${topParts[topParts.length - 1]}` : topParts[0]
 
   async function onSubmit(values: RebirthSettings) {
     setError(null)
@@ -93,7 +105,7 @@ function GmRebirthPage() {
       <h1 className="text-4xl">Rebirth</h1>
       <p className="mt-2 text-sm text-muted">
         {
-          "Players can send a level 90 character back to level 1 for Gold and keep a lasting bonus to all stats. A new price applies to the next rebirth. A new percent or limit changes every reborn character's bonus at its next login."
+          "Players can send a level 90 character back to level 1 for Gold and keep a lasting bonus to all stats, and optionally to EXP and monster gold. A new price applies to the next rebirth. A new percent or limit changes all three bonuses of every reborn character at its next login."
         }
       </p>
 
@@ -135,7 +147,7 @@ function GmRebirthPage() {
                   error={errors.priceGold?.message}
                 />
                 <TextField
-                  label="Bonus per rebirth (%)"
+                  label="Stats per rebirth (%)"
                   type="number"
                   registration={register('percent', { valueAsNumber: true })}
                   error={errors.percent?.message}
@@ -147,14 +159,14 @@ function GmRebirthPage() {
                   error={errors.limit?.message}
                 />
                 <TextField
-                  label="EXP per rebirth"
+                  label="EXP per rebirth (%)"
                   type="number"
                   hint="0 = off"
                   registration={register('expPercent', { valueAsNumber: true })}
                   error={errors.expPercent?.message}
                 />
                 <TextField
-                  label="Monster gold per rebirth"
+                  label="Monster gold per rebirth (%)"
                   type="number"
                   hint="0 = off"
                   registration={register('goldPercent', { valueAsNumber: true })}
@@ -162,7 +174,7 @@ function GmRebirthPage() {
                 />
               </div>
               <p className="text-sm text-muted">
-                {`Rebirth 2 costs twice the price, rebirth 3 three times. A character at the limit has +${Number.isFinite(top) ? top : 0}% to all stats.`}
+                {`Rebirth 2 costs twice the price, rebirth 3 three times. A character at the limit has ${topText}.`}
               </p>
               <FormMessage message={error} />
               <div className="flex flex-wrap items-center gap-3">

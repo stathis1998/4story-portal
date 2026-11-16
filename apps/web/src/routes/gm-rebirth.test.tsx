@@ -39,12 +39,12 @@ describe('GM rebirth page', () => {
     expect(await screen.findByRole('heading', { name: 'Rebirth', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('switch', { name: 'Rebirth is open' })).not.toBeChecked()
     expect(await field('Price of the first rebirth (Gold)')).toHaveValue(1000)
-    expect(await field('Bonus per rebirth (%)')).toHaveValue(2)
+    expect(await field('Stats per rebirth (%)')).toHaveValue(2)
     expect(await field('Most rebirths')).toHaveValue(10)
     expect(screen.getByText('Characters reborn: 3')).toBeInTheDocument()
     expect(
       screen.getByText(
-        "A new price applies to the next rebirth. A new percent or limit changes every reborn character's bonus at its next login.",
+        "A new price applies to the next rebirth. A new percent or limit changes all three bonuses of every reborn character at its next login.",
         { exact: false },
       ),
     ).toBeInTheDocument()
@@ -77,7 +77,7 @@ describe('GM rebirth page', () => {
     expect(
       await screen.findByText('Rebirth 2 costs twice the price, rebirth 3 three times. A character at the limit has +20% to all stats.'),
     ).toBeInTheDocument()
-    const percent = await field('Bonus per rebirth (%)')
+    const percent = await field('Stats per rebirth (%)')
     await user.clear(percent)
     await user.type(percent, '3')
     const limit = await field('Most rebirths')
@@ -85,6 +85,15 @@ describe('GM rebirth page', () => {
     await user.type(limit, '5')
 
     expect(screen.getByText(/A character at the limit has \+15% to all stats\./)).toBeInTheDocument()
+
+    const exp = await field('EXP per rebirth (%)')
+    await user.clear(exp)
+    await user.type(exp, '4')
+    expect(screen.getByText(/A character at the limit has \+15% to all stats and \+20% EXP\./)).toBeInTheDocument()
+    const gold = await field('Monster gold per rebirth (%)')
+    await user.clear(gold)
+    await user.type(gold, '2')
+    expect(screen.getByText(/has \+15% to all stats, \+20% EXP and \+10% monster gold\./)).toBeInTheDocument()
   })
 
   it('saves what was typed', async () => {
@@ -130,10 +139,10 @@ describe('GM rebirth page', () => {
     const fetchMock = mockApi(base({ 'PUT /gm/rebirth/settings': () => json(200, state()) }))
     const { user } = renderRoute('/gm/rebirth', { me: gm })
 
-    const exp = await field('EXP per rebirth')
+    const exp = await field('EXP per rebirth (%)')
     await user.clear(exp)
     await user.type(exp, '10')
-    const gold = await field('Monster gold per rebirth')
+    const gold = await field('Monster gold per rebirth (%)')
     await user.clear(gold)
     await user.type(gold, '5')
     expect(screen.getAllByText('0 = off')).toHaveLength(2)

@@ -67,7 +67,7 @@ describe('rebirth section', () => {
 
     expect(await screen.findByText('Rebirths: 1')).toBeInTheDocument()
     expect(screen.getByText('Stats +2%')).toBeInTheDocument()
-    expect(screen.getByText('Next: rebirth 2, stats +4%')).toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 2, Stats +4%')).toBeInTheDocument()
     expect(screen.getByText('Level 90')).toBeInTheDocument()
     expect(screen.getByText('Logged out')).toBeInTheDocument()
     expect(screen.getByText('Nothing worn')).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe('rebirth section', () => {
     expect(await screen.findByText('Stats +4%')).toBeInTheDocument()
     expect(screen.getByText('EXP +10%')).toBeInTheDocument()
     expect(screen.queryByText(/Monster gold/)).not.toBeInTheDocument()
-    expect(screen.getByText('Next: rebirth 2, stats +6%, EXP +15%')).toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 2, Stats +6%, EXP +15%')).toBeInTheDocument()
   })
 
   it('shows all three extras when they are set', async () => {
@@ -251,7 +251,7 @@ describe('rebirth section', () => {
     expect(await screen.findByText('Rebirths: 2')).toBeInTheDocument()
     expect(screen.getByText('Stats +4%')).toBeInTheDocument()
     expect(screen.getByText('Level 90 needed, this character is 1')).toBeInTheDocument()
-    expect(screen.getByText('Next: rebirth 3, stats +6%')).toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 3, Stats +6%')).toBeInTheDocument()
   })
 
   it("refreshes the character's other sections after a rebirth", async () => {

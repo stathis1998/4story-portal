@@ -109,7 +109,7 @@ export function RebirthSection({ characterId }: { characterId: string }) {
           )}
           <FormMessage message={message} />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">{`Next: rebirth ${next.number}, ${bonusParts(next.bonuses, 'stats').join(', ')}`}</p>
+            <p className="text-sm">{`Next: rebirth ${next.number}, ${bonusParts(next.bonuses).join(', ')}`}</p>
             <Button disabled={!ready} onClick={() => setAsking(true)}>
               Be reborn
             </Button>
