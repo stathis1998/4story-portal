@@ -52,6 +52,7 @@ it('builds bracketed three-part table names from the configured databases', () =
     slotMeters: '[TGAME_GSP_TEST].dbo.TPORTALSLOTMETER',
     rebirths: '[TGAME_GSP_TEST].dbo.TCHARREBIRTHTABLE',
     rebirthLog: '[TGAME_GSP_TEST].dbo.TCHARREBIRTHLOGTABLE',
+    rebirthRewards: '[TGAME_GSP_TEST].dbo.TPORTALREBIRTHREWARD',
     quests: '[TGAME_GSP_TEST].dbo.TQUESTTABLE',
     questTerms: '[TGAME_GSP_TEST].dbo.TQUESTTERMTABLE',
     skillMaintains: '[TGAME_GSP_TEST].dbo.TSKILLMAINTAINTABLE',
