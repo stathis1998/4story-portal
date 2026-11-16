@@ -257,7 +257,8 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
 
   function turn(r: Round, at: number) {
     const spin = r.spins[at]
-    // Scatters give nothing in a free spin: nothing is waited for, and they land like any symbol.
+    // Only the paid spin's scatters are waited for: a free spin's land like any symbol, and a retrigger they make is
+    // told once its chain has ended.
     const scatterOnReel = at === 0 ? slotWindow(r.machine, spin.stops).map((rows) => rows.includes(SLOT_SCATTER)) : NO_SCATTERS
     const suspense = suspenseReels(scatterOnReel)
     Object.assign(r, {
