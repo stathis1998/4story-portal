@@ -1042,7 +1042,7 @@ export class FakeSlotsRepository implements SlotsRepository {
   async bigWins(limit: number): Promise<SlotSpinRow[]> {
     this.check();
     this.checkColumns();
-    return this.newest(this.current().filter((row) => row.multiple >= SLOT_BIG_WIN || row.jackpot > 0), limit);
+    return this.newest(this.current().filter((row) => row.multiple >= SLOT_BIG_WIN || row.pots.major > 0 || row.pots.giga > 0), limit);
   }
 
   async jackpotWins(pot: SlotPot, limit: number): Promise<SlotSpinRow[]> {

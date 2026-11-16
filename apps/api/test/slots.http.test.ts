@@ -406,6 +406,18 @@ describe('/api/slots', () => {
       expect(other.body.mine).toEqual([]);
     });
 
+    it('lists a round that won the Major or the Giga under big wins, and not one that won only the Mini', async () => {
+      slots.spinRows.push(
+        spinRow({ id: 501, jackpot: 150, pots: { ...NO_POTS, mini: 150 } }),
+        spinRow({ id: 502, jackpot: 1_100, pots: { ...NO_POTS, major: 1_100 } }),
+        spinRow({ id: 503, jackpot: 5_100, pots: { ...NO_POTS, giga: 5_100 } }),
+        spinRow({ id: 504, jackpot: 5_250, pots: { ...NO_POTS, mini: 150, giga: 5_100 } }),
+      );
+      const page = await player.get('/api/slots').expect(200);
+      expect(page.body.bigWins.map((s: { id: number }) => s.id)).toEqual([504, 503, 502]);
+      expect(page.body.mine.map((s: { id: number }) => s.id)).toEqual([504, 503, 502, 501]);
+    });
+
     it('three scatters play eight free spins in the same round', async () => {
       const calls = draws(...stopsOf(eightFree, ...many(8, paying)));
 

@@ -1339,6 +1339,19 @@ describe('SqlSlotsRepository against the _TEST copy', () => {
         [win, 0],
         [drop, 50_002],
       ]);
+
+      // A Mini alone is not a big win; a Major is.
+      await setPot(tx, 999_000, 1_000_000, 'mini');
+      const mini = await placed(repo, bet(character, { ...lost({ add: 0 }), adds: { ...NO_POTS, mini: 1150 }, rolls: { ...HIGH_ROLLS, mini: 0 } }));
+      await setPot(tx, 9_999_000, 10_000_000, 'major');
+      const major = await placed(repo, bet(character, { ...lost({ add: 0 }), adds: { ...NO_POTS, major: 1150 }, rolls: { ...HIGH_ROLLS, major: 0 } }));
+      expect((await repo.jackpotWins('mini', 10)).map((row) => [row.id, row.pots.mini])).toEqual([[mini, 1000]]);
+      expect((await repo.jackpotWins('major', 10)).map((row) => [row.id, row.pots.major])).toEqual([[major, 10_000]]);
+      expect((await repo.bigWins(10)).map((row) => [row.id, row.jackpot])).toEqual([
+        [major, 10_000],
+        [win, 0],
+        [drop, 50_002],
+      ]);
     }));
 
   it('adds up what went to the jackpots', () =>

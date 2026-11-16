@@ -520,7 +520,8 @@ SELECT @wonMini AS mini, @wonMajor AS major, @wonGiga AS giga;`;
   }
 
   bigWins(limit: number): Promise<SlotSpinRow[]> {
-    return this.spins(limit, 'wMultiple >= @bigWin OR llJackpot > 0', (r) => r.input('bigWin', sql.SmallInt, SLOT_BIG_WIN));
+    // A Mini can drop from a tenth of its cap, below the stake: it alone does not make a big win.
+    return this.spins(limit, 'wMultiple >= @bigWin OR llWonMajor > 0 OR llWonGiga > 0', (r) => r.input('bigWin', sql.SmallInt, SLOT_BIG_WIN));
   }
 
   jackpotWins(pot: SlotPot, limit: number): Promise<SlotSpinRow[]> {
