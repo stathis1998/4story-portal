@@ -39,9 +39,9 @@ const ready: RebirthState = {
   wornItems: 0,
   wallet: { gold: 5000, silver: 0, copper: 0 },
   rebirths: 1,
-  bonus: 2,
+  bonuses: { stats: 2, exp: 0, gold: 0 },
   open: true,
-  next: { number: 2, bonus: 4, priceGold: 4000 },
+  next: { number: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, priceGold: 4000, reward: null },
 }
 
 function setup(state: Partial<RebirthState>, post?: (body: unknown) => Response) {
@@ -50,7 +50,7 @@ function setup(state: Partial<RebirthState>, post?: (body: unknown) => Response)
     'GET /characters/1/profile': () => json(200, profile),
     [FREEZE]: () => json(200, { level: current.level, freezeLevel: null, online: false }),
     [GET]: () => json(200, current),
-    [POST]: post ?? (() => json(200, { ...current, level: 1, rebirths: 2, bonus: 4, next: null })),
+    [POST]: post ?? (() => json(200, { ...current, level: 1, rebirths: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, next: null })),
   })
   return { fetchMock, ...renderRoute('/characters/1', { me }) }
 }
@@ -66,13 +66,53 @@ describe('rebirth section', () => {
     setup({})
 
     expect(await screen.findByText('Rebirths: 1')).toBeInTheDocument()
-    expect(screen.getByText('Bonus: +2% all stats')).toBeInTheDocument()
-    expect(screen.getByText('Next: rebirth 2, +4% all stats')).toBeInTheDocument()
+    expect(screen.getByText('Stats +2%')).toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 2, stats +4%')).toBeInTheDocument()
     expect(screen.getByText('Level 90')).toBeInTheDocument()
     expect(screen.getByText('Logged out')).toBeInTheDocument()
     expect(screen.getByText('Nothing worn')).toBeInTheDocument()
     expect(screen.getByText('4,000 Gold')).toBeInTheDocument()
     expect(await beReborn()).toBeEnabled()
+  })
+
+  it('shows the three bonuses and leaves out an extra at 0', async () => {
+    setup({
+      bonuses: { stats: 4, exp: 10, gold: 0 },
+      next: { number: 2, bonuses: { stats: 6, exp: 15, gold: 0 }, priceGold: 4000, reward: null },
+    })
+
+    expect(await screen.findByText('Stats +4%')).toBeInTheDocument()
+    expect(screen.getByText('EXP +10%')).toBeInTheDocument()
+    expect(screen.queryByText(/Monster gold/)).not.toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 2, stats +6%, EXP +15%')).toBeInTheDocument()
+  })
+
+  it('shows all three extras when they are set', async () => {
+    setup({ bonuses: { stats: 4, exp: 10, gold: 5 } })
+
+    expect(await screen.findByText('Monster gold +5%')).toBeInTheDocument()
+  })
+
+  it('shows the next reward and lists it in the confirmation', async () => {
+    const { user } = setup({
+      next: { number: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, priceGold: 4000, reward: { gold: 2, silver: 0, copper: 0, items: [] } },
+    })
+
+    const line = await screen.findByText('Reward:')
+    expect(line.parentElement).toHaveTextContent(/Reward:\s*2/)
+    await user.click(await beReborn())
+    const dialog = await screen.findByRole('dialog', { name: 'Be reborn as level 1?' })
+    expect(within(dialog).getByText('Reward:')).toBeInTheDocument()
+    expect(within(dialog).getByText('2')).toBeInTheDocument()
+  })
+
+  it('shows no reward line when the next rebirth has none', async () => {
+    const { user } = setup({})
+
+    await user.click(await beReborn())
+    const dialog = await screen.findByRole('dialog')
+    expect(screen.queryByText('Reward:')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Reward:')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -92,25 +132,25 @@ describe('rebirth section', () => {
 
     expect(await screen.findByText('Rebirth is closed right now.')).toBeInTheDocument()
     expect(screen.getByText('Rebirths: 1')).toBeInTheDocument()
-    expect(screen.getByText('Bonus: +2% all stats')).toBeInTheDocument()
+    expect(screen.getByText('Stats +2%')).toBeInTheDocument()
     expect(screen.queryByText('Nothing worn')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Be reborn' })).not.toBeInTheDocument()
   })
 
   it('says only that rebirth is closed for a character never reborn', async () => {
-    setup({ open: false, rebirths: 0, bonus: 0 })
+    setup({ open: false, rebirths: 0, bonuses: { stats: 0, exp: 0, gold: 0 } })
 
     expect(await screen.findByText('Rebirth is closed right now.')).toBeInTheDocument()
     expect(screen.queryByText(/^Rebirths:/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^Bonus:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Stats \+/)).not.toBeInTheDocument()
   })
 
   it('says the limit is reached', async () => {
-    setup({ rebirths: 10, bonus: 20, next: null })
+    setup({ rebirths: 10, bonuses: { stats: 20, exp: 0, gold: 0 }, next: null })
 
     expect(await screen.findByText('This character has reached the rebirth limit.')).toBeInTheDocument()
     expect(screen.getByText('Rebirths: 10')).toBeInTheDocument()
-    expect(screen.getByText('Bonus: +20% all stats')).toBeInTheDocument()
+    expect(screen.getByText('Stats +20%')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Be reborn' })).not.toBeInTheDocument()
   })
 
@@ -124,9 +164,7 @@ describe('rebirth section', () => {
         "Reset: level, EXP, skills and skill points, skill hotkeys, quests, running buffs, the level freeze. You return to your country's starting town.",
       ),
     ).toBeInTheDocument()
-    expect(
-      within(dialog).getByText('Kept: items, the rest of your Gold, pets, mounts, titles, guild and friends.'),
-    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Kept: items, the rest of your Gold, pets, mounts, titles, guild and friends.')).toBeInTheDocument()
     expect(within(dialog).getByText('Cost: 4,000 Gold.')).toBeInTheDocument()
     expect(calls(fetchMock, POST)).toBe(0)
 
@@ -155,7 +193,7 @@ describe('rebirth section', () => {
       [GET]: () => json(200, current),
       [POST]: async () => {
         await gate
-        return json(200, { ...current, level: 1, rebirths: 2, bonus: 4, next: null })
+        return json(200, { ...current, level: 1, rebirths: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, next: null })
       },
     })
     const { user } = renderRoute('/characters/1', { me })
@@ -177,7 +215,7 @@ describe('rebirth section', () => {
     let price = 4000
     const fetchMock = mockApi({
       'GET /characters/1/profile': () => json(200, profile),
-      [GET]: () => json(200, { ...ready, next: { number: 2, bonus: 4, priceGold: price } }),
+      [GET]: () => json(200, { ...ready, next: { number: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, priceGold: price, reward: null } }),
       [POST]: () => {
         price = 6000
         return json(409, { statusCode: 409, message: 'The price has changed. Check it and confirm again' })
@@ -196,26 +234,24 @@ describe('rebirth section', () => {
   })
 
   it('shows the new life after a rebirth', async () => {
-    const { user } = setup(
-      {},
-      () =>
-        json(200, {
-          ...ready,
-          level: 1,
-          rebirths: 2,
-          bonus: 4,
-          wallet: { gold: 1000, silver: 0, copper: 0 },
-          next: { number: 3, bonus: 6, priceGold: 6000 },
-        }),
+    const { user } = setup({}, () =>
+      json(200, {
+        ...ready,
+        level: 1,
+        rebirths: 2,
+        bonuses: { stats: 4, exp: 0, gold: 0 },
+        wallet: { gold: 1000, silver: 0, copper: 0 },
+        next: { number: 3, bonuses: { stats: 6, exp: 0, gold: 0 }, priceGold: 6000, reward: null },
+      }),
     )
 
     await user.click(await beReborn())
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Be reborn' }))
 
     expect(await screen.findByText('Rebirths: 2')).toBeInTheDocument()
-    expect(screen.getByText('Bonus: +4% all stats')).toBeInTheDocument()
+    expect(screen.getByText('Stats +4%')).toBeInTheDocument()
     expect(screen.getByText('Level 90 needed, this character is 1')).toBeInTheDocument()
-    expect(screen.getByText('Next: rebirth 3, +6% all stats')).toBeInTheDocument()
+    expect(screen.getByText('Next: rebirth 3, stats +6%')).toBeInTheDocument()
   })
 
   it("refreshes the character's other sections after a rebirth", async () => {
