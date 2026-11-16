@@ -557,8 +557,8 @@ describe('slots', () => {
 
     await user.click(spinButton())
 
-    expect(await screen.findByRole('img', { name: 'Reels, spinning' })).toBeInTheDocument()
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60 }])
+    expect(await reelsStarted()).toBeInTheDocument()
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60, rules: 3 }])
     expect(status()).toHaveTextContent('Good luck...')
     // A press now stops the reels: it never sends another spin.
     expect(spinButton()).toHaveTextContent('Stop')
@@ -685,7 +685,7 @@ describe('slots', () => {
 
     fireEvent.keyDown(document.body, { key: ' ' })
     await screen.findByRole('img', { name: /^Reels: / })
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 20 }])
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 20, rules: 3 }])
     expect(await screen.findByRole('button', { name: 'Spin' })).toBeEnabled()
 
     // The key is still down: the browser repeats it, and that is not a new pull.
@@ -1032,7 +1032,7 @@ describe('slots', () => {
       expect(spinButton()).toBeEnabled()
       await user.click(spinButton())
       await screen.findByRole('img', { name: /^Reels: / })
-      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 100 }])
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 100, rules: 3 }])
     })
 
     it('picks the new lowest, and says so, when it is no higher than the stake the player had', async () => {
@@ -1091,7 +1091,7 @@ describe('slots', () => {
 
       playOut()
 
-      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60 }])
+      expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 60, rules: 3 }])
       expect(stake('20 Silver')).toBeChecked()
       const line = lineOf(lines.spin)
       const note = 'The stakes on this machine changed. Your stake is now 20 Silver.'
@@ -1110,7 +1110,7 @@ describe('slots', () => {
     await user.keyboard(' ')
 
     await screen.findByRole('img', { name: /^Reels: / })
-    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 40 }])
+    expect(sentBodies(fetchMock, 'POST /slots/spin')).toEqual([{ characterId: 7, machine: 'shelf', stake: 40, rules: 3 }])
   })
 
   it('takes the stake from the wallet at the press, and puts it back when the spin is refused', async () => {

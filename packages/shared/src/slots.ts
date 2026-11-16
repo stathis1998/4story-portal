@@ -40,6 +40,8 @@ export const SLOT_METER_FREE = 8;
 export const SLOT_TOTAL_RETURN = 1.05;
 /** The rules number of a cascade round's row. */
 export const SLOT_RULES_CASCADE = 3;
+/** What a spin from a page that plays older rules is told. */
+export const SLOT_RULES_CHANGED = 'The slots have changed. Reload the page to keep playing.';
 /** Rounds per account per database day, all machines together. */
 export const SLOT_DAILY_DEFAULT = 1_500;
 export const SLOT_DAILY_MIN = 100;
@@ -154,6 +156,9 @@ export const slotSpinRequestSchema = z.object({
   characterId: characterIdSchema,
   machine: z.enum(SLOT_MACHINE_KEYS),
   stake: z.number().int().min(SLOT_MIN_STAKE).max(SLOT_MAX_STAKE).multipleOf(SLOT_STAKE_STEP),
+  // A page from before the cascades would replay the stops with its own strips and rules and show a round that was
+  // not played: it sends no rules (or rules 2), and is told to reload.
+  rules: z.literal(SLOT_RULES_CASCADE, { error: SLOT_RULES_CHANGED }),
 });
 export type SlotSpinRequest = z.output<typeof slotSpinRequestSchema>;
 

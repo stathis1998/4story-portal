@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   type GmSlots,
@@ -22,6 +22,27 @@ import { CurrentUser, SessionGuard } from '../auth/session.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { SlotsService } from './slots.service.js';
 
+/**
+ * The spin's body, read by its schema. A page from before the cascades sends no rules (or older ones) and shows the
+ * message of a refusal, not its fields, so that refusal carries the schema's words as its message.
+ */
+class SpinRequestPipe extends ZodValidationPipe<typeof slotSpinRequestSchema> {
+  constructor() {
+    super(slotSpinRequestSchema);
+  }
+
+  override transform(value: unknown): SlotSpinRequest {
+    try {
+      return super.transform(value);
+    } catch (error) {
+      const body = error instanceof BadRequestException ? (error.getResponse() as { fieldErrors?: Record<string, string[] | undefined> }) : null;
+      const rules = body?.fieldErrors?.rules?.[0];
+      if (rules) throw new BadRequestException({ ...body, message: rules });
+      throw error;
+    }
+  }
+}
+
 @Controller()
 @UseGuards(SessionGuard)
 export class SlotsController {
@@ -36,7 +57,7 @@ export class SlotsController {
   @HttpCode(200)
   @UseGuards(AccountThrottlerGuard)
   @Throttle({ default: { limit: 45, ttl: 60_000 } })
-  spin(@Body(new ZodValidationPipe(slotSpinRequestSchema)) body: SlotSpinRequest, @CurrentUser() user: SessionUser): Promise<SlotSpinResult> {
+  spin(@Body(new SpinRequestPipe()) body: SlotSpinRequest, @CurrentUser() user: SessionUser): Promise<SlotSpinResult> {
     return this.slots.spin(user, body);
   }
 

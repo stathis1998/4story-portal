@@ -5,6 +5,7 @@ import {
   slotJackpotDrops,
   slotMachineSettingsSchema,
   slotPotsSettingsSchema,
+  SLOT_RULES_CHANGED,
   slotSpinRequestSchema,
 } from './slots.js';
 
@@ -19,11 +20,22 @@ it.each(['10,25,50', '0,20,40', '20,40', '40,20,60', '20,20,40', '20,40,5020', '
 );
 
 it('refuses a spin for an unknown machine or a stake that is not a multiple of 20 in range', () => {
-  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake: 40 }).success).toBe(true);
-  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake: 5000 }).success).toBe(true);
-  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'bingo', stake: 40 }).success).toBe(false);
+  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake: 40, rules: 3 }).success).toBe(true);
+  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake: 5000, rules: 3 }).success).toBe(true);
+  expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'bingo', stake: 40, rules: 3 }).success).toBe(false);
   for (const stake of [25, 0, 10, 5020])
-    expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake }).success, `${stake}`).toBe(false);
+    expect(slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake, rules: 3 }).success, `${stake}`).toBe(false);
+});
+
+it('refuses a spin from a page that plays older rules, telling it to reload', () => {
+  for (const rules of [undefined, 2, 1, 4, '3']) {
+    const out = slotSpinRequestSchema.safeParse({ characterId: 5, machine: 'shelf', stake: 40, rules });
+    expect(out.success, `${rules}`).toBe(false);
+    expect(!out.success && out.error.issues.map((issue) => [issue.path, issue.message])).toEqual([
+      [['rules'], 'The slots have changed. Reload the page to keep playing.'],
+    ]);
+  }
+  expect(SLOT_RULES_CHANGED).toBe('The slots have changed. Reload the page to keep playing.');
 });
 
 it('refuses machine settings whose stakes are not three different multiples of 20, rising', () => {

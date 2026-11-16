@@ -1,4 +1,4 @@
-import { SLOT_MACHINES, SLOT_POTS, silverText, slotMachine, walletSilver } from '@4story-portal/shared'
+import { SLOT_MACHINES, SLOT_POTS, SLOT_RULES_CASCADE, silverText, slotMachine, walletSilver } from '@4story-portal/shared'
 import type { SlotMachine, SlotMachineKey, SlotMachineState, SlotPot, SlotSpinResult, SlotSpinView, SlotsState } from '@4story-portal/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
@@ -198,7 +198,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
     setProblem(null)
     let result: SlotSpinResult
     try {
-      result = await send(character.id, stake, () => spinSlots({ characterId: character.id, machine: machine.key, stake }))
+      result = await send(character.id, stake, () => spinSlots({ characterId: character.id, machine: machine.key, stake, rules: SLOT_RULES_CASCADE }))
     } catch (err) {
       // The stakes come back with the reload, and a stake that went is replaced the way the page always does it.
       sounds.play('refused')

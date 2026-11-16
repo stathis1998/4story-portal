@@ -143,7 +143,7 @@ describe('/api/slots', () => {
   const many = (count: number, stops: SlotStops) => Array<SlotStops>(count).fill(stops);
 
   const spin = (body: Record<string, unknown> = {}, who = player) =>
-    who.post('/api/slots/spin').send({ characterId: 7, machine: 'shelf', stake: 60, ...body });
+    who.post('/api/slots/spin').send({ characterId: 7, machine: 'shelf', stake: 60, rules: 3, ...body });
   const wallet = () => {
     const { gold, silver, copper } = slots.characterRows[0];
     return { gold, silver, copper };
@@ -754,6 +754,21 @@ describe('/api/slots', () => {
       expect(calls).toEqual([]);
       expect(slots.betCalls).toEqual([]);
       untouched();
+    });
+
+    it('refuses a spin from a page that plays older rules with 400, telling it to reload, before anything is drawn', async () => {
+      const calls = draws(...paying);
+      for (const rules of [undefined, 2]) {
+        const res = await spin({ rules }).expect(400);
+        expect(res.body.message).toBe('The slots have changed. Reload the page to keep playing.');
+      }
+      expect(calls).toEqual([]);
+      expect(slots.betCalls).toEqual([]);
+      expect(slots.spinRows).toEqual([]);
+      potsUntouched();
+      untouched();
+      // The page of today sends rules 3 and plays.
+      await spin().expect(200);
     });
 
     it('refuses with 400 an unknown machine, a stake of 0 and a missing character', async () => {
