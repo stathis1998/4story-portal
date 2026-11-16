@@ -198,6 +198,17 @@ describe('a cascade', () => {
     expect(second.drop[0]).toEqual([1, 1, 0]);
   });
 
+  it('bursts exactly the two tiles of a two lucky symbols win', () => {
+    // Lines 1, 16 and 17 all pay the two Alphas in the middle of reels 1 and 2, and they burst once each.
+    const rows = ['DFEGH', 'CEGHG', 'AACDE', 'DFHGH'];
+    const [first, second] = slotChain(stacked(rows), bottom(rows)).steps;
+    expect(first.lines.map((l) => [l.line, l.count, l.multiple])).toEqual([[0, 2, 2], [15, 2, 2], [16, 2, 2]]);
+    expect(first.burst).toEqual([[0, 1], [1, 1]]);
+    // Only reels 1 and 2 refill; reel 3's C, past the count of 2, stays where it was.
+    expect(second.drop).toEqual([[1, 1, 0], [1, 1, 0], still, still, still]);
+    expect(second.grid.slice(0, 3)).toEqual([col('DCD'), col('FEF'), col('GCH')]);
+  });
+
   it('bursts a wild that helped a line', () => {
     // The wild on reel 2 makes the line; the wild on reel 5 is past the line's count of 3.
     const rows = ['DFEGH', 'CEGHG', 'BIBCI', 'DFHGH'];

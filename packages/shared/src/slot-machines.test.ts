@@ -4,7 +4,6 @@ import {
   SLOT_PAYING,
   SLOT_POTS,
   SLOT_REEL_STOPS,
-  SLOT_REELS,
   SLOT_SCATTER,
   SLOT_TOTAL_RETURN,
   SLOT_WILD,
@@ -25,7 +24,6 @@ import { SLOT_MACHINES, slotMachine } from './slot-machines.js';
 
 const WILD = SLOT_LETTERS[SLOT_WILD];
 const SCATTER = SLOT_LETTERS[SLOT_SCATTER];
-const WINDOWS = SLOT_REEL_STOPS ** SLOT_REELS;
 const machine = (key: string): SlotMachine => slotMachine(key)!;
 
 // The symbols the five-reel machines had: names, sprites and indexes stay exactly as they were.
@@ -131,8 +129,8 @@ describe.each(SLOT_MACHINES)('$name', (m) => {
     }
   });
 
-  it('almost never reaches the 12-step cap', () => {
-    expect(m.counts.capped).toBeLessThanOrEqual(WINDOWS / 100_000);
+  it('never reaches the 12-step cap', () => {
+    expect(m.counts.capped).toBe(0);
   });
 
   it('rests on a window that looks like nothing', () => {

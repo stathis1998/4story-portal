@@ -139,6 +139,9 @@ describe('counting windows', () => {
   // Short strips that mostly repeat every 3, so a burst often refills alike and chains, some to the cap. A wild on
   // reel 2; scatters on reels 4 and 5, two side by side on reel 4 so it can show two at once.
   const small = build(['ABCABE', 'ABCIBC', 'ABCAEC', 'JJCABC', 'JBCDBC']);
+  // The same with a wild and a scatter on reel 1, so the count's "reel 1 starts nothing" is played against slotChain.
+  // Any change to reel 1 breaks the repeat that takes chains to the cap, so this is a second machine.
+  const reelOne = build(['ABCIBJ', 'ABCIBC', 'ABCAEC', 'JJCABC', 'JBCDBC']);
 
   it('counts a small machine exactly as slotChain plays it, window by window', () => {
     const expected = countByHand(small);
@@ -152,6 +155,12 @@ describe('counting windows', () => {
     expect(expected.capped).toBeGreaterThan(0);
     expect(expected.capped).toBeLessThan(6 ** 5);
     expect(countSlotMachine(small)).toEqual(expected);
+
+    const withReelOne = countByHand(reelOne);
+    expect(withReelOne.free.reduce((a, b) => a + b, 0)).toBe(6 ** 5);
+    expect(withReelOne.longest).toBeGreaterThan(1);
+    expect(withReelOne.last[1] + withReelOne.last[2]).toBeGreaterThan(0);
+    expect(countSlotMachine(reelOne)).toEqual(withReelOne);
   });
 
   it('pays a free round exactly as the round rules play it, multiplier and retriggers included', () => {
