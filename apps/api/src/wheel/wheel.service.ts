@@ -22,6 +22,7 @@ import {
 } from '@4story-portal/shared';
 import { ControlClient } from '../control/control-client.js';
 import { itemIcons } from '../gm/game-icons.generated.js';
+import { checkRewardItems } from '../gm/reward-items.js';
 import { GM_REPOSITORY, type GmRepository } from '../gm/gm.repository.js';
 import {
   isEmptyReward,
@@ -32,7 +33,6 @@ import {
   SPIN_SWITCHED_OFF,
   type SpinRow,
   WHEEL_REPOSITORY,
-  type WheelItem,
   type WheelRepository,
   type WheelReward,
 } from './wheel.repository.js';
@@ -157,14 +157,14 @@ export class WheelService {
   async createPrize(prize: WheelPrizeInput, actor: Actor): Promise<GmWheel> {
     const existing = await this.write(() => this.repo.prizes());
     if (existing.length >= WHEEL_MAX_PRIZES) throw new UnprocessableEntityException(`The wheel holds at most ${WHEEL_MAX_PRIZES} prizes`);
-    await this.checkItems(prize.items);
+    await checkRewardItems(prize.items, (ids) => this.write(() => this.repo.findItems(ids)));
     const id = await this.write(() => this.repo.createPrize(prize, actor.username));
     await this.audit(`ADD ${id} ${describePrize(prize)}`, actor);
     return this.gmState();
   }
 
   async updatePrize(id: number, prize: WheelPrizeInput, actor: Actor): Promise<GmWheel> {
-    await this.checkItems(prize.items);
+    await checkRewardItems(prize.items, (ids) => this.write(() => this.repo.findItems(ids)));
     if (!(await this.write(() => this.repo.updatePrize(id, prize, actor.username)))) throw new NotFoundException('No such prize');
     await this.audit(`SET ${id} ${describePrize(prize)}`, actor);
     return this.gmState();
@@ -181,26 +181,6 @@ export class WheelService {
     await this.write(() => this.repo.setLive(live, actor.username));
     await this.audit(live ? 'ON' : 'OFF', actor);
     return this.gmState();
-  }
-
-  /** The same checks GM mail makes: a prize is sent as a letter. */
-  private async checkItems(items: WheelItem[]): Promise<void> {
-    if (items.length === 0) return;
-    const ids = [...new Set(items.map((item) => item.itemId))];
-    const found = new Map((await this.write(() => this.repo.findItems(ids))).map((row) => [row.itemId, row]));
-
-    const unknown = ids.filter((id) => !found.has(id));
-    if (unknown.length > 0) throw new UnprocessableEntityException(`Unknown items: ${unknown.join(', ')}`);
-
-    // The client crashes drawing an item it has no entry for.
-    const missing = ids.find((id) => !Object.hasOwn(itemIcons, id));
-    if (missing !== undefined) throw new UnprocessableEntityException(`Not in the game client: ${missing}`);
-
-    for (const { itemId, count } of items) {
-      const item = found.get(itemId)!;
-      const stack = Math.max(item.stack, 1);
-      if (count > stack) throw new UnprocessableEntityException(`${item.name || `Item ${itemId}`} stacks to ${stack}`);
-    }
   }
 
   private async itemNames(rewards: WheelReward[]): Promise<Map<number, string>> {

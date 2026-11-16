@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { itemIcons } from '../src/gm/game-icons.generated.js';
 import { sha1Hex } from '../src/auth/sha1.js';
 import { RebirthAnnouncer } from '../src/rebirth/rebirth-announcer.js';
 import { ANNOUNCE_SENT, ANNOUNCE_SKIPPED, ANNOUNCE_WAITING } from '../src/rebirth/rebirth.repository.js';
@@ -9,7 +10,9 @@ import { StatsService } from '../src/stats/stats.service.js';
 import { FakeAccountsRepository, FakeControlClient, FakeGmRepository, FakeRebirthRepository } from './fakes.js';
 import { createTestApp } from './test-app.js';
 
-const settingsBody = (overrides = {}) => ({ live: true, priceGold: 2000, percent: 2, limit: 10, ...overrides });
+const [itemId] = Object.keys(itemIcons).map(Number);
+const settingsBody = (overrides = {}) => ({ live: true, priceGold: 2000, percent: 2, limit: 10, expPercent: 0, goldPercent: 0, ...overrides });
+const money = { gold: 100, silver: 0, copper: 0, items: [] as { itemId: number; count: number }[] };
 
 describe('/api rebirth', () => {
   let app: INestApplication;
@@ -31,8 +34,8 @@ describe('/api rebirth', () => {
     rebirth = new FakeRebirthRepository();
     now = new Date('2026-11-15T10:00:00Z');
     rebirth.now = () => now;
-    rebirth.settingsRow = { live: true, priceGold: 2000, percent: 2, limit: 10 };
-    const base = { level: 90, online: false, wornItems: 0, rebirths: 0, bonus: 0, gold: 5000, silver: 0, copper: 0 };
+    rebirth.settingsRow = { live: true, priceGold: 2000, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 };
+    const base = { level: 90, online: false, wornItems: 0, rebirths: 0, statBonus: 0, expBonus: 0, goldBonus: 0, gold: 5000, silver: 0, copper: 0 };
     rebirth.characters = [
       { ...base, charId: 7, userId: playerId, name: 'Mounara' },
       { ...base, charId: 9, userId: playerId + 50, name: 'Stranger' },
@@ -55,29 +58,65 @@ describe('/api rebirth', () => {
 
   describe('GET /characters/:id/rebirth', () => {
     it('shows what the next rebirth costs and gives', async () => {
-      Object.assign(mine(), { rebirths: 1, bonus: 2 });
+      Object.assign(mine(), { rebirths: 1, statBonus: 2 });
       const res = await player.get('/api/characters/7/rebirth').expect(200);
       expect(res.body).toMatchObject({
         characterId: 7,
         name: 'Mounara',
         level: 90,
         rebirths: 1,
-        bonus: 2,
+        bonuses: { stats: 2, exp: 0, gold: 0 },
         open: true,
-        next: { number: 2, bonus: 4, priceGold: 4000 },
+        next: { number: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, priceGold: 4000, reward: null },
       });
     });
 
     it('shows no next rebirth at the limit', async () => {
-      Object.assign(mine(), { rebirths: 10, bonus: 20 });
+      Object.assign(mine(), { rebirths: 10, statBonus: 20 });
       const res = await player.get('/api/characters/7/rebirth').expect(200);
       expect(res.body.next).toBeNull();
     });
 
     it('shows rebirth as closed with no price', async () => {
-      rebirth.settingsRow = { live: true, priceGold: 0, percent: 2, limit: 10 };
+      rebirth.settingsRow = { live: true, priceGold: 0, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 };
       const res = await player.get('/api/characters/7/rebirth').expect(200);
       expect(res.body.open).toBe(false);
+    });
+
+    it('shows all three bonuses now and after the next rebirth', async () => {
+      rebirth.settingsRow = { ...rebirth.settingsRow, percent: 5, expPercent: 10, goldPercent: 5 };
+      Object.assign(mine(), { rebirths: 1, statBonus: 5, expBonus: 10, goldBonus: 5 });
+      const res = await player.get('/api/characters/7/rebirth').expect(200);
+      expect(res.body.bonuses).toEqual({ stats: 5, exp: 10, gold: 5 });
+      expect(res.body.next.bonuses).toEqual({ stats: 10, exp: 20, gold: 10 });
+    });
+
+    it("shows the next rebirth's reward with item names", async () => {
+      rebirth.items = [{ itemId, name: 'Potion', stack: 20 }];
+      rebirth.rewardRows = [{ rebirth: 2, gold: 5, silver: 0, copper: 0, items: [{ itemId, count: 3 }] }];
+      Object.assign(mine(), { rebirths: 1, statBonus: 2 });
+      const res = await player.get('/api/characters/7/rebirth').expect(200);
+      expect(res.body.next.reward).toEqual({
+        gold: 5,
+        silver: 0,
+        copper: 0,
+        items: [{ itemId, count: 3, name: 'Potion', icon: itemIcons[itemId] }],
+      });
+    });
+
+    it('shows no reward when the next rebirth has none', async () => {
+      rebirth.rewardRows = [{ rebirth: 3, gold: 5, silver: 0, copper: 0, items: [] }];
+      Object.assign(mine(), { rebirths: 1, statBonus: 2 });
+      const res = await player.get('/api/characters/7/rebirth').expect(200);
+      expect(res.body.next.reward).toBeNull();
+    });
+
+    it('still shows the state when the reward table cannot be read', async () => {
+      rebirth.rewardRows = [{ rebirth: 1, gold: 5, silver: 0, copper: 0, items: [] }];
+      const rewards = vi.spyOn(rebirth, 'rewards').mockRejectedValue(new Error('Invalid object name'));
+      const res = await player.get('/api/characters/7/rebirth').expect(200);
+      expect(rewards).toHaveBeenCalled();
+      expect(res.body.next.reward).toBeNull();
     });
 
     it('needs a login', async () => {
@@ -94,8 +133,8 @@ describe('/api rebirth', () => {
   describe('POST /characters/:id/rebirth', () => {
     it('is reborn and returns the new state', async () => {
       const res = await reborn().expect(200);
-      expect(res.body).toMatchObject({ level: 1, rebirths: 1, bonus: 2, wallet: { gold: 3000, silver: 0, copper: 0 } });
-      expect(res.body.next).toEqual({ number: 2, bonus: 4, priceGold: 4000 });
+      expect(res.body).toMatchObject({ level: 1, rebirths: 1, bonuses: { stats: 2, exp: 0, gold: 0 }, wallet: { gold: 3000, silver: 0, copper: 0 } });
+      expect(res.body.next).toEqual({ number: 2, bonuses: { stats: 4, exp: 0, gold: 0 }, priceGold: 4000, reward: null });
       expect(mine()).toMatchObject({ level: 1, rebirths: 1, gold: 3000 });
     });
 
@@ -122,8 +161,8 @@ describe('/api rebirth', () => {
     });
 
     it.each([
-      ['closed', { settingsRow: { live: false, priceGold: 2000, percent: 2, limit: 10 } }, 409, 'Rebirth is closed right now'],
-      ['closed with no price', { settingsRow: { live: true, priceGold: 0, percent: 2, limit: 10 } }, 409, 'Rebirth is closed right now'],
+      ['closed', { settingsRow: { live: false, priceGold: 2000, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 } }, 409, 'Rebirth is closed right now'],
+      ['closed with no price', { settingsRow: { live: true, priceGold: 0, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 } }, 409, 'Rebirth is closed right now'],
       ['online', { row: { online: true } }, 409, 'Log out of the game with this character first'],
       ['level 1', { row: { level: 1 } }, 422, 'This character is not level 90 yet'],
     ])('refuses %s before reading the baseline', async (_name, change, status, message) => {
@@ -136,6 +175,13 @@ describe('/api rebirth', () => {
       expect(rebirth.rebirthCalls).toEqual([]);
     });
 
+    it('answers 503 and takes nothing when the reward letter cannot be sent', async () => {
+      vi.spyOn(rebirth, 'rebirth').mockRejectedValue(new Error('Rebirth reward letter not sent'));
+      const res = await reborn().expect(503);
+      expect(res.body.message).toBe('Rebirth could not be completed right now. Nothing was taken. Try again in a minute');
+      expect(mine()).toMatchObject({ level: 90, rebirths: 0, gold: 5000 });
+    });
+
     it('drops the stats cache after a rebirth', async () => {
       const drop = vi.spyOn(app.get(StatsService), 'dropCache');
       await reborn(1).expect(409);
@@ -145,7 +191,7 @@ describe('/api rebirth', () => {
     });
 
     it.each([
-      ['closed', { settingsRow: { live: false, priceGold: 2000, percent: 2, limit: 10 } }, 409, 'Rebirth is closed right now'],
+      ['closed', { settingsRow: { live: false, priceGold: 2000, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 } }, 409, 'Rebirth is closed right now'],
       ['online', { row: { online: true } }, 409, 'Log out of the game with this character first'],
       ['a changed price', { price: 1000 }, 409, 'The price has changed. Check it and confirm again'],
       ['too low a level', { row: { level: 89 } }, 422, 'This character is not level 90 yet'],
@@ -189,16 +235,16 @@ describe('/api rebirth', () => {
     it('saves the settings, writes the audit line and returns the page', async () => {
       await reborn().expect(200);
       const res = await moose.put('/api/gm/rebirth/settings').send(settingsBody({ priceGold: 3000, percent: 3, limit: 5 })).expect(200);
-      expect(rebirth.settingsRow).toEqual({ live: true, priceGold: 3000, percent: 3, limit: 5 });
+      expect(rebirth.settingsRow).toEqual({ live: true, priceGold: 3000, percent: 3, limit: 5, expPercent: 0, goldPercent: 0 });
       expect(res.body).toMatchObject({
-        settings: { live: true, priceGold: 3000, percent: 3, limit: 5 },
+        settings: { live: true, priceGold: 3000, percent: 3, limit: 5, expPercent: 0, goldPercent: 0 },
         reborn: 1,
         recent: [{ name: 'Mounara', rebirth: 1, bonus: 2, priceGold: 2000, at: now.toISOString() }],
       });
       expect(gm.audits).toEqual([
-        expect.objectContaining({ gmId: 'moose', command: 'REBIRTH', log: 'SET on price 3000 percent 3 limit 5' }),
+        expect.objectContaining({ gmId: 'moose', command: 'REBIRTH', log: 'SET on price 3000 percent 3 limit 5 exp 0 gold 0' }),
       ]);
-      expect(mine().bonus).toBe(3);
+      expect(mine().statBonus).toBe(3);
     });
 
     it('shows the newest 20 rebirths', async () => {
@@ -218,6 +264,74 @@ describe('/api rebirth', () => {
       const res = await moose.get('/api/gm/rebirth').expect(200);
       expect(res.body.recent).toHaveLength(20);
       expect(res.body.recent.map((row: { id: number }) => row.id)).toEqual(Array.from({ length: 20 }, (_, i) => 25 - i));
+    });
+
+    it('saves EXP and gold settings', async () => {
+      const res = await moose.put('/api/gm/rebirth/settings').send(settingsBody({ expPercent: 10, goldPercent: 5 })).expect(200);
+      expect(res.body.settings).toMatchObject({ expPercent: 10, goldPercent: 5 });
+      expect(rebirth.settingsRow).toMatchObject({ expPercent: 10, goldPercent: 5 });
+      expect(gm.audits).toEqual([expect.objectContaining({ log: 'SET on price 2000 percent 2 limit 10 exp 10 gold 5' })]);
+    });
+
+    it('refuses an EXP total over 250', async () => {
+      await moose.put('/api/gm/rebirth/settings').send(settingsBody({ expPercent: 13, limit: 20 })).expect(400);
+      expect(gm.audits).toEqual([]);
+    });
+
+    describe('rewards', () => {
+      const put = (n: number | string, body: string | object) => moose.put(`/api/gm/rebirth/rewards/${n}`).send(body);
+      beforeEach(() => {
+        rebirth.items = [{ itemId, name: 'Potion', stack: 20 }];
+      });
+
+      it('saves a reward for a GM, audits it and lists it', async () => {
+        const res = await put(3, { gold: 100, silver: 2, copper: 3, items: [{ itemId, count: 5 }] }).expect(200);
+        expect(res.body.rewards).toEqual([
+          { rebirth: 3, reward: { gold: 100, silver: 2, copper: 3, items: [{ itemId, count: 5, name: 'Potion', icon: itemIcons[itemId] }] } },
+        ]);
+        expect(rebirth.rewardChanges).toEqual([
+          { reward: { rebirth: 3, gold: 100, silver: 2, copper: 3, items: [{ itemId, count: 5 }] }, changedBy: 'moose' },
+        ]);
+        expect(gm.audits).toEqual([
+          expect.objectContaining({ gmId: 'moose', command: 'REBIRTH', log: `REWARD 3 gold 100 silver 2 copper 3 items ${itemId} x 5` }),
+        ]);
+      });
+
+      it('clears a reward with an empty one', async () => {
+        rebirth.rewardRows = [{ rebirth: 3, ...money }];
+        const res = await put(3, { gold: 0, silver: 0, copper: 0, items: [] }).expect(200);
+        expect(res.body.rewards).toEqual([]);
+      });
+
+      it('refuses a reward for a player', async () => {
+        await player.put('/api/gm/rebirth/rewards/3').send(money).expect(403);
+        expect(rebirth.rewardChanges).toEqual([]);
+      });
+
+      it.each([['0'], ['21'], ['x']])('refuses reward number %s', async (n) => {
+        await put(n, money).expect(400);
+        expect(rebirth.rewardChanges).toEqual([]);
+      });
+
+      it('refuses an unknown item, an item missing from the client and a count over its stack', async () => {
+        const missing = [...Array(32000).keys()].find((id) => id > 0 && !Object.hasOwn(itemIcons, id))!;
+        rebirth.items.push({ itemId: missing, name: 'Ghost', stack: 1 });
+        const cases: [number, number, string][] = [
+          [32000, 1, 'Unknown items: 32000'],
+          [missing, 1, `Not in the game client: ${missing}`],
+          [itemId, 21, 'Potion stacks to 20'],
+        ];
+        for (const [id, count, message] of cases) {
+          const res = await put(3, { ...money, items: [{ itemId: id, count }] }).expect(422);
+          expect(res.body.message).toBe(message);
+        }
+        expect(rebirth.rewardChanges).toEqual([]);
+      });
+
+      it('refuses four items', async () => {
+        await put(3, { ...money, items: Array(4).fill({ itemId, count: 1 }) }).expect(400);
+        expect(rebirth.rewardChanges).toEqual([]);
+      });
     });
 
     it('refuses to open rebirth without a price', async () => {

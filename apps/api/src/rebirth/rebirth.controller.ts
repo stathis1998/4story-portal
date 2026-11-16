@@ -1,10 +1,13 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
+  type AchievementRewardInput,
   characterIdSchema,
   type GmRebirth,
   type RebirthRequest,
   rebirthRequestSchema,
+  rebirthRewardNumberSchema,
+  rebirthRewardSchema,
   type RebirthSettingsInput,
   rebirthSettingsSchema,
   type RebirthState,
@@ -53,5 +56,17 @@ export class RebirthController {
     @Req() req: Request,
   ): Promise<GmRebirth> {
     return this.rebirth.saveSettings(body, { username: user.username, ip: req.ip ?? '' });
+  }
+
+  @Put('gm/rebirth/rewards/:rebirth')
+  @UseGuards(GmGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  setReward(
+    @Param('rebirth', new ZodValidationPipe(rebirthRewardNumberSchema)) rebirth: number,
+    @Body(new ZodValidationPipe(rebirthRewardSchema)) body: AchievementRewardInput,
+    @CurrentUser() user: SessionUser,
+    @Req() req: Request,
+  ): Promise<GmRebirth> {
+    return this.rebirth.setReward(rebirth, body, { username: user.username, ip: req.ip ?? '' });
   }
 }
