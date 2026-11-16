@@ -1,6 +1,7 @@
 # Rebirth extras: EXP and gold bonuses, and a mailed reward per rebirth
 
 Date: 2026-11-16.
+Status: built on `feat/rebirth-extras` (portal) and `feature/rebirth-extras` (Server). Not applied to `TGAME_GSP`, not merged, not built.
 Builds on `2026-11-15-rebirth-design.md` (rebirth itself, on `main` and on Server `master` `9952504`).
 Calls marked *(owner)* are the owner's; the rest were proposed and approved as a whole on 2026-11-16.
 
