@@ -441,8 +441,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
         </div>
       </section>
 
-      {/* From 1024 px what it pays sits beside the two lists. */}
-      <div className="order-2 mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
+      {/* From 1024 px what it pays sits beside the two lists. The first row is only as tall as the first list, so the
+          tall pay table does not open a gap between the lists. */}
+      <div className="order-2 mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:grid-rows-[auto_1fr] lg:items-start">
         <section aria-labelledby="slots-pays" className={`${card} lg:row-span-2`}>
           <h2 id="slots-pays" className="text-2xl">
             What it pays
