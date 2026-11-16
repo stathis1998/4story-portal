@@ -7,11 +7,15 @@ type Props = {
   type?: 'text' | 'password' | 'number' | 'date' | 'time'
   autoComplete?: string
   step?: string
+  /** A short note under the field. */
+  hint?: string
 }
 
-export function TextField({ label, registration, error, type = 'text', autoComplete, step }: Props) {
+export function TextField({ label, registration, error, type = 'text', autoComplete, step, hint }: Props) {
   const id = registration.name
   const errorId = `${id}-error`
+  const hintId = `${id}-hint`
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -24,10 +28,15 @@ export function TextField({ label, registration, error, type = 'text', autoCompl
         autoComplete={autoComplete}
         step={step}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={describedBy}
         className="rounded-xs border border-line bg-surface-raised px-3 py-2 outline-none transition focus:border-accent focus:ring-1 focus:ring-accent aria-invalid:border-danger aria-invalid:focus:ring-danger"
         {...registration}
       />
+      {hint && (
+        <p id={hintId} className="text-xs text-muted">
+          {hint}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="text-sm text-danger">
           {error}

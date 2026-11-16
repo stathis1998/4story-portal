@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import type {
   Achievement,
@@ -20,6 +19,7 @@ import type {
 import { className } from '../characters/character-codes.js';
 import { ControlClient, ControlRefusedError, ControlUnavailableError } from '../control/control-client.js';
 import { itemIcons } from '../gm/game-icons.generated.js';
+import { checkRewardItems } from '../gm/reward-items.js';
 import { REBIRTH_REPOSITORY, type RebirthLogRow, type RebirthRepository } from '../rebirth/rebirth.repository.js';
 import type { CharacterStatsRow } from '../stats/stats-rules.js';
 import { serverNow, StatsService } from '../stats/stats.service.js';
@@ -184,7 +184,7 @@ export class AchievementsService {
   async setReward({ achievementId, level, reward }: AchievementRewardRequest, changedBy: string): Promise<GmAchievements> {
     const family = CHARACTER_ACHIEVEMENTS.find((entry) => entry.id === achievementId);
     if (!family || level > family.levels.length) throw new NotFoundException('No such character achievement level');
-    await this.checkItems(reward.items);
+    await checkRewardItems(reward.items, (ids) => this.repo.findItems(ids));
     await this.save(() => this.repo.setReward({ achievementId, level, ...reward }, changedBy));
     return this.gm();
   }
@@ -213,26 +213,6 @@ export class AchievementsService {
       // Most likely the achievement tables are not in this game database yet.
       this.logger.warn(`Could not save an achievement setting: ${describe(error)}`);
       throw new HttpException('The setting could not be saved', 503);
-    }
-  }
-
-  /** The same checks GM mail makes: a reward is sent as a letter. */
-  private async checkItems(items: { itemId: number; count: number }[]): Promise<void> {
-    if (items.length === 0) return;
-    const ids = [...new Set(items.map((item) => item.itemId))];
-    const found = new Map((await this.repo.findItems(ids)).map((row) => [row.itemId, row]));
-
-    const unknown = ids.filter((id) => !found.has(id));
-    if (unknown.length > 0) throw new UnprocessableEntityException(`Unknown items: ${unknown.join(', ')}`);
-
-    // The client crashes drawing an item it has no entry for.
-    const missing = ids.find((id) => !Object.hasOwn(itemIcons, id));
-    if (missing !== undefined) throw new UnprocessableEntityException(`Not in the game client: ${missing}`);
-
-    for (const { itemId, count } of items) {
-      const item = found.get(itemId)!;
-      const stack = Math.max(item.stack, 1);
-      if (count > stack) throw new UnprocessableEntityException(`${item.name || `Item ${itemId}`} stacks to ${stack}`);
     }
   }
 

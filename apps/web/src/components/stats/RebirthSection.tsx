@@ -1,11 +1,13 @@
-import { REBIRTH_LEVEL, type RebirthState } from '@4story-portal/shared'
+import { type AchievementReward, REBIRTH_LEVEL, type RebirthState } from '@4story-portal/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { applyServerError } from '../../lib/form-errors'
-import { beReborn, rebirthQueryOptions } from '../../lib/rebirth'
+import { paysSomething } from '../../lib/achievements'
+import { beReborn, bonusParts, rebirthQueryOptions } from '../../lib/rebirth'
 import { Button } from '../Button'
 import { FormMessage } from '../FormMessage'
+import { RewardSummary } from './RewardSummary'
 
 const muted = (text: string) => <p className="text-sm text-muted">{text}</p>
 const grouped = (n: number) => n.toLocaleString('en-US')
@@ -15,7 +17,10 @@ type Line = { met: boolean; text: string }
 function checklist(state: RebirthState, priceGold: number): Line[] {
   const { level, online, wornItems, wallet } = state
   return [
-    { met: level >= REBIRTH_LEVEL, text: level >= REBIRTH_LEVEL ? `Level ${REBIRTH_LEVEL}` : `Level ${REBIRTH_LEVEL} needed, this character is ${level}` },
+    {
+      met: level >= REBIRTH_LEVEL,
+      text: level >= REBIRTH_LEVEL ? `Level ${REBIRTH_LEVEL}` : `Level ${REBIRTH_LEVEL} needed, this character is ${level}`,
+    },
     { met: !online, text: online ? 'Log out of the game with this character' : 'Logged out' },
     { met: wornItems === 0, text: wornItems === 0 ? 'Nothing worn' : `${wornItems} ${wornItems === 1 ? 'item' : 'items'} still on` },
     {
@@ -60,7 +65,9 @@ export function RebirthSection({ characterId }: { characterId: string }) {
   const summary = (
     <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       <span>Rebirths: {data.rebirths}</span>
-      <span>Bonus: {data.bonus > 0 ? `+${data.bonus}% all stats` : 'none yet'}</span>
+      {bonusParts(data.bonuses).map((part) => (
+        <span key={part}>{part}</span>
+      ))}
     </p>
   )
 
@@ -75,6 +82,7 @@ export function RebirthSection({ characterId }: { characterId: string }) {
   }
 
   const { next } = data
+  const reward = paysSomething(next?.reward ?? null) ? (next?.reward ?? null) : null
   const lines = next ? checklist(data, next.priceGold) : []
   const ready = lines.length > 0 && lines.every((line) => line.met)
 
@@ -93,9 +101,15 @@ export function RebirthSection({ characterId }: { characterId: string }) {
               </li>
             ))}
           </ul>
+          {reward && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span>Reward:</span>
+              <RewardSummary reward={reward} names />
+            </p>
+          )}
           <FormMessage message={message} />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">{`Next: rebirth ${next.number}, +${next.bonus}% all stats`}</p>
+            <p className="text-sm">{`Next: rebirth ${next.number}, ${bonusParts(next.bonuses).join(', ')}`}</p>
             <Button disabled={!ready} onClick={() => setAsking(true)}>
               Be reborn
             </Button>
@@ -103,6 +117,7 @@ export function RebirthSection({ characterId }: { characterId: string }) {
           {asking && (
             <ConfirmDialog
               priceGold={next.priceGold}
+              reward={reward}
               pending={reborn.isPending}
               onConfirm={() => !reborn.isPending && reborn.mutate(next.priceGold)}
               onCancel={() => setAsking(false)}
@@ -121,9 +136,9 @@ export function RebirthSection({ characterId }: { characterId: string }) {
 
 const FOCUSABLE = 'button:not([disabled])'
 
-type DialogProps = { priceGold: number; pending: boolean; onConfirm: () => void; onCancel: () => void }
+type DialogProps = { priceGold: number; reward: AchievementReward | null; pending: boolean; onConfirm: () => void; onCancel: () => void }
 
-function ConfirmDialog({ priceGold, pending, onConfirm, onCancel }: DialogProps) {
+function ConfirmDialog({ priceGold, reward, pending, onConfirm, onCancel }: DialogProps) {
   const titleId = useId()
   const panel = useRef<HTMLDivElement>(null)
   const cancel = useRef<HTMLButtonElement>(null)
@@ -181,6 +196,12 @@ function ConfirmDialog({ priceGold, pending, onConfirm, onCancel }: DialogProps)
             }
           </li>
           <li>Kept: items, the rest of your Gold, pets, mounts, titles, guild and friends.</li>
+          {reward && (
+            <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>Reward:</span>
+              <RewardSummary reward={reward} names />
+            </li>
+          )}
           <li className="font-bold">{`Cost: ${grouped(priceGold)} Gold.`}</li>
         </ul>
         <div className="flex justify-end gap-2">
