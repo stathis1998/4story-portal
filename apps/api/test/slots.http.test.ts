@@ -15,7 +15,7 @@ import {
   type SlotStops,
 } from '@4story-portal/shared';
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha1Hex } from '../src/auth/sha1.js';
 import { SlotsService } from '../src/slots/slots.service.js';
 import { FakeAccountsRepository, FakeGmRepository, FakeSlotsRepository, type FakeSlotSpinRow } from './fakes.js';
@@ -893,6 +893,7 @@ describe('/api/slots', () => {
         spinRow({ ...stray, id: 108, stops: oneScatter, meterFree: many(8, paying), meterBefore: 0 }),
       );
 
+      const warned = vi.spyOn(Logger.prototype, 'warn');
       const page = await player.get('/api/slots').expect(200);
       expect(page.body.mine).toEqual([real.body.spin]);
       // The stray rows are all big wins, and the real one is not.
@@ -901,6 +902,11 @@ describe('/api/slots', () => {
       expect(gmPage.body.latest).toEqual([real.body.spin]);
       // Only the three machines the code has are listed, whatever the table holds.
       expect(gmPage.body.machines.map((m: { key: string }) => m.key)).toEqual(['shelf', 'armoury', 'hoard']);
+      await player.get('/api/slots').expect(200);
+      // Each row of a machine the code has that is left out is said once, however often it is read; the old machine's is not.
+      const said = warned.mock.calls.map(([message]) => /^Slots round (\d+) /.exec(String(message))?.[1]).filter((id) => id !== undefined);
+      expect(said.map(Number).sort((a, b) => a - b)).toEqual([101, 102, 103, 104, 105, 106, 107, 108]);
+      warned.mockRestore();
     });
   });
 

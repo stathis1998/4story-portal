@@ -88,6 +88,8 @@ const MAX_MULTIPLE = 32_767;
 @Injectable()
 export class SlotsService {
   private readonly logger = new Logger(SlotsService.name);
+  /** The rows already said to be left out of the lists: each is said once, not on every read of the page. */
+  private readonly unshown = new Set<number>();
   /** A whole number from 0 up to (not including) `max`. The operating system's random source; tests replace it. */
   random: (max: number) => number = randomInt;
 
@@ -115,8 +117,8 @@ export class SlotsService {
       live: settings.live,
       machines: machineStates(settings),
       characters: characters.map(walletCharacterView),
-      mine: spinViews(mine),
-      bigWins: spinViews(bigWins),
+      mine: this.spinViews(mine),
+      bigWins: this.spinViews(bigWins),
       jackpots: pots.map((row) => jackpotView(settings, row, lastWins[row.pot][0])),
       meters,
       daily: { limit: settings.daily, played },
@@ -230,7 +232,7 @@ export class SlotsService {
           allTime: totalsView(totals[machine.key]?.allTime),
         }),
       ),
-      latest: spinViews(latest),
+      latest: this.spinViews(latest),
       jackpots: SLOT_POTS.map((pot): GmSlotPot => {
         const row = pots.find((p) => p.pot === pot);
         const sums = jackpotTotals?.[pot] ?? NO_JACKPOT_TOTALS;
@@ -242,7 +244,7 @@ export class SlotsService {
           added: Math.floor(sums.added / BRONZE_PER_SILVER),
           paid: sums.paid,
           drops: sums.drops,
-          wins: spinViews(wins[pot]),
+          wins: this.spinViews(wins[pot]),
         };
       }),
       daily: { limit: settings.daily },
@@ -278,6 +280,15 @@ export class SlotsService {
   private async eachPotRead<T>(read: (pot: SlotPot) => Promise<T>): Promise<Record<SlotPot, T>> {
     const values = await Promise.all(SLOT_POTS.map(read));
     return Object.fromEntries(SLOT_POTS.map((pot, i) => [pot, values[i]])) as Record<SlotPot, T>;
+  }
+
+  /** The rows as the lists show them. A row of a machine the code has that cannot be shown is left out, and said once. */
+  private spinViews(rows: SlotSpinRow[]): SlotSpinView[] {
+    return spinViews(rows, (row) => {
+      if (this.unshown.has(row.id)) return;
+      this.unshown.add(row.id);
+      this.logger.warn(`Slots round ${row.id} on ${row.machine} cannot be played again from its stops by the rules, so the lists leave it out`);
+    });
   }
 
   private async readOr<T>(what: string, read: () => Promise<T>, fallback: T): Promise<T> {
@@ -346,12 +357,18 @@ const replays = (machine: SlotMachine, row: SlotSpinRow) => {
   }
 };
 
-/** A spin for a machine the code no longer has, with stops that cannot be shown, or that the rules cannot replay, is left out. */
-const spinViews = (rows: SlotSpinRow[]): SlotSpinView[] =>
+/**
+ * A spin for a machine the code no longer has, with stops that cannot be shown, or that the rules cannot replay, is
+ * left out. `unshown` hears of each row of a machine the code has that is left out.
+ */
+const spinViews = (rows: SlotSpinRow[], unshown: (row: SlotSpinRow) => void): SlotSpinView[] =>
   rows.flatMap((row) => {
     const machine = slotMachine(row.machine);
-    if (!machine || !stopsInRange(row.stops) || !row.free.every(stopsInRange) || !row.meterFree.every(stopsInRange)) return [];
-    if (!replays(machine, row)) return [];
+    if (!machine) return [];
+    if (!stopsInRange(row.stops) || !row.free.every(stopsInRange) || !row.meterFree.every(stopsInRange) || !replays(machine, row)) {
+      unshown(row);
+      return [];
+    }
     return [
       {
         id: row.id,
