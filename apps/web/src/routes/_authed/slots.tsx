@@ -451,7 +451,7 @@ function SlotsFloor({ data }: { data: SlotsState }) {
           </h2>
           <div className="mt-3">
             {/* With no stake chosen, what the lowest pays. */}
-            <PayTable machine={machine} stake={stake ?? lowest} stakes={settings.stakes} jackpotLive={view.jackpots.some((pot) => pot.live)} />
+            <PayTable machine={machine} stake={stake ?? lowest} stakes={settings.stakes} livePots={view.jackpots.filter((pot) => pot.live).map((pot) => pot.pot)} />
           </div>
         </section>
 

@@ -1,4 +1,4 @@
-import { SLOT_MACHINES, SLOT_SCATTER, silverText, slotChain, slotJackpotShare, slotPaidChainPay, slotReplayRound, slotWindow } from '@4story-portal/shared'
+import { SLOT_MACHINES, SLOT_SCATTER, silverText, slotChain, slotPaidChainPay, slotReplayRound, slotWindow } from '@4story-portal/shared'
 import type {
   SlotChain,
   SlotGrid,
@@ -2476,14 +2476,18 @@ describe('slots', () => {
       expect(big[0]).toHaveTextContent(bigWinLine(shelf, drop))
     })
 
-    it('says what a lost round adds, per machine', async () => {
-      const { user } = open(state({ jackpots: pots() }))
+    it('says what a lost round adds to each pot that is on, per machine', async () => {
+      // The figures themselves are pinned in the pay table's own tests.
+      const share = String.raw`\d+\.\d%`
+      const { user } = open(state({ jackpots: pots({ major: { live: false } }) }))
       await loaded()
 
       for (const machine of SLOT_MACHINES) {
         await user.click(tab(machine.name))
-        const { num, den } = slotJackpotShare(machine)
-        expect(payTable().getByText(`A lost round adds ${((num / den) * 100).toFixed(1)}% of its stake to the jackpots.`)).toBeInTheDocument()
+        expect(
+          payTable().getByText(new RegExp(`^A lost round adds ${share} of its stake to the jackpots: ${share} to the Mini and ${share} to the Giga\\.$`)),
+        ).toBeInTheDocument()
+        expect(payTable().getByText(/counting the meter and the jackpots that are on\./)).toBeInTheDocument()
       }
     })
 

@@ -110,7 +110,7 @@ function potNames(spin: SlotSpinView): string[] {
 }
 
 /** "Mini", "Mini and Giga", "Mini, Major and Giga". */
-function potList(names: string[]): string {
+export function potList(names: string[]): string {
   return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
