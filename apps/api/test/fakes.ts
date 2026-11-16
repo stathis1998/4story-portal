@@ -49,6 +49,7 @@ import {
   type RebirthSettings,
   REBIRTH_LEVEL,
   rebirthBonus,
+  rebirthExtraBonus,
   rebirthIsOpen,
   rebirthPriceGold,
   ROULETTE_DEFAULT_LIMITS,
@@ -110,6 +111,7 @@ import {
   type RebirthLogRow,
   type RebirthOutcome,
   type RebirthRepository,
+  type RebirthRewardRow,
 } from '../src/rebirth/rebirth.repository.js';
 
 // A TCHARTABLE row with plausible defaults (a level 1 human wizard from Defugel).
@@ -1120,8 +1122,8 @@ export class FakeSlotsRepository implements SlotsRepository {
   }
 }
 
-// In-memory stand-in for the rebirth settings, TCHARREBIRTHTABLE and its log. Its rebirth() only checks
-// the nine outcomes the SQL batch has, in its order.
+// In-memory stand-in for the rebirth settings, TCHARREBIRTHTABLE, its log and the rewards. Its rebirth() only
+// checks the nine outcomes the SQL batch has, in its order, and "mails" the saved reward into `letters`.
 export class FakeRebirthRepository implements RebirthRepository {
   settingsRow: RebirthSettings = { ...REBIRTH_DEFAULT_SETTINGS };
   /** The characters find() and rebirth() see, with the account each belongs to. */
@@ -1130,6 +1132,14 @@ export class FakeRebirthRepository implements RebirthRepository {
   logRows: RebirthLogRow[] = [];
   /** Everything rebirth() was asked for, including calls that changed nothing. */
   readonly rebirthCalls: RebirthInput[] = [];
+  /** TPORTALREBIRTHREWARD, by rebirth number. */
+  rewardRows: RebirthRewardRow[] = [];
+  /** Every setReward() call, with who made it. */
+  readonly rewardChanges: { reward: RebirthRewardRow; changedBy: string }[] = [];
+  /** The item chart findItems() reads. */
+  items: RewardItemRow[] = [];
+  /** The reward letters rebirth() sent; postId is the index plus one. */
+  readonly letters: { postId: number; charId: number; rebirth: number; reward: RebirthRewardRow }[] = [];
   /** The database's clock: stamps new rebirths and ages old ones. */
   now: () => Date = () => new Date();
   /** Every call rejects, as before the tables exist. */
@@ -1168,11 +1178,17 @@ export class FakeRebirthRepository implements RebirthRepository {
     const held = row.gold * BRONZE_PER_GOLD + row.silver * BRONZE_PER_SILVER + row.copper;
     if (held < priceGold * BRONZE_PER_GOLD) return { code: REBIRTH_POOR };
     const left = held - priceGold * BRONZE_PER_GOLD;
-    const bonus = rebirthBonus(rebirth, settings);
+    const bonuses = {
+      stats: rebirthBonus(rebirth, settings),
+      exp: rebirthExtraBonus(rebirth, settings.limit, settings.expPercent),
+      gold: rebirthExtraBonus(rebirth, settings.limit, settings.goldPercent),
+    };
     Object.assign(row, {
       level: 1,
       rebirths: rebirth,
-      bonus,
+      statBonus: bonuses.stats,
+      expBonus: bonuses.exp,
+      goldBonus: bonuses.gold,
       gold: Math.floor(left / BRONZE_PER_GOLD),
       silver: Math.floor((left % BRONZE_PER_GOLD) / BRONZE_PER_SILVER),
       copper: left % BRONZE_PER_SILVER,
@@ -1184,14 +1200,21 @@ export class FakeRebirthRepository implements RebirthRepository {
       charId: input.charId,
       name: row.name,
       rebirth,
-      bonus,
+      bonus: bonuses.stats,
       priceGold,
       at: this.now(),
       ageSeconds: 0,
       text: input.text.replace('{name}', row.name).replace('{rebirth}', String(rebirth)),
       announced: REBIRTH_ANNOUNCE_WAITING,
     });
-    return { code: REBIRTH_OK, id, name: row.name, rebirth, bonus, priceGold, wallet: { gold: row.gold, silver: row.silver, copper: row.copper } };
+    const reward = this.rewardRows.find((entry) => entry.rebirth === rebirth);
+    let postId = 0;
+    if (reward && !isEmptyReward(reward)) {
+      postId = this.letters.length + 1;
+      this.letters.push({ postId, charId: input.charId, rebirth, reward: structuredClone(reward) });
+    }
+    const wallet = { gold: row.gold, silver: row.silver, copper: row.copper };
+    return { code: REBIRTH_OK, id, name: row.name, rebirth, bonuses, priceGold, wallet, postId };
   }
 
   async settings(): Promise<RebirthSettings> {
@@ -1202,7 +1225,29 @@ export class FakeRebirthRepository implements RebirthRepository {
   async saveSettings(settings: RebirthSettings): Promise<void> {
     this.check();
     this.settingsRow = { ...settings };
-    for (const row of this.characters) if (row.rebirths > 0) row.bonus = rebirthBonus(row.rebirths, settings);
+    for (const row of this.characters) {
+      if (row.rebirths === 0) continue;
+      row.statBonus = rebirthBonus(row.rebirths, settings);
+      row.expBonus = rebirthExtraBonus(row.rebirths, settings.limit, settings.expPercent);
+      row.goldBonus = rebirthExtraBonus(row.rebirths, settings.limit, settings.goldPercent);
+    }
+  }
+
+  async rewards(): Promise<RebirthRewardRow[]> {
+    this.check();
+    return structuredClone([...this.rewardRows].sort((a, b) => a.rebirth - b.rebirth));
+  }
+
+  async setReward(reward: RebirthRewardRow, changedBy: string): Promise<void> {
+    this.check();
+    this.rewardChanges.push({ reward: structuredClone(reward), changedBy });
+    this.rewardRows = this.rewardRows.filter((row) => row.rebirth !== reward.rebirth);
+    if (!isEmptyReward(reward)) this.rewardRows.push(structuredClone(reward));
+  }
+
+  async findItems(itemIds: number[]): Promise<RewardItemRow[]> {
+    this.check();
+    return this.items.filter((item) => itemIds.includes(item.itemId));
   }
 
   async recent(limit: number): Promise<RebirthLogRow[]> {

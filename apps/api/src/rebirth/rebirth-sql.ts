@@ -2,7 +2,7 @@
 // safe while the game does not hold the character: TMapSvr keeps an online character in memory and writes it
 // back when it saves. So the batch takes the same lock on the online list as a bet does (games/wallet-bet.ts).
 
-import { REBIRTH_LEVEL } from '@4story-portal/shared';
+import { REBIRTH_LEVEL, REBIRTH_MAX_EXTRA_PERCENT, REBIRTH_MAX_EXTRA_TOTAL } from '@4story-portal/shared';
 import type { tableNames } from '../db/db.service.js';
 
 export const REBIRTH_OK = 0,
@@ -19,7 +19,21 @@ export type RebirthCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export const START_SKILL_POINTS = 200; // TCreateChar with a level option, which is how every character here is made
 
 /** The setting rows in TPORTALSETTING. Constants from code, so the batch may name them inline. */
-export const REBIRTH_KEYS = { live: 'rebirth_live', priceGold: 'rebirth_price_gold', percent: 'rebirth_percent', limit: 'rebirth_limit' } as const;
+export const REBIRTH_KEYS = {
+  live: 'rebirth_live',
+  priceGold: 'rebirth_price_gold',
+  percent: 'rebirth_percent',
+  limit: 'rebirth_limit',
+  expPercent: 'rebirth_exp_percent',
+  goldPercent: 'rebirth_gold_percent',
+} as const;
+/** Every key, quoted for an IN list. Constants from code, never input. */
+export const REBIRTH_KEY_LIST = Object.values(REBIRTH_KEYS)
+  .map((key) => `'${key}'`)
+  .join(', ');
+
+/** The sender of the reward letter. A constant from code, so the batch may name it inline. */
+export const REWARD_SENDER = 'Rebirth';
 
 /** TCreateChar's start points by country; any other country starts at the third. */
 const SPAWN_BY_COUNTRY = [15001, 15002] as const;
@@ -45,8 +59,10 @@ export const wornItemIds = (tables: Tables, owner: string): string =>
  * price, together, in one transaction. A refusal writes nothing; the first check that fails decides the code.
  * Binds @userId INT, @charId INT, @expectedPriceGold INT, @baseline VARCHAR(2000), @text VARCHAR(160).
  * `@text` may name {name} and {rebirth}, which are filled in for the log row.
- * Returns one row: { code, id, name, rebirth, bonus, priceGold, gold, silver, copper }.
- * Throws, rolling back everything (the caller's transaction too), when the start point is missing.
+ * Returns one row: { code, id, name, rebirth, bonus, expBonus, goldBonus, priceGold, gold, silver, copper, postId }.
+ * When the new rebirth number has a reward saved, it is mailed in the same transaction; postId is that letter, or 0.
+ * Throws, rolling back everything (the caller's transaction too), when the start point is missing or the
+ * reward letter could not be written.
  */
 export function rebirthSql(tables: Tables): string {
   // A skill hotkey is cleared once its skill is no longer learned: no row, or a row at level 0. Item slots
@@ -63,20 +79,36 @@ export function rebirthSql(tables: Tables): string {
   return `SET NOCOUNT ON;
 SET XACT_ABORT ON;
 DECLARE @code INT = 0, @id INT = 0, @live INT, @price INT, @percent INT, @limit INT, @online INT,
+        @expRows INT, @expPercent INT, @goldRows INT, @goldPercent INT,
         @name VARCHAR(50), @level INT, @class INT, @race INT, @country INT, @wallet BIGINT,
-        @count INT = 0, @priceGold INT, @rebirth INT, @bonus INT, @exp INT = 0, @hp INT = 2, @mp INT = 2,
-        @spawnId SMALLINT, @mapId SMALLINT, @x REAL, @y REAL, @z REAL;
+        @count INT = 0, @priceGold INT, @rebirth INT, @bonus INT, @expBonus INT, @goldBonus INT,
+        @exp INT = 0, @hp INT = 2, @mp INT = 2,
+        @spawnId SMALLINT, @mapId SMALLINT, @x REAL, @y REAL, @z REAL,
+        @post INT = 0, @rewardGold INT = 0, @rewardSilver INT = 0, @rewardCopper INT = 0,
+        @item1 SMALLINT = 0, @count1 TINYINT = 0, @item2 SMALLINT = 0, @count2 TINYINT = 0, @item3 SMALLINT = 0, @count3 TINYINT = 0,
+        @title VARCHAR(240), @message VARCHAR(2000);
 BEGIN TRAN;
 -- Missing or unreadable rows are NULL, and a NULL fails the CASE, so they mean closed. The switch is
 -- compared in the column's collation, as walletBetSql does: 'true' in any case, trailing spaces ignored.
+-- The EXP and gold percents came later: a missing row is 0 (off), but a row that is there and unreadable
+-- (blank too, which TRY_CAST would read as 0) or out of range still means closed.
 SELECT @live = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.live}' AND szValue = 'true' THEN 1 ELSE 0 END),
        @price = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.priceGold}' THEN TRY_CAST(szValue AS INT) END),
        @percent = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.percent}' THEN TRY_CAST(szValue AS INT) END),
-       @limit = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.limit}' THEN TRY_CAST(szValue AS INT) END)
+       @limit = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.limit}' THEN TRY_CAST(szValue AS INT) END),
+       @expRows = COUNT(CASE WHEN szKey = '${REBIRTH_KEYS.expPercent}' THEN 1 END),
+       @expPercent = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.expPercent}' AND LTRIM(szValue) <> '' THEN TRY_CAST(szValue AS INT) END),
+       @goldRows = COUNT(CASE WHEN szKey = '${REBIRTH_KEYS.goldPercent}' THEN 1 END),
+       @goldPercent = MAX(CASE WHEN szKey = '${REBIRTH_KEYS.goldPercent}' AND LTRIM(szValue) <> '' THEN TRY_CAST(szValue AS INT) END)
 FROM ${tables.portalSettings}
-WHERE szKey IN ('${REBIRTH_KEYS.live}', '${REBIRTH_KEYS.priceGold}', '${REBIRTH_KEYS.percent}', '${REBIRTH_KEYS.limit}');
+WHERE szKey IN (${REBIRTH_KEY_LIST});
+IF @expRows = 0 SET @expPercent = 0;
+IF @goldRows = 0 SET @goldPercent = 0;
 SET @code = CASE WHEN @live = 1 AND @price BETWEEN 1 AND 100000 AND @percent BETWEEN 1 AND 10 AND @limit BETWEEN 1 AND 20
-                      AND @percent * @limit <= 100 THEN 0 ELSE ${REBIRTH_CLOSED} END;
+                      AND @percent * @limit <= 100
+                      AND @expPercent BETWEEN 0 AND ${REBIRTH_MAX_EXTRA_PERCENT} AND @expPercent * @limit <= ${REBIRTH_MAX_EXTRA_TOTAL}
+                      AND @goldPercent BETWEEN 0 AND ${REBIRTH_MAX_EXTRA_PERCENT} AND @goldPercent * @limit <= ${REBIRTH_MAX_EXTRA_TOTAL}
+                 THEN 0 ELSE ${REBIRTH_CLOSED} END;
 IF @code = 0
 BEGIN
   -- A range lock on the account's rows in the online list: its login and enter-server wait for the COMMIT.
@@ -106,6 +138,8 @@ IF @code = 0
 BEGIN
   SET @rebirth = @count + 1;
   SET @bonus = (CASE WHEN @rebirth < @limit THEN @rebirth ELSE @limit END) * @percent;
+  SET @expBonus = (CASE WHEN @rebirth < @limit THEN @rebirth ELSE @limit END) * @expPercent;
+  SET @goldBonus = (CASE WHEN @rebirth < @limit THEN @rebirth ELSE @limit END) * @goldPercent;
   SET @wallet = @wallet - CAST(@priceGold AS BIGINT) * 1000000;
 
   -- What TCreateChar gives a new character: the EXP of the level below (none below level 1), HP and MP from
@@ -158,9 +192,12 @@ BEGIN
   -- The global copy of the level; TLogout would also set it at the next logout.
   UPDATE ${tables.allCharacters} SET bLevel = 1, dwEXP = @exp WHERE dwCharID = @charId AND dwUserID = @userId;
 
-  UPDATE ${tables.rebirths} SET bRebirth = @rebirth, bStatBonus = @bonus, dUpdate = GETDATE() WHERE dwCharID = @charId;
+  UPDATE ${tables.rebirths}
+  SET bRebirth = @rebirth, bStatBonus = @bonus, bExpBonus = @expBonus, bGoldBonus = @goldBonus, dUpdate = GETDATE()
+  WHERE dwCharID = @charId;
   IF @@ROWCOUNT = 0
-    INSERT INTO ${tables.rebirths} (dwCharID, bRebirth, bStatBonus, dUpdate) VALUES (@charId, @rebirth, @bonus, GETDATE());
+    INSERT INTO ${tables.rebirths} (dwCharID, bRebirth, bStatBonus, bExpBonus, bGoldBonus, dUpdate)
+    VALUES (@charId, @rebirth, @bonus, @expBonus, @goldBonus, GETDATE());
 
   -- {rebirth} is filled in first, so a name holding that word is not changed. LEFT keeps a long name from
   -- failing the rebirth over its announcement.
@@ -168,8 +205,26 @@ BEGIN
   VALUES (@userId, @charId, @name, @rebirth, @bonus, @priceGold, @baseline,
           LEFT(REPLACE(REPLACE(@text, '{rebirth}', CAST(@rebirth AS VARCHAR(3))), '{name}', @name), 160));
   SET @id = SCOPE_IDENTITY();
+
+  -- The reward saved for this rebirth number right now, mailed as one letter. No row, or a row that pays
+  -- nothing, sends nothing. A letter that is not written fails the whole rebirth: XACT_ABORT rolls it back.
+  SELECT @rewardGold = dwGold, @rewardSilver = dwSilver, @rewardCopper = dwCooper,
+         @item1 = wItemID1, @count1 = bCount1, @item2 = wItemID2, @count2 = bCount2, @item3 = wItemID3, @count3 = bCount3
+  FROM ${tables.rebirthRewards} WHERE bRebirth = @rebirth;
+  IF @rewardGold > 0 OR @rewardSilver > 0 OR @rewardCopper > 0 OR @item1 <> 0 OR @item2 <> 0 OR @item3 <> 0
+  BEGIN
+    SET @title = 'Rebirth ' + CAST(@rebirth AS VARCHAR(3)) + ' reward';
+    SET @message = 'You were reborn. Your reward for rebirth ' + CAST(@rebirth AS VARCHAR(3)) + ' is attached.';
+    EXEC @post = ${tables.mailProcedure}
+      @pCharID = @charId, @pSender = '${REWARD_SENDER}', @pTitle = @title, @pMessage = @message,
+      @dwGold = @rewardGold, @dwSilver = @rewardSilver, @dwCooper = @rewardCopper,
+      @wItemID1 = @item1, @bCount1 = @count1, @wItemID2 = @item2, @bCount2 = @count2, @wItemID3 = @item3, @bCount3 = @count3;
+    IF @post = 0 THROW 50001, 'Rebirth reward letter not sent', 1;
+    UPDATE ${tables.rebirthLog} SET dwPostID = @post WHERE dwID = @id;
+  END
 END
 COMMIT;
-SELECT @code AS code, @id AS id, @name AS name, @rebirth AS rebirth, @bonus AS bonus, @priceGold AS priceGold,
-       CAST(@wallet / 1000000 AS INT) AS gold, CAST((@wallet / 1000) % 1000 AS INT) AS silver, CAST(@wallet % 1000 AS INT) AS copper;`;
+SELECT @code AS code, @id AS id, @name AS name, @rebirth AS rebirth, @bonus AS bonus, @expBonus AS expBonus, @goldBonus AS goldBonus,
+       @priceGold AS priceGold, CAST(@wallet / 1000000 AS INT) AS gold, CAST((@wallet / 1000) % 1000 AS INT) AS silver,
+       CAST(@wallet % 1000 AS INT) AS copper, @post AS postId;`;
 }

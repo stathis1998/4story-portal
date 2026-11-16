@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Wallet } from '@4story-portal/shared';
+import { REBIRTH_DEFAULT_SETTINGS, type RebirthSettings, type Wallet } from '@4story-portal/shared';
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config/config.js';
@@ -17,16 +17,24 @@ import {
   REBIRTH_PRICE_CHANGED,
   REBIRTH_WEARING,
   type RebirthCode,
+  REWARD_SENDER,
   START_SKILL_POINTS,
 } from '../../src/rebirth/rebirth-sql.js';
-import { ANNOUNCE_SKIPPED, ANNOUNCE_WAITING, type RebirthInput, SqlRebirthRepository } from '../../src/rebirth/rebirth.repository.js';
+import {
+  ANNOUNCE_SKIPPED,
+  ANNOUNCE_WAITING,
+  type RebirthInput,
+  type RebirthRewardRow,
+  SqlRebirthRepository,
+} from '../../src/rebirth/rebirth.repository.js';
 import { connectTestDb, inRolledBackTransaction } from './db-test-helpers.js';
 
-const setupSql = ['TPORTALSETTING.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
+// The letter procedure and its notify table are created inside each test's transaction, as the mail tests do.
+const setupSql = ['TPORTALSETTING.sql', 'TPORTALREBIRTHREWARD.sql', 'TPORTALPOSTNOTIFY.sql', 'TPortalGmPost.sql'].map((file) => readFileSync(path.resolve(process.cwd(), 'sql', file), 'utf8'));
 
 type Character = { charId: number; userId: number; name: string; classId: number; raceId: number; country: number };
-/** The four setting rows as stored; null leaves the row out. */
-type Settings = Record<'live' | 'priceGold' | 'percent' | 'limit', string | null>;
+/** The six setting rows as stored; null leaves the row out. */
+type Settings = Record<keyof RebirthSettings, string | null>;
 type ReadyOptions = { settings?: Partial<Settings>; wallet?: Wallet };
 type Ctx = { repo: SqlRebirthRepository; tx: sql.Transaction; character: Character };
 type StartSkill = { wSkillID: number; bLevel: number; bKind: number };
@@ -61,7 +69,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
 
   /**
    * Inside tx: the highest-level character at level 90 with a known wallet, nothing worn, never reborn and
-   * offline, and rebirth open at price 2000, 2 percent, limit 10.
+   * offline, and rebirth open at price 2000, 2 percent, limit 10, 10 percent EXP and 5 percent gold, with no rewards saved.
    */
   async function ready(tx: sql.Transaction, options: ReadyOptions = {}): Promise<Character> {
     for (const batch of setupSql) {
@@ -82,10 +90,11 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
        DELETE FROM ${t.rebirths} WHERE dwCharID = @charId;
        DELETE FROM ${t.rebirthLog} WHERE dwCharID = @charId;
        DELETE FROM ${t.currentUsers} WHERE dwUserID = @userId OR dwCharID = @charId;
-       DELETE FROM ${t.portalSettings} WHERE szKey LIKE 'rebirth[_]%';`,
+       DELETE FROM ${t.portalSettings} WHERE szKey LIKE 'rebirth[_]%';
+       DELETE FROM ${t.rebirthRewards};`,
       { ...ids(character), ...wallet },
     );
-    const settings: Settings = { live: 'true', priceGold: '2000', percent: '2', limit: '10', ...options.settings };
+    const settings: Settings = { live: 'true', priceGold: '2000', percent: '2', limit: '10', expPercent: '10', goldPercent: '5', ...options.settings };
     for (const [name, value] of Object.entries(settings)) {
       if (value === null) continue;
       await exec(tx, `INSERT INTO ${t.portalSettings} (szKey, szValue, szUpdatedBy) VALUES (@key, @value, 'test')`, {
@@ -167,7 +176,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
 
   const logRows = (tx: sql.Transaction, charId: number) => exec(tx, `SELECT * FROM ${t.rebirthLog} WHERE dwCharID = @charId ORDER BY dwID`, { charId });
   const rebirthRows = (tx: sql.Transaction, charId: number) =>
-    exec(tx, `SELECT dwCharID, bRebirth, bStatBonus FROM ${t.rebirths} WHERE dwCharID = @charId`, { charId });
+    exec(tx, `SELECT dwCharID, bRebirth, bStatBonus, bExpBonus, bGoldBonus FROM ${t.rebirths} WHERE dwCharID = @charId`, { charId });
 
   /** The character's rows in each table, one query at a time (a transaction runs one request at once). */
   const countRows = async (tx: sql.Transaction, tables: string[], charId: number) => {
@@ -202,7 +211,16 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       const outcome = await go(ctx);
 
       const wallet = { gold: 3000, silver: 250, copper: 999 };
-      expect(outcome).toEqual({ code: REBIRTH_OK, id: expect.any(Number), name: character.name, rebirth: 1, bonus: 2, priceGold: 2000, wallet });
+      expect(outcome).toEqual({
+        code: REBIRTH_OK,
+        id: expect.any(Number),
+        name: character.name,
+        rebirth: 1,
+        bonuses: { stats: 2, exp: 10, gold: 5 },
+        priceGold: 2000,
+        wallet,
+        postId: 0,
+      });
 
       const levelZero = (await exec<{ dwEXP: number }>(tx, `SELECT dwEXP FROM ${t.levels} WHERE bLevel = 0`))[0]?.dwEXP ?? 0;
       const spawnId = [15001, 15002][character.country] ?? 15003;
@@ -393,7 +411,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       const outcome = await go(ctx);
       if (outcome.code !== REBIRTH_OK) throw new Error(`rebirth refused with ${outcome.code}`);
 
-      expect(await rebirthRows(tx, character.charId)).toEqual([{ dwCharID: character.charId, bRebirth: 1, bStatBonus: 2 }]);
+      expect(await rebirthRows(tx, character.charId)).toEqual([{ dwCharID: character.charId, bRebirth: 1, bStatBonus: 2, bExpBonus: 10, bGoldBonus: 5 }]);
       expect(await logRows(tx, character.charId)).toEqual([
         {
           dwID: outcome.id,
@@ -407,6 +425,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
           szText: `${character.name} was reborn (rebirth 1)`,
           bAnnounced: 0,
           dRebirth: expect.any(Date),
+          dwPostID: 0,
         },
       ]);
     }));
@@ -423,11 +442,12 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
           id: expect.any(Number),
           name: character.name,
           rebirth: 2,
-          bonus: 4,
+          bonuses: { stats: 4, exp: 20, gold: 10 },
           priceGold: 4000,
           wallet: { gold: 1000, silver: 250, copper: 999 },
+          postId: 0,
         });
-        expect(await rebirthRows(tx, character.charId)).toEqual([{ dwCharID: character.charId, bRebirth: 2, bStatBonus: 4 }]);
+        expect(await rebirthRows(tx, character.charId)).toEqual([{ dwCharID: character.charId, bRebirth: 2, bStatBonus: 4, bExpBonus: 20, bGoldBonus: 10 }]);
         expect((await logRows(tx, character.charId)).map((row) => [row.bRebirth, row.bStatBonus, row.dwPriceGold, row.szText])).toEqual([
           [1, 2, 2000, `${character.name} was reborn (rebirth 1)`],
           [2, 4, 4000, `${character.name} was reborn (rebirth 2)`],
@@ -501,14 +521,16 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
         online: false,
         wornItems: 0,
         rebirths: 0,
-        bonus: 0,
+        statBonus: 0,
+        expBonus: 0,
+        goldBonus: 0,
         ...START,
       });
 
       await goOnline(tx, character);
       await wear(tx, character.charId);
       await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 3, 6)`, ids(character));
-      expect(await repo.find(character.userId, character.charId)).toMatchObject({ online: true, wornItems: 1, rebirths: 3, bonus: 6 });
+      expect(await repo.find(character.userId, character.charId)).toMatchObject({ online: true, wornItems: 1, rebirths: 3, statBonus: 6 });
     }));
 
   it('counts an item worn only in the twin item table', () =>
@@ -541,8 +563,8 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       expect(await repo.find(character.userId, character.charId)).toBeNull();
     }));
 
-  const NONE: Settings = { live: null, priceGold: null, percent: null, limit: null };
-  const STARTING = { live: false, priceGold: 0, percent: 2, limit: 10 };
+  const NONE: Settings = { live: null, priceGold: null, percent: null, limit: null, expPercent: null, goldPercent: null };
+  const STARTING = REBIRTH_DEFAULT_SETTINGS;
 
   const logRow = (tx: sql.Transaction, c: Character, rebirth: number) =>
     exec<{ id: number }>(
@@ -569,15 +591,15 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
 
   it('saves and reads the settings back', () =>
     withReady(async ({ repo }) => {
-      expect(await repo.settings()).toEqual({ live: true, priceGold: 2000, percent: 2, limit: 10 });
-      await repo.saveSettings({ live: false, priceGold: 50, percent: 4, limit: 7 }, 'gm');
-      expect(await repo.settings()).toEqual({ live: false, priceGold: 50, percent: 4, limit: 7 });
+      expect(await repo.settings()).toEqual({ live: true, priceGold: 2000, percent: 2, limit: 10, expPercent: 10, goldPercent: 5 });
+      await repo.saveSettings({ live: false, priceGold: 50, percent: 4, limit: 7, expPercent: 25, goldPercent: 0 }, 'gm');
+      expect(await repo.settings()).toEqual({ live: false, priceGold: 50, percent: 4, limit: 7, expPercent: 25, goldPercent: 0 });
     }));
 
   it('saves into an empty table', () =>
     withReady(async ({ repo }) => {
-      await repo.saveSettings({ live: true, priceGold: 9, percent: 1, limit: 1 }, 'gm');
-      expect(await repo.settings()).toEqual({ live: true, priceGold: 9, percent: 1, limit: 1 });
+      await repo.saveSettings({ live: true, priceGold: 9, percent: 1, limit: 1, expPercent: 3, goldPercent: 4 }, 'gm');
+      expect(await repo.settings()).toEqual({ live: true, priceGold: 9, percent: 1, limit: 1, expPercent: 3, goldPercent: 4 });
     }, { settings: NONE }));
 
   it('recalculates every bonus when the percent or the limit changes', () =>
@@ -589,7 +611,7 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
         other: other.charId,
       });
 
-      await repo.saveSettings({ live: true, priceGold: 2000, percent: 3, limit: 5 }, 'gm');
+      await repo.saveSettings({ live: true, priceGold: 2000, percent: 3, limit: 5, expPercent: 0, goldPercent: 0 }, 'gm');
 
       const bonus = async (charId: number) =>
         (await exec<{ b: number }>(tx, `SELECT bStatBonus AS b FROM ${t.rebirths} WHERE dwCharID = @charId`, { charId }))[0].b;
@@ -631,4 +653,329 @@ describe('SqlRebirthRepository against the _TEST copy', () => {
       await repo.markAnnounced(id, ANNOUNCE_SKIPPED);
       expect((await repo.recent(100)).find((row) => row.id === id)?.announced).toBe(ANNOUNCE_SKIPPED);
     }));
+
+  describe('EXP and gold bonuses', () => {
+    it('stores the EXP and gold bonuses with the stat bonus', () =>
+      withReady(async (ctx) => {
+        const outcome = await go(ctx);
+
+        expect(outcome).toMatchObject({ code: REBIRTH_OK, bonuses: { stats: 2, exp: 10, gold: 5 } });
+        expect(await rebirthRows(ctx.tx, ctx.character.charId)).toEqual([
+          { dwCharID: ctx.character.charId, bRebirth: 1, bStatBonus: 2, bExpBonus: 10, bGoldBonus: 5 },
+        ]);
+      }));
+
+    it('reads missing EXP and gold settings as 0', () =>
+      withReady(
+        async (ctx) => {
+          expect(await ctx.repo.settings()).toEqual({ live: true, priceGold: 2000, percent: 2, limit: 10, expPercent: 0, goldPercent: 0 });
+
+          expect(await go(ctx)).toMatchObject({ code: REBIRTH_OK, bonuses: { stats: 2, exp: 0, gold: 0 } });
+          expect(await rebirthRows(ctx.tx, ctx.character.charId)).toEqual([
+            { dwCharID: ctx.character.charId, bRebirth: 1, bStatBonus: 2, bExpBonus: 0, bGoldBonus: 0 },
+          ]);
+        },
+        { settings: { expPercent: null, goldPercent: null } },
+      ));
+
+    it.each<[string, Partial<Settings>]>([
+      ['EXP is text', { expPercent: 'x' }],
+      ['EXP is empty', { expPercent: '' }],
+      ['EXP is 26', { expPercent: '26' }],
+      ['EXP is -1', { expPercent: '-1' }],
+      ['EXP 13 with limit 20 passes 250', { expPercent: '13', limit: '20' }],
+      ['gold is text', { goldPercent: 'x' }],
+      ['gold is 26', { goldPercent: '26' }],
+      ['gold 13 with limit 20 passes 250', { goldPercent: '13', limit: '20' }],
+    ])('refuses with closed when an EXP or gold setting is unreadable: %s', (_, settings) =>
+      withReady(
+        async (ctx) => {
+          const before = await snapshot(ctx.tx, ctx.character);
+
+          expect(await go(ctx)).toEqual({ code: REBIRTH_CLOSED });
+
+          expect(await snapshot(ctx.tx, ctx.character)).toEqual(before);
+          expect(await letters(ctx.tx, ctx.character.charId)).toEqual([]);
+          expect(await ctx.repo.settings()).toEqual(STARTING);
+        },
+        { settings },
+      ),
+    );
+
+    it('allows EXP and gold at 25 percent with limit 10, 250 in all', () =>
+      withReady(
+        async (ctx) => {
+          expect(await go(ctx)).toMatchObject({ code: REBIRTH_OK, bonuses: { stats: 2, exp: 25, gold: 25 } });
+        },
+        { settings: { expPercent: '25', goldPercent: '25' } },
+      ));
+
+    it('recalculates every bonus when the settings are saved', () =>
+      withReady(async ({ repo, tx, character }) => {
+        await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 3, 6)`, ids(character));
+
+        await repo.saveSettings({ live: true, priceGold: 2000, percent: 3, limit: 2, expPercent: 10, goldPercent: 4 }, 'gm');
+
+        expect(await rebirthRows(tx, character.charId)).toEqual([
+          { dwCharID: character.charId, bRebirth: 3, bStatBonus: 6, bExpBonus: 20, bGoldBonus: 8 },
+        ]);
+      }));
+
+    it('finds the character with all three bonuses', () =>
+      withReady(async ({ repo, tx, character }) => {
+        await exec(
+          tx,
+          `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus, bExpBonus, bGoldBonus) VALUES (@charId, 3, 6, 30, 15)`,
+          ids(character),
+        );
+
+        expect(await repo.find(character.userId, character.charId)).toMatchObject({ rebirths: 3, statBonus: 6, expBonus: 30, goldBonus: 15 });
+      }));
+  });
+
+  type Letter = {
+    dwPostID: number;
+    dwCharID: number;
+    szSender: string;
+    szTitle: string;
+    szMessage: string;
+    bType: number;
+    dwGold: number;
+    dwSilver: number;
+    dwCooper: number;
+  };
+
+  /** The character's letters from the rebirth sender, title and message without the game's 8 hex digit length prefix. */
+  async function letters(tx: sql.Transaction, charId: number): Promise<Letter[]> {
+    const rows = await exec<Letter>(
+      tx,
+      `SELECT dwPostID, dwCharID, szSender, szTitle, szMessage, bType, dwGold, dwSilver, dwCooper
+       FROM [${gameName}].dbo.TPOSTTABLE WHERE dwCharID = @charId AND szSender = 'Rebirth' ORDER BY dwPostID`,
+      { charId },
+    );
+    return rows.map((row) => ({ ...row, szTitle: row.szTitle.slice(8), szMessage: row.szMessage.slice(8) }));
+  }
+
+  /** The items attached to a letter, in the order they were written. */
+  const letterItems = (tx: sql.Transaction, postId: number) =>
+    exec(
+      tx,
+      `SELECT bOwnerType, dwOwnerID, wItemID, bCount FROM ${t.characterItems} WHERE bStorageType = 2 AND dwStorageID = @postId ORDER BY dlID`,
+      { postId },
+    );
+
+  const postIdsInLog = async (tx: sql.Transaction, charId: number) => (await logRows(tx, charId)).map((row) => [row.bRebirth, row.dwPostID]);
+
+  /** Two item IDs from the item chart that fit a reward's SMALLINT. */
+  const twoItems = async (tx: sql.Transaction): Promise<[number, number]> => {
+    const rows = await exec<{ itemId: number }>(tx, `SELECT TOP 2 wItemID AS itemId FROM ${t.items} WHERE wItemID BETWEEN 1 AND 32767 ORDER BY wItemID`);
+    return [rows[0].itemId, rows[1].itemId];
+  };
+
+  type Money = Partial<Pick<RebirthRewardRow, 'gold' | 'silver' | 'copper'>>;
+  const reward = (rebirth: number, money: Money, items: RebirthRewardRow['items'] = []): RebirthRewardRow => ({
+    rebirth,
+    gold: 0,
+    silver: 0,
+    copper: 0,
+    ...money,
+    items,
+  });
+
+  const letter = (charId: number, rebirth: number, money: Partial<Pick<Letter, 'dwGold' | 'dwSilver' | 'dwCooper'>>): Letter => ({
+    dwPostID: expect.any(Number),
+    dwCharID: charId,
+    szSender: 'Rebirth',
+    szTitle: `Rebirth ${rebirth} reward`,
+    szMessage: `You were reborn. Your reward for rebirth ${rebirth} is attached.`,
+    bType: 6,
+    dwGold: 0,
+    dwSilver: 0,
+    dwCooper: 0,
+    ...money,
+  });
+
+  describe('rewards', () => {
+    it('names the sender Rebirth', () => {
+      expect(REWARD_SENDER).toBe('Rebirth');
+    });
+
+    it('mails the reward for that rebirth number', () =>
+      withReady(async (ctx) => {
+        const { repo, tx, character } = ctx;
+        const [a, b] = await twoItems(tx);
+        await repo.setReward(reward(1, { gold: 2 }, [{ itemId: a, count: 3 }, { itemId: b, count: 1 }]), 'gm');
+
+        const outcome = await go(ctx);
+
+        const sent = await letters(tx, character.charId);
+        expect(sent).toEqual([letter(character.charId, 1, { dwGold: 2 })]);
+        const postId = sent[0].dwPostID;
+        expect(await letterItems(tx, postId)).toEqual([
+          { bOwnerType: 0, dwOwnerID: character.charId, wItemID: a, bCount: 3 },
+          { bOwnerType: 0, dwOwnerID: character.charId, wItemID: b, bCount: 1 },
+        ]);
+        expect(await postIdsInLog(tx, character.charId)).toEqual([[1, postId]]);
+        expect(outcome).toMatchObject({ code: REBIRTH_OK, rebirth: 1, postId });
+      }));
+
+    type OneKind = [string, (item: number) => RebirthRewardRow, Partial<Letter>, (item: number) => { wItemID: number; bCount: number }[]];
+    it.each<OneKind>([
+      ['money only', () => reward(1, { gold: 1, silver: 20, copper: 300 }), { dwGold: 1, dwSilver: 20, dwCooper: 300 }, () => []],
+      ['items only', (item) => reward(1, {}, [{ itemId: item, count: 2 }]), {}, (item) => [{ wItemID: item, bCount: 2 }]],
+    ])('mails %s', (_, saved, money, items) =>
+      withReady(async (ctx) => {
+        const { repo, tx, character } = ctx;
+        const [item] = await twoItems(tx);
+        await repo.setReward(saved(item), 'gm');
+
+        const outcome = await go(ctx);
+
+        const sent = await letters(tx, character.charId);
+        expect(sent).toEqual([letter(character.charId, 1, money)]);
+        expect((await letterItems(tx, sent[0].dwPostID)).map(({ wItemID, bCount }) => ({ wItemID, bCount }))).toEqual(items(item));
+        expect(outcome).toMatchObject({ code: REBIRTH_OK, postId: sent[0].dwPostID });
+      }),
+    );
+
+    it('sends nothing for a rebirth number without a reward', () =>
+      withReady(async (ctx) => {
+        const { repo, tx, character } = ctx;
+        await repo.setReward(reward(2, { gold: 5 }), 'gm');
+
+        expect(await go(ctx)).toMatchObject({ code: REBIRTH_OK, rebirth: 1, postId: 0 });
+
+        expect(await letters(tx, character.charId)).toEqual([]);
+        expect(await postIdsInLog(tx, character.charId)).toEqual([[1, 0]]);
+      }));
+
+    it('sends the reward of the second rebirth on the second rebirth', () =>
+      withReady(
+        async (ctx) => {
+          const { repo, tx, character } = ctx;
+          await repo.setReward(reward(1, { gold: 1 }), 'gm');
+          await repo.setReward(reward(2, { gold: 7 }), 'gm');
+          const first = await go(ctx);
+          await setLevel(tx, character.charId, 90);
+
+          const second = await go(ctx, { expectedPriceGold: 4000 });
+
+          const sent = await letters(tx, character.charId);
+          expect(sent).toEqual([letter(character.charId, 1, { dwGold: 1 }), letter(character.charId, 2, { dwGold: 7 })]);
+          expect(first).toMatchObject({ code: REBIRTH_OK, rebirth: 1, postId: sent[0].dwPostID });
+          expect(second).toMatchObject({ code: REBIRTH_OK, rebirth: 2, postId: sent[1].dwPostID });
+          expect(await postIdsInLog(tx, character.charId)).toEqual([
+            [1, sent[0].dwPostID],
+            [2, sent[1].dwPostID],
+          ]);
+        },
+        { wallet: { gold: 7000, silver: 250, copper: 999 } },
+      ));
+
+    // TPortalGmPost returns 0 when it writes nothing. The batch throws, and XACT_ABORT takes the whole
+    // transaction with it, the caller's too, so mssql reports it aborted.
+    it('fails the whole rebirth when the letter is not written', async () => {
+      const tx = new sql.Transaction(db.pool);
+      await tx.begin();
+      let failure: unknown;
+      let rollback: unknown;
+      try {
+        const character = await ready(tx);
+        const repo = new SqlRebirthRepository(db).withTransaction(tx);
+        await repo.setReward(reward(1, { gold: 2 }), 'gm');
+        const stub = `CREATE OR ALTER PROCEDURE dbo.TPortalGmPost
+          @pCharID INT, @pSender VARCHAR(50), @pTitle VARCHAR(240), @pMessage VARCHAR(2000), @dwGold INT, @dwSilver INT, @dwCooper INT,
+          @wItemID1 SMALLINT, @bCount1 TINYINT, @wItemID2 SMALLINT, @bCount2 TINYINT, @wItemID3 SMALLINT, @bCount3 TINYINT
+          AS RETURN 0`;
+        await new sql.Request(tx).input('sql', sql.NVarChar(sql.MAX), stub).query(`EXEC [${gameName}].sys.sp_executesql @sql`);
+
+        failure = await go({ repo, tx, character }).then(
+          (outcome) => outcome,
+          (error: unknown) => error,
+        );
+      } finally {
+        rollback = await tx.rollback().then(
+          () => 'rolled back by the test',
+          (error: unknown) => error,
+        );
+      }
+
+      expect(failure).toMatchObject({ message: 'Rebirth reward letter not sent' });
+      expect(rollback).toMatchObject({ code: 'EABORT' });
+    });
+
+    it('never sends a reward saved above the limit', () =>
+      withReady(
+        async (ctx) => {
+          const { repo, tx, character } = ctx;
+          await repo.setReward(reward(2, { gold: 5 }), 'gm');
+          await exec(tx, `INSERT INTO ${t.rebirths} (dwCharID, bRebirth, bStatBonus) VALUES (@charId, 1, 2)`, ids(character));
+
+          expect(await go(ctx, { expectedPriceGold: 4000 })).toEqual({ code: REBIRTH_AT_LIMIT });
+
+          expect(await letters(tx, character.charId)).toEqual([]);
+          expect(await logRows(tx, character.charId)).toEqual([]);
+        },
+        { settings: { limit: '1' } },
+      ));
+
+    it('lists every saved reward by rebirth number', () =>
+      withReady(async ({ repo, tx }) => {
+        const [a, b] = await twoItems(tx);
+        await repo.setReward(reward(3, { copper: 9 }, [{ itemId: b, count: 4 }]), 'gm');
+        await repo.setReward(reward(1, { gold: 2, silver: 3 }, [{ itemId: a, count: 1 }, { itemId: b, count: 2 }]), 'gm');
+
+        expect(await repo.rewards()).toEqual([
+          reward(1, { gold: 2, silver: 3 }, [{ itemId: a, count: 1 }, { itemId: b, count: 2 }]),
+          reward(3, { copper: 9 }, [{ itemId: b, count: 4 }]),
+        ]);
+        const [row] = await exec(tx, `SELECT szUpdatedBy, wItemID3, bCount3 FROM ${t.rebirthRewards} WHERE bRebirth = 1`);
+        expect(row).toEqual({ szUpdatedBy: 'gm', wItemID3: 0, bCount3: 0 });
+      }));
+
+    it('replaces a saved reward', () =>
+      withReady(async ({ repo }) => {
+        await repo.setReward(reward(2, { gold: 5 }), 'gm');
+        await repo.setReward(reward(2, { silver: 6 }), 'other');
+
+        expect(await repo.rewards()).toEqual([reward(2, { silver: 6 })]);
+      }));
+
+    it('keeps a reward above a lowered limit', () =>
+      withReady(async ({ repo }) => {
+        await repo.setReward(reward(5, { gold: 3 }), 'gm');
+
+        await repo.saveSettings({ live: true, priceGold: 2000, percent: 2, limit: 3, expPercent: 10, goldPercent: 5 }, 'gm');
+
+        expect(await repo.rewards()).toEqual([reward(5, { gold: 3 })]);
+      }));
+
+    it('deletes a reward saved empty', () =>
+      withReady(async ({ repo }) => {
+        await repo.setReward(reward(4, { gold: 3 }), 'gm');
+        await repo.setReward(reward(5, { gold: 1 }), 'gm');
+
+        await repo.setReward(reward(4, {}), 'gm');
+
+        expect(await repo.rewards()).toEqual([reward(5, { gold: 1 })]);
+      }));
+
+    it('finds reward items by ID with their names and stack sizes', () =>
+      withReady(async ({ repo, tx }) => {
+        const [a, b] = await twoItems(tx);
+        const chart = await exec<{ itemId: number; name: string; stack: number }>(
+          tx,
+          `SELECT wItemID AS itemId, CASE WHEN szNAME = '_' THEN '' ELSE szNAME END AS name, bStack AS stack FROM ${t.items} WHERE wItemID IN (@a, @b)`,
+          { a, b },
+        );
+        const [{ missing }] = await exec<{ missing: number }>(tx, `SELECT MAX(wItemID) + 1 AS missing FROM ${t.items}`);
+        const byId = (x: { itemId: number }, y: { itemId: number }) => x.itemId - y.itemId;
+
+        const found = await repo.findItems([a, b, missing]);
+
+        expect([...found].sort(byId)).toEqual([...chart].sort(byId));
+        expect(found).toHaveLength(2);
+        expect(await repo.findItems([])).toEqual([]);
+      }));
+  });
 });
