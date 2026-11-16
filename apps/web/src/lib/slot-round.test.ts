@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { slotChain, slotReplayRound, type SlotMachine, type SlotSpinView } from '@4story-portal/shared';
+import { SLOT_MACHINES, SLOT_METER_FREE, slotChain, slotPlayRound, slotReplayRound, type SlotMachine, type SlotSpinView, type SlotStops } from '@4story-portal/shared';
 import { BOTTOM, TOP, at, bottom, same, showing, stacked } from '../test/slot-fixture';
 import { bigWinLine, roundLine, roundListLine, roundSpins, winTier, wonTiles } from './slot-round';
 
@@ -163,4 +163,51 @@ describe('bigWinLine', () => {
     ['a pot', view({ jackpot: 31420, pots: { mini: 0, major: 0, giga: 31420 } }), 'Tester won the Giga jackpot, 31 Gold 420 Silver'],
     ['two pots', view({ jackpot: 2100, pots: { mini: 100, major: 0, giga: 2000 } }), 'Tester won the Mini and Giga jackpots, 2 Gold 100 Silver'],
   ])('says a big win: %s', (_name, v, text) => expect(bigWinLine(named, v)).toBe(text));
+});
+
+describe('roundSpins against the shared rules, on real rounds', () => {
+  /** A fixed 32-bit generator, so every run plays the same rounds. Its high bits make the stops: the low bits of an LCG repeat. */
+  function seeded(seed: number) {
+    let s = seed >>> 0;
+    return () => {
+      s = (Math.imul(s, 1_664_525) + 1_013_904_223) >>> 0;
+      return s;
+    };
+  }
+
+  it.each(SLOT_MACHINES.map((machine) => [machine.name, machine] as const))(
+    'plays 400 rounds of %s as slotPlayRound does: the total, the free spins and the meter',
+    (_name, machine) => {
+      const next = seeded(20_261_115);
+      const stops = () => [0, 1, 2, 3, 4].map(() => next() >>> 27) as SlotStops;
+      const seen = { free: 0, meter: 0 };
+      for (let round = 0; round < 400; round++) {
+        const meterBefore = (next() >>> 16) % machine.meterSize;
+        const stake = machine.stakes[round % 3];
+        const play = slotPlayRound(machine, meterBefore, stops);
+        const v = view({ machine: machine.key, stops: play.stops, free: play.free, meterFree: play.meterFree, meterBefore, stake });
+        const spins = roundSpins(machine, v);
+        const where = `round ${round}`;
+
+        expect(spins).toHaveLength(1 + play.free.length + play.meterFree.length);
+        expect(spins.at(-1)!.total, where).toBe((play.lineStakes * stake) / 20);
+        // The free spins each spin adds are the ones the round played: the award, then every retrigger.
+        const free = spins.slice(1, 1 + play.free.length);
+        const meter = spins.slice(1 + play.free.length);
+        expect(spins[0].added + free.reduce((sum, spin) => sum + spin.added, 0), where).toBe(play.free.length);
+        if (play.meterFree.length > 0) expect(SLOT_METER_FREE + meter.reduce((sum, spin) => sum + spin.added, 0), where).toBe(play.meterFree.length);
+        // The meter as the page shows it: the paid spin's scatters unless they won free spins, less a full meter's size.
+        const points = spins[0].added === 0 ? spins[0].scatters : 0;
+        const full = meterBefore + points >= machine.meterSize;
+        expect(play.meterFree.length > 0, where).toBe(full);
+        expect(meterBefore + points - (full ? machine.meterSize : 0), where).toBe(play.meterAfter);
+
+        if (play.free.length > 0) seen.free++;
+        if (full) seen.meter++;
+      }
+      // The rounds played include free rounds and full meters, so both re-implementations were compared.
+      expect(seen.free).toBeGreaterThan(0);
+      expect(seen.meter).toBeGreaterThan(0);
+    },
+  );
 });
