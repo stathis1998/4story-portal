@@ -298,6 +298,17 @@ function animate() {
 /** Moves the clock by `ms` at once: the reels' frames, but no part of the show that waits for the page to be drawn. */
 const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms))
 
+/**
+ * Waits for the reels to start turning, then lets React run the effects that come with it. Reels asks for its first
+ * frame in a passive effect, which React runs a moment after the page is drawn: under load the clock could
+ * otherwise be moved before any frame was asked for.
+ */
+async function reelsStarted() {
+  const turning = await screen.findByRole('img', { name: 'Reels, spinning' })
+  await act(async () => {})
+  return turning
+}
+
 /** Moves the clock in steps, drawing the page between them as a browser would: each spin of a round starts from a drawn page. */
 function run(ms: number, each?: () => void) {
   for (let t = 0; t < ms; t += 100) {
@@ -650,7 +661,7 @@ describe('slots', () => {
 
     fireEvent.click(spinButton())
     fireEvent.click(spinButton())
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
     // Stops the reels; the space bar while they settle does nothing more.
     await user.click(spinButton())
     fireEvent.keyDown(document.body, { key: ' ' })
@@ -696,7 +707,7 @@ describe('slots', () => {
 
     // Down, three repeats, then up: the first is a press, and starts the round.
     await user.keyboard('{Enter>4/}')
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
     expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(1)
     expect(spinButton()).toHaveTextContent('Stop')
 
@@ -922,7 +933,7 @@ describe('slots', () => {
 
     await user.click(spinButton())
 
-    const spinning = await screen.findByRole('img', { name: 'Reels, spinning' })
+    const spinning = await reelsStarted()
     expect(scrolled).toHaveBeenCalledTimes(1)
     // The cabinet down to the status line, so on a phone Spin and the result are in view with the reels.
     const shown = scrolled.mock.contexts[0] as Element
@@ -946,7 +957,7 @@ describe('slots', () => {
     await user.click(stake('60 Silver'))
     animate()
     await user.click(spinButton())
-    await screen.findByRole('img', { name: 'Reels, spinning' })
+    await reelsStarted()
 
     // Straight on the tab, as if it had kept the focus when it was turned off.
     fireEvent.keyDown(tab("Tranus's Shelf"), { key: 'ArrowRight' })
@@ -1070,7 +1081,7 @@ describe('slots', () => {
       await user.click(stake('60 Silver'))
       animate()
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
 
       current = { ...moved, characters: lines.state.characters, mine: lines.state.mine }
       await poll(queryClient)
@@ -1237,7 +1248,7 @@ describe('slots', () => {
       expect(paid.steps.filter((step) => step.lines.length > 0).length).toBeGreaterThanOrEqual(2)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const labels = changes(reelsLabel)
       // The step on the reels: the latest whose grid has been seen.
       let landed = -1
@@ -1277,7 +1288,7 @@ describe('slots', () => {
       const won = paid.steps.filter((step) => step.lines.length > 0)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       expect(multiplier()).toBeNull()
       const shown = changes(multiplier)
       const names = paid.steps.map((step) => gridName(step.grid))
@@ -1308,7 +1319,7 @@ describe('slots', () => {
       expect(chain.steps.filter((step) => step.lines.length > 0).length).toBeGreaterThanOrEqual(3)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       // To free spin 1's first step, its lines showing.
       until(() => status().textContent === 'Free spin 1 of 8' && reelsLabel() === gridName(chain.steps[0].grid) && drawnLines() > 0)
       fireEvent.click(spinButton())
@@ -1328,7 +1339,7 @@ describe('slots', () => {
       // A lone paid spin: the press ends the round on the chain's last step, with its whole win.
       const [paid] = roundSpins(shelf, alone)
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       until(() => reelsLabel() === gridName(paid.steps[0].grid) && drawnLines() > 0)
       fireEvent.click(spinButton())
 
@@ -1352,7 +1363,7 @@ describe('slots', () => {
       const end = gridName(paid.steps.at(-1)!.grid)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const meters = seen(meterText)
       playOut(() => {
         meters.look()
@@ -1378,7 +1389,7 @@ describe('slots', () => {
       const spins = roundSpins(shelf, spin)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const told = seen(() => status().textContent)
       const banners = seen(bannerText)
       const meters = seen(meterText)
@@ -1418,7 +1429,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const told = seen(() => status().textContent)
       const banners = seen(bannerText)
       const shown = changes(multiplier)
@@ -1470,7 +1481,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const held = () => {
         expect(wallet()).toBe('5 Gold 230 Silver')
         expect(within(pot('Mini')).getByText('640 Silver')).toBeInTheDocument()
@@ -1514,7 +1525,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const held = () => {
         expect(wallet()).toBe('5 Gold 230 Silver')
         expect(within(pot('Giga')).getByText('31 Gold')).toBeInTheDocument()
@@ -1539,7 +1550,7 @@ describe('slots', () => {
       const names = paid.steps.map((step) => gridName(step.grid))
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       let landed = -1
       let bursts = 0
       playOut(() => {
@@ -1561,7 +1572,7 @@ describe('slots', () => {
       // A round that wins nothing has no step after the first, so no burst.
       calls.length = 0
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       playOut()
       expect(calls.filter((call) => call.startsWith('burst'))).toEqual([])
     })
@@ -1575,7 +1586,7 @@ describe('slots', () => {
       const freeWon = spin.payout - spins[0].won
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const told = seen(() => status().textContent)
       // Drawn over the window.
       const banners = seen(bannerText)
@@ -1611,7 +1622,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance(600)
       expect(reelSounds(calls)).toEqual([])
 
@@ -1637,7 +1648,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       until(() => screen.queryByText('Big win') !== null, undefined, 100)
       expect(calls).toContain('bigWin')
       expect(wallet()).toBe('5 Gold 230 Silver')
@@ -1665,7 +1676,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       expect(skipButton()).toBeNull()
       // Offered from the banner on.
       until(() => skipButton() !== null, undefined, 100)
@@ -1696,7 +1707,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       until(() => status().textContent!.includes('Free spin 8 of 8'), undefined, 100)
       // Even once the last free spin has stopped: hidden then, it would tell that no retrigger was coming.
       until(() => reelsLabel() !== 'Reels, spinning', undefined, 100)
@@ -1714,7 +1725,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
       let drew = 0
       playOut(() => {
@@ -1742,7 +1753,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       let overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
       playOut(overlays.look)
       expect(overlays.texts).toEqual(['Big win'])
@@ -1757,7 +1768,7 @@ describe('slots', () => {
 
       calls.length = 0
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       overlays = seen(() => screen.queryByText(/^(Big|Huge) win$/)?.textContent ?? null)
       playOut(overlays.look)
       expect(overlays.texts).toEqual(['Huge win'])
@@ -1773,7 +1784,7 @@ describe('slots', () => {
       const times = reelTimes(scatterReels(SCATTERS_1_4), false)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       expect(calls).toEqual(['unlock', 'press', 'spinning true'])
       let now = 0
       const to = (seconds: number) => {
@@ -1799,7 +1810,7 @@ describe('slots', () => {
       const times = reelTimes([true, true, false, false, false], false)
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance((times[1] - 0.05) * 1000)
       expect(calls).not.toContain('suspense true')
       advance(100)
@@ -1861,7 +1872,7 @@ describe('slots', () => {
       const quick = reelTimes(scatterReels(BLANK), true)
       expect(quick[4]).toBeCloseTo(reelTimes(scatterReels(BLANK), false)[4] / 2, 6)
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       advance((quick[4] - 0.05) * 1000)
       expect(reels()).toHaveAccessibleName('Reels, spinning')
       advance(100)
@@ -1872,7 +1883,7 @@ describe('slots', () => {
       const [paid] = roundSpins(shelf, chain.spin)
       const lineSeconds = Math.min(0.6, 2.4 / paid.steps[0].lines.length) * 0.5
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       until(() => reelsLabel() === gridName(paid.steps[0].grid), undefined, 10)
       advance((paid.steps[0].lines.length * lineSeconds + 0.3) * 1000 + 40)
       expect(reels()).toHaveAccessibleName('Reels, tiles falling')
@@ -1941,7 +1952,7 @@ describe('slots', () => {
       await loaded()
       animate()
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       until(() => status().textContent!.includes('Free spin 2 of 8'), undefined, 100)
       expect(vi.getTimerCount()).toBeGreaterThan(0)
 
@@ -1969,7 +1980,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const cheers = () => calls.filter((call) => call.startsWith('lineWin') || call === 'count')
       // Up to free spin 2 coming to rest, nothing cheers, though the paid spin's lines are drawn.
       let drewLines = false
@@ -1993,7 +2004,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const banners = seen(bannerText)
       playOut(banners.look)
 
@@ -2012,7 +2023,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       const banners = seen(bannerText)
       playOut(banners.look)
       expect(banners.texts).toContain('8 free spins won nothing.')
@@ -2023,7 +2034,7 @@ describe('slots', () => {
       calls.length = 0
       advance(500)
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       playOut()
       expect(calls.filter((call) => call === 'freeEnd')).toHaveLength(1)
     })
@@ -2035,7 +2046,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         until(() => screen.queryByText('Big win') !== null, undefined, 100)
 
         fireEvent.click(spinButton())
@@ -2054,7 +2065,7 @@ describe('slots', () => {
         await loaded()
         animate()
         fireEvent.keyDown(document.body, { key: ' ' })
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         advance(reelTimes(scatterReels(LINES), false)[4] * 1000 + 100)
         expect(drawnLines()).toBe(1)
 
@@ -2070,7 +2081,7 @@ describe('slots', () => {
         // The pause is over: a press is a new round.
         advance(100)
         fireEvent.keyDown(document.body, { key: ' ' })
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -2081,7 +2092,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         until(() => skipButton() !== null, undefined, 100)
 
         fireEvent.click(skipButton()!)
@@ -2098,7 +2109,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         // To the very frame the round ends.
         until(() => spinButton().textContent === 'Spin', undefined, 10)
         expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
@@ -2115,7 +2126,7 @@ describe('slots', () => {
         advance(250)
         expect(spinButton()).not.toHaveAttribute('aria-disabled')
         fireEvent.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -2125,7 +2136,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         advance(300)
         expect(spinButton()).toHaveTextContent('Stop')
 
@@ -2139,7 +2150,7 @@ describe('slots', () => {
 
         advance(400)
         fireEvent.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         expect(sentBodies(fetchMock, 'POST /slots/spin')).toHaveLength(2)
         playOut()
       })
@@ -2168,7 +2179,7 @@ describe('slots', () => {
         await loaded()
         animate()
         await user.click(spinButton())
-        await screen.findByRole('img', { name: 'Reels, spinning' })
+        await reelsStarted()
         until(() => spinButton().textContent === 'Spin', undefined, 10)
         expect(spinButton()).toHaveAttribute('aria-disabled', 'true')
         expect(vi.getTimerCount()).toBeGreaterThan(0)
@@ -2326,7 +2337,7 @@ describe('slots', () => {
       animate()
 
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       // A poll that brings the drop in mid-spin does not give it away.
       await poll(queryClient)
       playOut(() => {
@@ -2349,7 +2360,7 @@ describe('slots', () => {
       // Two pots at once: the biggest one's sound, once, and both meters celebrate.
       calls.length = 0
       await user.click(spinButton())
-      await screen.findByRole('img', { name: 'Reels, spinning' })
+      await reelsStarted()
       playOut()
       await waitFor(() => expect(within(pot('Giga')).getByText('0 Silver')).toBeInTheDocument())
       expect(calls.filter((call) => POT_SOUNDS.includes(call))).toEqual(['jackpot'])
