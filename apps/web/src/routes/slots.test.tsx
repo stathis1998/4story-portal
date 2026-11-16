@@ -416,6 +416,9 @@ describe('slots', () => {
     // On a phone the tagline goes, and the sentence is shown under the machine, before everything below it.
     expect(screen.getByText('Three machines, one pull at a time.')).toHaveClass('hidden', 'sm:block')
     expect(screen.getByText("This is real gambling with your character's money. Each machine shows what it pays back.")).toHaveClass('order-1')
+    // On a screen too short for the full layout (from sm up, under 1000 px high) the page does the same.
+    expect(screen.getByRole('main')).toHaveClass('flex', 'sm:block', 'short:flex')
+    expect(screen.getByText('Three machines, one pull at a time.')).toHaveClass('short:hidden')
     for (const name of ['What it pays', 'Your last rounds', 'Big wins']) expect(screen.getByRole('region', { name }).closest('.order-2')).not.toBeNull()
     expect(tabNames()).toEqual(["Tranus's Shelf", 'The Armoury', "Dragon's Hoard"])
     expect(tab("Tranus's Shelf")).toHaveAttribute('aria-selected', 'true')
@@ -2267,7 +2270,7 @@ describe('slots', () => {
       // Above the machines; on a phone the three sit in one row under the machine, so that Spin stays on the first
       // screen, and the last winners go.
       expect(jackpots().compareDocumentPosition(screen.getByRole('tablist', { name: 'Machine' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(jackpots()).toHaveClass('order-1', 'sm:order-none', 'grid-cols-3')
+      expect(jackpots()).toHaveClass('order-1', 'sm:order-none', 'short:order-1', 'grid-cols-3')
       expect(giga.getByText(/^Last won by/)).toHaveClass('hidden', 'sm:block')
     })
 

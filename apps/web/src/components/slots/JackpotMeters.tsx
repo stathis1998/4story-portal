@@ -12,13 +12,13 @@ type Props = {
 
 /**
  * The three shared pots side by side, even on a phone: each its name, its pot, its bar and when it must drop. The
- * last winner shows from sm up. On a phone the three are drawn under the machine (by order, so they are still read
- * first), so Spin stays on the first screen.
+ * last winner shows from sm up. On a phone, and on a screen too short for them above the machine, the three are
+ * drawn under the machine (by order, so they are still read first), so Spin stays on the first screen.
  */
 export function JackpotMeters({ jackpots, won }: Props) {
   if (jackpots.length === 0) return null
   return (
-    <section aria-label="Jackpots" className="order-1 mt-2 grid grid-cols-3 gap-1.5 sm:order-none sm:mt-0 sm:mb-4 sm:gap-3">
+    <section aria-label="Jackpots" className="order-1 mt-2 grid grid-cols-3 gap-1.5 sm:order-none sm:mt-0 sm:mb-4 sm:gap-3 short:order-1 short:mt-3 short:mb-0">
       {jackpots.map((jackpot) => (
         <Pot key={jackpot.pot} jackpot={jackpot} won={won.includes(jackpot.pot)} />
       ))}
