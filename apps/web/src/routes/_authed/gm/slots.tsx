@@ -227,7 +227,7 @@ function JackpotsSection({ jackpots }: { jackpots: GmSlotPot[] }) {
               typed={typedOf(pot)}
               fieldError={fieldErrors[pot.pot]}
               disabled={save.isPending}
-              onType={(text) => setDraft({ ...draft, [pot.pot]: text })}
+              onType={(text) => setDraft((current) => ({ ...current, [pot.pot]: text }))}
               onToggle={() => void toggleLive(pot.pot)}
             />
           ))}
