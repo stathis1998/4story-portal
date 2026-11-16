@@ -2350,6 +2350,8 @@ describe('slots', () => {
       // The sound comes with the end, the meter and the money with the result.
       await waitFor(() => expect(within(pot('Mini')).getByText('0 Silver')).toBeInTheDocument())
       expect(status()).toHaveTextContent(`Mini jackpot. You won ${silverText(1_002)} on a stake of 60 Silver.`)
+      // At least the stake: celebrated.
+      expect(within(status()).getByText(`Mini jackpot. You won ${silverText(1_002)} on a stake of 60 Silver.`)).toHaveClass('font-bold')
       expect(calls.filter((call) => POT_SOUNDS.includes(call))).toEqual(['jackpotMini'])
       expect(wallet()).toBe(walletText(mini))
       expect(pot('Mini')).toHaveAttribute('data-won', 'true')
@@ -2368,6 +2370,99 @@ describe('slots', () => {
       expect(pot('Mini')).toHaveAttribute('data-won', 'true')
       expect(pot('Major')).not.toHaveAttribute('data-won')
       expect(pot('Giga')).toHaveAttribute('data-won', 'true')
+    })
+
+    describe('a pot that won less than the stake', () => {
+      const at = '2026-11-15T10:05:00.000Z'
+      const SMALL_LINE = 'Mini jackpot. You won 50 Silver on a stake of 60 Silver.'
+      /** A lost round at 60 Silver that won a 50 Silver Mini, and the state it leaves. */
+      const smallPot = (stops: SlotStops = BLANK, overrides: Partial<SlotSpinView> = {}) => {
+        const spin = roundOf(stops, { stake: 60, jackpot: 50, pots: { mini: 50, major: 0, giga: 0 }, ...overrides })
+        return result(spin, { jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 50, at } } }) })
+      }
+      const glowing = () => within(jackpots()).queryAllByRole('group').filter((group) => group.hasAttribute('data-won'))
+      /** The small win's tick, and no pot's sound and no cheer. */
+      const ticked = () => expect(calls.filter((call) => [...POT_SOUNDS, ...WIN_SOUNDS, 'smallWin'].includes(call))).toEqual(['smallWin'])
+      /** The meter shows the drop and its winner, without the glow, and the line says it plainly. */
+      async function toldPlainly() {
+        await waitFor(() => expect(within(pot('Mini')).getByText('0 Silver')).toBeInTheDocument())
+        expect(within(pot('Mini')).getByText('Last won by Mounara: 50 Silver.')).toBeInTheDocument()
+        expect(glowing()).toEqual([])
+        expect(within(status()).getByText(SMALL_LINE)).not.toHaveClass('font-bold')
+      }
+
+      it('is not celebrated when the round ends by itself: the small win tick, no glow, a plain line', async () => {
+        const round = smallPot()
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        await user.click(spinButton())
+        await reelsStarted()
+        playOut()
+
+        await toldPlainly()
+        ticked()
+        expect(wallet()).toBe(walletText(round.spin))
+      })
+
+      it('is not celebrated with reduce motion', async () => {
+        const round = smallPot()
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+
+        await user.click(spinButton())
+
+        expect(await within(status()).findByText(SMALL_LINE)).toBeInTheDocument()
+        await toldPlainly()
+        expect(calls).toEqual(['unlock', 'press', 'smallWin'])
+      })
+
+      it('is not celebrated when Skip to the total ends the round', async () => {
+        // Eight free spins that pay nothing: still a lost round, so it can win a pot.
+        const round = smallPot(EIGHT, { free: Array<SlotStops>(8).fill(BLANK) })
+        expect(round.spin.payout).toBe(0)
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), round))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        await user.click(spinButton())
+        await reelsStarted()
+        until(() => skipButton() !== null, undefined, 100)
+        calls.length = 0
+        fireEvent.click(skipButton()!)
+
+        await toldPlainly()
+        ticked()
+      })
+
+      it("a press as a lone lost round's reels land: a pot of the stake or more is still heard, one below it only ticks", async () => {
+        const big = roundOf(BLANK, { stake: 60, jackpot: 1_002, pots: { mini: 1_002, major: 0, giga: 0 } })
+        const afterBig = result(big, { jackpots: pots({ mini: { amount: 0, last: { character: 'Mounara', amount: 1_002, at } } }) })
+        const { user } = open(state({ jackpots: pots() }), serverFrom(state({ jackpots: pots() }), afterBig, smallPot()))
+        await loaded()
+        await user.click(stake('60 Silver'))
+        animate()
+
+        for (const sound of ['jackpotMini', 'smallWin']) {
+          await user.click(spinButton())
+          await reelsStarted()
+          calls.length = 0
+          // The last reel rests and step 1 is sent to the reels; the press comes before it has landed.
+          act(() => {
+            vi.advanceTimersByTime(reelTimes(scatterReels(BLANK), false)[4] * 1000 + 100)
+            fireEvent.keyDown(document.body, { key: ' ' })
+          })
+          expect(spinButton()).toHaveTextContent('Spin')
+          expect(calls.filter((call) => [...POT_SOUNDS, 'smallWin'].includes(call))).toEqual([sound])
+          // Past the rest after the round.
+          advance(500)
+        }
+        await toldPlainly()
+      })
     })
 
     it('lists a jackpot round in the last rounds and the big wins', async () => {

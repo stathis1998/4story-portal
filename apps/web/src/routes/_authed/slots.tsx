@@ -14,7 +14,7 @@ import { cabinetLine, Reels } from '../../components/slots/Reels'
 import { WinLines } from '../../components/slots/WinLines'
 import { WinShow } from '../../components/slots/WinShow'
 import { Tabs } from '../../components/Tabs'
-import { bigWinLine, roundLine, roundListLine, roundSpins } from '../../lib/slot-round'
+import { bigWinLine, jackpotCheered, roundLine, roundListLine, roundSpins } from '../../lib/slot-round'
 import { slotsErrorMessage, slotsQueryOptions, spinSlots } from '../../lib/slots'
 import { useSlotRound, useSlotSounds } from '../../lib/use-slot-round'
 import { reducedMotion, useChosenCharacter, useHeldSpin } from '../../lib/wallet-game'
@@ -172,8 +172,9 @@ function SlotsFloor({ data }: { data: SlotsState }) {
   const showing = busy && !sending
   // The show belongs to the machine it was played on.
   const ours = show.machine === machine.key
-  // Told with the result, when the round has been shown, like the wallet.
-  const wonPots: SlotPot[] = shown !== null && !busy ? SLOT_POTS.filter((pot) => shown.spin.pots[pot] > 0) : []
+  // Told with the result, when the round has been shown, like the wallet. Pots that won less than the stake are a small
+  // win: the meters show their new amounts and winner, without the glow.
+  const wonPots: SlotPot[] = shown !== null && !busy && jackpotCheered(shown.spin) ? SLOT_POTS.filter((pot) => shown.spin.pots[pot] > 0) : []
   // The meter for this machine and stake: arriving point by point while a round shows it, then as the state has it.
   // The answer's own meter stands in if the state could not read the meters back.
   const storedMeter =
@@ -284,8 +285,8 @@ function SlotsFloor({ data }: { data: SlotsState }) {
               ? 'Not enough money in that wallet for this stake.'
               : null
   const lastRound = shown && !busy && shown.spin.machine === machine.key ? shown.spin : null
-  // A win below the stake is told plainly, as what it is.
-  const cheered = lastRound !== null && (lastRound.payout >= lastRound.stake || lastRound.jackpot > 0)
+  // A win below the stake, pots too, is told plainly, as what it is.
+  const cheered = lastRound !== null && (lastRound.payout >= lastRound.stake || jackpotCheered(lastRound))
   const known = (entries: SlotSpinView[]) =>
     entries.flatMap((entry) => {
       const of = slotMachine(entry.machine)

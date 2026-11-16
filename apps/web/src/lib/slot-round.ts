@@ -30,6 +30,12 @@ export function winTier(won: number, stake: number): WinTier {
   return 'huge';
 }
 
+/**
+ * Whether the pots a round won are cheered: only when they paid the stake back or more. Only a lost round wins a pot,
+ * and a Mini can drop below the stake: that is a small win, told plainly.
+ */
+export const jackpotCheered = (spin: Pick<SlotSpinView, 'jackpot' | 'stake'>) => spin.jackpot > 0 && spin.jackpot >= spin.stake;
+
 export type ShownStep = SlotStep & {
   /** The multiplier this step paid at: the paid spin's step multiplier, or the free round's climbing one. */
   times: number;

@@ -1,7 +1,7 @@
 import { SLOT_FREE_MULTIPLIER_MAX, SLOT_FREE_START, SLOT_METER_FREE, SLOT_REELS, SLOT_SCATTER, slotWindow } from '@4story-portal/shared'
 import type { SlotGrid, SlotMachine, SlotMachineKey, SlotSpinView, SlotStops } from '@4story-portal/shared'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { roundSpins, winTier, wonTiles } from './slot-round'
+import { jackpotCheered, roundSpins, winTier, wonTiles } from './slot-round'
 import type { RoundSpin, ShownStep, WinTier } from './slot-round'
 import { createSlotSounds } from './slot-sounds'
 import type { SlotSound, SlotSounds } from './slot-sounds'
@@ -53,14 +53,23 @@ export function useSlotSounds(): SlotSounds {
   return sounds
 }
 
-/** The sound of the biggest pot a round won: the Giga's, then the Major's, then the Mini's. Null for none. */
+/**
+ * The sound of the biggest pot a round won: the Giga's, then the Major's, then the Mini's. Null for none, and for pots
+ * that won less than the stake: those are a small win.
+ */
 function potSound(spin: SlotSpinView): SlotSound | null {
-  if (spin.jackpot <= 0) return null
+  if (!jackpotCheered(spin)) return null
   if (spin.pots.giga > 0) return 'jackpot'
   if (spin.pots.major > 0) return 'jackpotMajor'
   if (spin.pots.mini > 0) return 'jackpotMini'
   // A jackpot the record does not split: the Giga's sound, as the one pot before the three.
   return 'jackpot'
+}
+
+/** How loud a round's end is when no pot is cheered: by its win against the stake. Pots below the stake are a small win. */
+function endTier(spin: SlotSpinView): WinTier {
+  const tier = winTier(spin.payout, spin.stake)
+  return tier === 'none' && spin.jackpot > 0 ? 'small' : tier
 }
 
 type Clock = { after(seconds: number, run: () => void): void; clear(): void }
@@ -374,8 +383,8 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
       ...(spin.total > 0 ? { win: spin.total } : {}),
       times: r.at > 0 ? last.times : (lastWin?.times ?? null),
     })
-    // A paid spin with nothing after it: the press ends the round, as it always has.
-    if (r.spins.length === 1 && pointsOf(r) === 0) return finish(r)
+    // A paid spin with nothing after it: the press ends the round, as it always has, and a pot it won is still heard.
+    if (r.spins.length === 1 && pointsOf(r) === 0) return endNow(r)
     chainEnded(r)
   }
 
@@ -491,15 +500,14 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
     })
   }
 
-  /** The round's end, as loud as its win against the stake. A win below the stake gets one soft tick and no more. */
+  /** The round's end, as loud as its win against the stake. A win below the stake, pots too, gets one soft tick and no more. */
   function end(r: Round) {
-    const { payout, stake } = r.spin
     const pot = potSound(r.spin)
     if (pot) {
       sounds.play(pot)
       return finish(r)
     }
-    const tier = winTier(payout, stake)
+    const tier = endTier(r.spin)
     if (tier === 'none') return finish(r)
     sounds.play(TIER_SOUNDS[tier])
     if (tier === 'small') return finish(r)
@@ -546,8 +554,7 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
 
   /** Reduce motion: the round was put at its end at once, and it gets one sound. */
   function jumpEnd(r: Round) {
-    const { payout, stake } = r.spin
-    const tier = winTier(payout, stake)
+    const tier = endTier(r.spin)
     const pot = potSound(r.spin)
     if (pot) sounds.play(pot)
     else if (tier !== 'none') sounds.play(TIER_SOUNDS[tier])
@@ -654,10 +661,11 @@ export function useSlotRound(sounds: SlotSounds, onDone: () => void) {
     endNow(r)
   }
 
-  /** The round over without its cheer. A jackpot is still heard: it is above every other moment. */
+  /** The round over without its cheer. A jackpot of the stake or more is still heard: it is above every other moment. Pots below the stake get the small win's tick. */
   function endNow(r: Round) {
     const pot = potSound(r.spin)
     if (pot) sounds.play(pot)
+    else if (r.spin.jackpot > 0) sounds.play(TIER_SOUNDS.small)
     finish(r)
   }
 
